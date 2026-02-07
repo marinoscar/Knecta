@@ -16,6 +16,7 @@ const AuthCallbackPage = lazy(() => import('./pages/AuthCallbackPage'));
 const ActivateDevicePage = lazy(() => import('./pages/ActivateDevicePage'));
 const HomePage = lazy(() => import('./pages/HomePage'));
 const UserSettingsPage = lazy(() => import('./pages/UserSettingsPage'));
+const ConnectionsPage = lazy(() => import('./pages/ConnectionsPage'));
 const SystemSettingsPage = lazy(() => import('./pages/SystemSettingsPage'));
 const UserManagementPage = lazy(() => import('./pages/UserManagementPage'));
 
@@ -50,6 +51,7 @@ function AppRoutes() {
               <Route element={<Layout />}>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/settings" element={<UserSettingsPage />} />
+                <Route path="/connections" element={<ConnectionsPage />} />
                 <Route path="/admin/users" element={<UserManagementPage />} />
                 <Route path="/admin/settings" element={<SystemSettingsPage />} />
               </Route>

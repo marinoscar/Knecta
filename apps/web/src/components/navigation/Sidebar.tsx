@@ -16,6 +16,7 @@ import {
   Settings as SettingsIcon,
   AdminPanelSettings as AdminIcon,
   People as PeopleIcon,
+  Storage as StorageIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -38,6 +39,12 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       label: 'Home',
       icon: <HomeIcon />,
       path: '/',
+      visible: true,
+    },
+    {
+      label: 'Connections',
+      icon: <StorageIcon />,
+      path: '/connections',
       visible: true,
     },
     {
