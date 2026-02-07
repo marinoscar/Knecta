@@ -88,8 +88,9 @@ describe('Sidebar', () => {
 
       const { container } = render(<Sidebar open={true} onClose={mockOnClose} />);
 
-      // Non-admin users should see Home and User Settings (use container to bypass aria-hidden)
+      // Non-admin users should see Home, Connections, and User Settings (use container to bypass aria-hidden)
       expect(container.textContent).toContain('Home');
+      expect(container.textContent).toContain('Connections');
       expect(container.textContent).toContain('User Settings');
     });
 
@@ -130,6 +131,7 @@ describe('Sidebar', () => {
 
       // All menu items should be visible
       expect(container.textContent).toContain('Home');
+      expect(container.textContent).toContain('Connections');
       expect(container.textContent).toContain('User Settings');
       expect(container.textContent).toContain('User Management');
       expect(container.textContent).toContain('System Settings');
@@ -459,7 +461,7 @@ describe('Sidebar', () => {
       });
 
       const buttons = container.querySelectorAll('.MuiListItemButton-root');
-      const userMgmtButton = buttons[2]; // User Management
+      const userMgmtButton = buttons[3]; // User Management
       expect(userMgmtButton.classList.contains('Mui-selected')).toBe(true);
     });
   });
@@ -507,7 +509,7 @@ describe('Sidebar', () => {
 
       expect(mockOnClose).toHaveBeenCalledTimes(1);
 
-      const settingsButton = buttons[1];
+      const settingsButton = buttons[2];
       await user.click(settingsButton);
 
       expect(mockOnClose).toHaveBeenCalledTimes(2);
@@ -533,7 +535,7 @@ describe('Sidebar', () => {
 
       // Each menu item should have an icon
       const icons = container.querySelectorAll('.MuiListItemIcon-root');
-      expect(icons).toHaveLength(4); // Home, User Settings, User Management, System Settings
+      expect(icons).toHaveLength(5); // Home, Connections, User Settings, User Management, System Settings
     });
 
     it('should highlight icon for selected menu item', () => {
@@ -553,7 +555,7 @@ describe('Sidebar', () => {
       const { container } = render(<Sidebar open={true} onClose={mockOnClose} />);
 
       const buttons = container.querySelectorAll('.MuiListItemButton-root');
-      const settingsButton = buttons[1]; // User Settings
+      const settingsButton = buttons[2]; // User Settings
       const icon = settingsButton?.querySelector('.MuiListItemIcon-root');
 
       expect(icon).not.toBeNull();
