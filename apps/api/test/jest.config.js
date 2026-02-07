@@ -23,4 +23,9 @@ module.exports = {
   globalTeardown: '<rootDir>/test/teardown.ts',
   testTimeout: 30000,
   verbose: true,
+  globals: {
+    'ts-jest': {
+      isolatedModules: true,
+    },
+  },
 };

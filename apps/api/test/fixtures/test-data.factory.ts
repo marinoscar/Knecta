@@ -79,6 +79,26 @@ export const mockPermissions = {
     name: 'connections:test',
     description: 'Test connections',
   },
+  semanticModelsRead: {
+    id: randomUUID(),
+    name: 'semantic_models:read',
+    description: 'Read semantic models',
+  },
+  semanticModelsWrite: {
+    id: randomUUID(),
+    name: 'semantic_models:write',
+    description: 'Modify semantic models',
+  },
+  semanticModelsDelete: {
+    id: randomUUID(),
+    name: 'semantic_models:delete',
+    description: 'Delete semantic models',
+  },
+  semanticModelsGenerate: {
+    id: randomUUID(),
+    name: 'semantic_models:generate',
+    description: 'Generate semantic models',
+  },
 };
 
 export const mockRoles = {
@@ -374,6 +394,10 @@ export const rolePermissionsMap = {
     mockPermissions.connectionsWrite,
     mockPermissions.connectionsDelete,
     mockPermissions.connectionsTest,
+    mockPermissions.semanticModelsRead,
+    mockPermissions.semanticModelsWrite,
+    mockPermissions.semanticModelsDelete,
+    mockPermissions.semanticModelsGenerate,
   ],
   contributor: [
     mockPermissions.userSettingsRead,
@@ -382,6 +406,10 @@ export const rolePermissionsMap = {
     mockPermissions.connectionsWrite,
     mockPermissions.connectionsDelete,
     mockPermissions.connectionsTest,
+    mockPermissions.semanticModelsRead,
+    mockPermissions.semanticModelsWrite,
+    mockPermissions.semanticModelsDelete,
+    mockPermissions.semanticModelsGenerate,
   ],
   viewer: [
     mockPermissions.userSettingsRead,
@@ -452,6 +480,139 @@ export function createMockConnection(
     lastTestedAt,
     lastTestResult,
     lastTestMessage,
+    createdAt,
+    updatedAt,
+  };
+}
+
+// ============================================================================
+// Semantic Model Factory
+// ============================================================================
+
+export interface CreateMockSemanticModelOptions {
+  id?: string;
+  name?: string;
+  description?: string | null;
+  connectionId: string;
+  databaseName?: string | null;
+  status?: 'draft' | 'generating' | 'ready' | 'failed';
+  model?: any;
+  modelVersion?: number;
+  tableCount?: number | null;
+  fieldCount?: number | null;
+  relationshipCount?: number | null;
+  metricCount?: number | null;
+  ownerId: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export function createMockSemanticModel(
+  options: CreateMockSemanticModelOptions,
+): any {
+  const {
+    id = randomUUID(),
+    name = 'Test Semantic Model',
+    description = null,
+    connectionId,
+    databaseName = 'testdb',
+    status = 'ready',
+    model = {
+      semantic_model: [
+        {
+          name: 'test',
+          datasets: [],
+          relationships: [],
+          metrics: [],
+        },
+      ],
+    },
+    modelVersion = 1,
+    tableCount = 5,
+    fieldCount = 20,
+    relationshipCount = 3,
+    metricCount = 10,
+    ownerId,
+    createdAt = new Date(),
+    updatedAt = new Date(),
+  } = options;
+
+  return {
+    id,
+    name,
+    description,
+    connectionId,
+    databaseName,
+    status,
+    model,
+    modelVersion,
+    tableCount,
+    fieldCount,
+    relationshipCount,
+    metricCount,
+    ownerId,
+    createdAt,
+    updatedAt,
+  };
+}
+
+// ============================================================================
+// Semantic Model Run Factory
+// ============================================================================
+
+export interface CreateMockSemanticModelRunOptions {
+  id?: string;
+  semanticModelId?: string | null;
+  connectionId: string;
+  databaseName?: string | null;
+  selectedSchemas?: string[];
+  selectedTables?: string[];
+  status?: 'pending' | 'discovering' | 'analyzing' | 'generating' | 'completed' | 'failed' | 'cancelled';
+  plan?: any;
+  progress?: any;
+  errorMessage?: string | null;
+  startedAt?: Date | null;
+  completedAt?: Date | null;
+  ownerId: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export function createMockSemanticModelRun(
+  options: CreateMockSemanticModelRunOptions,
+): any {
+  const {
+    id = randomUUID(),
+    semanticModelId = null,
+    connectionId,
+    databaseName = 'testdb',
+    selectedSchemas = ['public'],
+    selectedTables = ['public.users', 'public.orders'],
+    status = 'pending',
+    plan = null,
+    progress = null,
+    errorMessage = null,
+    startedAt = null,
+    completedAt = null,
+    ownerId,
+    createdAt = new Date(),
+    updatedAt = new Date(),
+  } = options;
+
+  return {
+    id,
+    semanticModelId,
+    connectionId,
+    databaseName,
+    selectedSchemas,
+    selectedTables,
+    status,
+    plan,
+    progress,
+    errorMessage,
+    startedAt,
+    completedAt,
+    ownerId,
     createdAt,
     updatedAt,
   };
