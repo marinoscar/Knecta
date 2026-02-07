@@ -38,6 +38,8 @@ model User {
   deviceCodes               DeviceCode[]     @relation("UserDeviceCodes")
   storageObjects            StorageObject[]  @relation("UserStorageObjects")
   dataConnections           DataConnection[] @relation("UserDataConnections")
+  semanticModels            SemanticModel[]  @relation("UserSemanticModels")
+  semanticModelRuns         SemanticModelRun[] @relation("UserSemanticModelRuns")
 
   @@map("users")
 }
@@ -254,6 +256,23 @@ enum DatabaseType {
   snowflake
 }
 
+enum SemanticModelStatus {
+  draft
+  generating
+  ready
+  failed
+}
+
+enum RunStatus {
+  pending
+  planning
+  awaiting_approval
+  executing
+  completed
+  failed
+  cancelled
+}
+
 model StorageObject {
   id              String              @id @default(uuid()) @db.Uuid
   name            String              // Original filename
@@ -319,9 +338,72 @@ model DataConnection {
   updatedAt           DateTime     @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relations
-  owner User @relation("UserDataConnections", fields: [ownerId], references: [id], onDelete: Cascade)
+  owner             User               @relation("UserDataConnections", fields: [ownerId], references: [id], onDelete: Cascade)
+  semanticModels    SemanticModel[]    @relation("ConnectionSemanticModels")
+  semanticModelRuns SemanticModelRun[] @relation("ConnectionSemanticModelRuns")
 
   @@index([ownerId])
   @@index([dbType])
   @@map("data_connections")
+}
+
+// =============================================================================
+// Semantic Models
+// =============================================================================
+
+model SemanticModel {
+  id                String              @id @default(uuid()) @db.Uuid
+  name              String
+  description       String?
+  connectionId      String              @map("connection_id") @db.Uuid
+  databaseName      String              @map("database_name")
+  status            SemanticModelStatus @default(draft)
+  model             Json?               // The full OSI semantic model as structured JSON
+  modelVersion      Int                 @default(1) @map("model_version")
+  tableCount        Int                 @default(0) @map("table_count")
+  fieldCount        Int                 @default(0) @map("field_count")
+  relationshipCount Int                 @default(0) @map("relationship_count")
+  metricCount       Int                 @default(0) @map("metric_count")
+  ownerId           String              @map("owner_id") @db.Uuid
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  owner      User             @relation("UserSemanticModels", fields: [ownerId], references: [id], onDelete: Cascade)
+  connection DataConnection   @relation("ConnectionSemanticModels", fields: [connectionId], references: [id], onDelete: Cascade)
+  runs       SemanticModelRun[]
+
+  @@index([ownerId])
+  @@index([connectionId])
+  @@index([status])
+  @@map("semantic_models")
+}
+
+model SemanticModelRun {
+  id              String     @id @default(uuid()) @db.Uuid
+  semanticModelId String?    @map("semantic_model_id") @db.Uuid
+  connectionId    String     @map("connection_id") @db.Uuid
+  databaseName    String     @map("database_name")
+  selectedSchemas String[]   @map("selected_schemas")
+  selectedTables  String[]   @map("selected_tables")
+  status          RunStatus  @default(pending)
+  plan            Json?
+  progress        Json?
+  errorMessage    String?    @map("error_message")
+  startedAt       DateTime?  @map("started_at") @db.Timestamptz
+  completedAt     DateTime?  @map("completed_at") @db.Timestamptz
+  ownerId         String     @map("owner_id") @db.Uuid
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  owner         User           @relation("UserSemanticModelRuns", fields: [ownerId], references: [id], onDelete: Cascade)
+  semanticModel SemanticModel? @relation(fields: [semanticModelId], references: [id], onDelete: SetNull)
+  connection    DataConnection @relation("ConnectionSemanticModelRuns", fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([semanticModelId])
+  @@index([connectionId])
+  @@index([status])
+  @@map("semantic_model_runs")
 }
