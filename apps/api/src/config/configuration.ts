@@ -83,6 +83,25 @@ export default () => {
     key: process.env.ENCRYPTION_KEY,
   },
 
+  // LLM Providers
+  llm: {
+    defaultProvider: process.env.LLM_DEFAULT_PROVIDER || 'openai',
+    openai: {
+      apiKey: process.env.OPENAI_API_KEY,
+      model: process.env.OPENAI_MODEL || 'gpt-4o',
+    },
+    anthropic: {
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929',
+    },
+    azure: {
+      apiKey: process.env.AZURE_OPENAI_API_KEY,
+      endpoint: process.env.AZURE_OPENAI_ENDPOINT,
+      deployment: process.env.AZURE_OPENAI_DEPLOYMENT,
+      apiVersion: process.env.AZURE_OPENAI_API_VERSION || '2024-02-01',
+    },
+  },
+
   logLevel: process.env.LOG_LEVEL || 'info',
   };
 };
