@@ -9,7 +9,8 @@ import { CreateConnectionDto } from './dto/create-connection.dto';
 import { UpdateConnectionDto } from './dto/update-connection.dto';
 import { ConnectionQueryDto } from './dto/connection-query.dto';
 import { TestConnectionDto } from './dto/test-connection.dto';
-import { encrypt, getEncryptionKey } from '../common/utils/encryption.util';
+import { encrypt, decrypt, getEncryptionKey } from '../common/utils/encryption.util';
+import { getDriver, ConnectionParams } from './drivers';
 
 @Injectable()
 export class ConnectionsService {
@@ -240,12 +241,26 @@ export class ConnectionsService {
       throw new NotFoundException(`Connection with ID ${id} not found`);
     }
 
-    // Placeholder implementation - will be replaced when drivers are implemented
-    const result = {
-      success: false,
-      message: 'Driver not yet implemented',
-      latencyMs: 0,
+    // Decrypt password if stored
+    let password: string | undefined = undefined;
+    if (connection.encryptedCredential) {
+      password = decrypt(connection.encryptedCredential, this.encryptionKey);
+    }
+
+    // Build connection parameters
+    const params: ConnectionParams = {
+      host: connection.host,
+      port: connection.port,
+      databaseName: connection.databaseName || undefined,
+      username: connection.username || undefined,
+      password,
+      useSsl: connection.useSsl,
+      options: connection.options as Record<string, unknown> || undefined,
     };
+
+    // Test connection using appropriate driver
+    const driver = getDriver(connection.dbType);
+    const result = await driver.testConnection(params);
 
     // Update test results
     await this.prisma.dataConnection.update({
@@ -257,7 +272,16 @@ export class ConnectionsService {
       },
     });
 
-    this.logger.log(`Connection ${connection.name} tested by user ${userId}`);
+    // Create audit event
+    await this.createAuditEvent(
+      userId,
+      'connections:test',
+      'data_connection',
+      connection.id,
+      { name: connection.name, success: result.success },
+    );
+
+    this.logger.log(`Connection ${connection.name} tested by user ${userId}: ${result.success ? 'success' : 'failed'}`);
 
     return result;
   }
@@ -266,14 +290,22 @@ export class ConnectionsService {
    * Test new connection parameters without saving
    */
   async testNew(dto: TestConnectionDto) {
-    // Placeholder implementation - will be replaced when drivers are implemented
-    const result = {
-      success: false,
-      message: 'Driver not yet implemented',
-      latencyMs: 0,
+    // Build connection parameters
+    const params: ConnectionParams = {
+      host: dto.host,
+      port: dto.port,
+      databaseName: dto.databaseName,
+      username: dto.username,
+      password: dto.password,
+      useSsl: dto.useSsl,
+      options: dto.options,
     };
 
-    this.logger.log(`New connection test attempted for ${dto.dbType}`);
+    // Test connection using appropriate driver
+    const driver = getDriver(dto.dbType);
+    const result = await driver.testConnection(params);
+
+    this.logger.log(`New connection test for ${dto.dbType}: ${result.success ? 'success' : 'failed'}`);
 
     return result;
   }
