@@ -193,7 +193,7 @@ describe('Sidebar', () => {
 
       // Only items with visible: true should be rendered
       const menuButtons = container.querySelectorAll('.MuiListItemButton-root');
-      expect(menuButtons).toHaveLength(2); // Home and User Settings
+      expect(menuButtons).toHaveLength(3); // Home, Connections, and User Settings
     });
 
     it('should show all menu items when user is admin', () => {
@@ -213,7 +213,7 @@ describe('Sidebar', () => {
       });
 
       const menuButtons = container.querySelectorAll('.MuiListItemButton-root');
-      expect(menuButtons).toHaveLength(4); // All menu items visible
+      expect(menuButtons).toHaveLength(5); // All menu items visible
     });
 
     it('should dynamically update menu items when isAdmin changes', () => {
@@ -277,7 +277,7 @@ describe('Sidebar', () => {
       const { container } = render(<Sidebar open={true} onClose={trackingOnClose} />);
 
       const buttons = container.querySelectorAll('.MuiListItemButton-root');
-      const settingsButton = buttons[1]; // User Settings is second button
+      const settingsButton = buttons[2]; // User Settings is third button
       await user.click(settingsButton);
 
       // onClose should be called immediately (synchronously)
@@ -334,7 +334,7 @@ describe('Sidebar', () => {
       const { container } = render(<Sidebar open={true} onClose={mockOnClose} />);
 
       const buttons = container.querySelectorAll('.MuiListItemButton-root');
-      const settingsButton = buttons[1]; // User Settings is second button
+      const settingsButton = buttons[2]; // User Settings is third button
       await user.click(settingsButton);
 
       await waitFor(() => {
@@ -361,7 +361,7 @@ describe('Sidebar', () => {
       });
 
       const buttons = container.querySelectorAll('.MuiListItemButton-root');
-      const userMgmtButton = buttons[2]; // User Management is third button
+      const userMgmtButton = buttons[3]; // User Management is fourth button
       await user.click(userMgmtButton);
 
       await waitFor(() => {
@@ -388,7 +388,7 @@ describe('Sidebar', () => {
       });
 
       const buttons = container.querySelectorAll('.MuiListItemButton-root');
-      const systemSettingsButton = buttons[3]; // System Settings is fourth button
+      const systemSettingsButton = buttons[4]; // System Settings is fifth button
       await user.click(systemSettingsButton);
 
       await waitFor(() => {
@@ -415,7 +415,7 @@ describe('Sidebar', () => {
       const { container } = render(<Sidebar open={true} onClose={mockOnClose} />);
 
       const buttons = container.querySelectorAll('.MuiListItemButton-root');
-      const settingsButton = buttons[1]; // User Settings
+      const settingsButton = buttons[2]; // User Settings
       expect(settingsButton.classList.contains('Mui-selected')).toBe(true);
     });
 
@@ -436,7 +436,7 @@ describe('Sidebar', () => {
       const { container } = render(<Sidebar open={true} onClose={mockOnClose} />);
 
       const buttons = container.querySelectorAll('.MuiListItemButton-root');
-      const settingsButton = buttons[1]; // User Settings
+      const settingsButton = buttons[2]; // User Settings
       expect(settingsButton.classList.contains('Mui-selected')).toBe(false);
     });
 

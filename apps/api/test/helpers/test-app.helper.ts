@@ -33,6 +33,11 @@ export interface TestAppOptions {
 export async function createTestApp(
   options: TestAppOptions = {},
 ): Promise<TestContext> {
+  // Ensure ENCRYPTION_KEY is set for tests (ConnectionsService requires it at construction time)
+  if (!process.env.ENCRYPTION_KEY) {
+    process.env.ENCRYPTION_KEY = 'test-encryption-key-32-bytes!!';
+  }
+
   // Default to mocked database for unit/integration tests
   const shouldUseMock = options.useMockDatabase ?? true;
 
