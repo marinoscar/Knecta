@@ -45,6 +45,12 @@ const PERMISSIONS = [
   { name: 'storage:read', description: 'Read object metadata, get download URLs' },
   { name: 'storage:write', description: 'Upload, update metadata' },
   { name: 'storage:delete_any', description: 'Admin: delete any object' },
+
+  // Connections management
+  { name: 'connections:read', description: 'View database connections' },
+  { name: 'connections:write', description: 'Create and edit database connections' },
+  { name: 'connections:delete', description: 'Delete database connections' },
+  { name: 'connections:test', description: 'Test database connections' },
 ] as const;
 
 // Role to permissions mapping
@@ -62,17 +68,26 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'storage:read',
     'storage:write',
     'storage:delete_any',
+    'connections:read',
+    'connections:write',
+    'connections:delete',
+    'connections:test',
   ],
   contributor: [
     'user_settings:read',
     'user_settings:write',
     'storage:read',
     'storage:write',
+    'connections:read',
+    'connections:write',
+    'connections:delete',
+    'connections:test',
   ],
   viewer: [
     'user_settings:read',
     'user_settings:write',
     'storage:read',
+    'connections:read',
   ],
 };
 
