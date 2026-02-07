@@ -96,8 +96,8 @@ describe('Connections (Integration)', () => {
 
       expect(response.body.data.items).toHaveLength(2);
       expect(response.body.data.total).toBe(2);
-      expect(response.body.items[0]).toHaveProperty('hasCredential');
-      expect(response.body.items[0]).not.toHaveProperty('encryptedCredential');
+      expect(response.body.data.items[0]).toHaveProperty('hasCredential');
+      expect(response.body.data.items[0]).not.toHaveProperty('encryptedCredential');
     });
 
     it('should filter by ownerId (users only see their own)', async () => {
