@@ -266,6 +266,15 @@ cd apps/api && npm run prisma:migrate
 - `DELETE /api/storage/objects/:id` - Delete object
 - `PATCH /api/storage/objects/:id/metadata` - Update metadata
 
+### Database Connections
+- `GET /api/connections` - List user's connections (paginated)
+- `GET /api/connections/:id` - Get connection by ID
+- `POST /api/connections` - Create new connection
+- `PATCH /api/connections/:id` - Update connection
+- `DELETE /api/connections/:id` - Delete connection
+- `POST /api/connections/test` - Test new connection params
+- `POST /api/connections/:id/test` - Test existing connection
+
 ### Health
 - `GET /api/health/live` - Liveness check
 - `GET /api/health/ready` - Readiness check (includes DB)
@@ -285,6 +294,7 @@ cd apps/api && npm run prisma:migrate
 - `allowlist:read/write` - Allowlist management (Admin only)
 - `storage:read/write/delete` - Storage object access (own objects)
 - `storage:read_any/write_any/delete_any` - Storage object access (all objects, Admin only)
+- `connections:read/write/delete/test` - Database connection management
 
 ## Database Tables
 
@@ -300,6 +310,7 @@ cd apps/api && npm run prisma:migrate
 - `device_codes` - Device authorization codes (RFC 8628)
 - `storage_objects` - File metadata, status, storage references
 - `storage_object_chunks` - Multipart upload chunk tracking
+- `data_connections` - Database connection configurations (per-user, encrypted credentials)
 
 ## Access Control: Email Allowlist
 
@@ -369,6 +380,9 @@ Note: `DATABASE_URL` is constructed automatically from these variables at runtim
 - `INITIAL_ADMIN_EMAIL` - First user with this email becomes Admin
 - `DEVICE_CODE_EXPIRY_MINUTES` - Device code lifetime (default: 15)
 - `DEVICE_CODE_POLL_INTERVAL` - Device polling interval in seconds (default: 5)
+
+**Encryption:**
+- `ENCRYPTION_KEY` - 32-byte key for AES-256-GCM encryption of connection credentials
 
 **Observability:**
 - `OTEL_ENABLED` - Enable OpenTelemetry (default: true)

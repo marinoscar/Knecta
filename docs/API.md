@@ -1304,6 +1304,373 @@ The storage system provides file upload and management capabilities with support
 
 ---
 
+### Database Connections
+
+The database connections API allows users to store and manage connection configurations for external databases. Credentials are encrypted at rest using AES-256-GCM encryption.
+
+**Supported Database Types:**
+- PostgreSQL
+- MySQL
+- SQL Server
+- Databricks
+- Snowflake
+
+#### GET /connections
+
+**Requires:** `connections:read` permission - List current user's database connections.
+
+**Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `page` | number | 1 | Page number |
+| `pageSize` | number | 20 | Items per page (max 100) |
+| `search` | string | - | Search by name or description |
+| `dbType` | enum | - | Filter by type: `postgresql`, `mysql`, `sqlserver`, `databricks`, `snowflake` |
+| `sortBy` | enum | `createdAt` | Sort by: `name`, `dbType`, `createdAt`, `lastTestedAt` |
+| `sortOrder` | enum | `desc` | Sort order: `asc`, `desc` |
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "name": "Production DB",
+      "description": "Main production database",
+      "dbType": "postgresql",
+      "host": "db.example.com",
+      "port": 5432,
+      "databaseName": "myapp",
+      "username": "dbuser",
+      "hasCredential": true,
+      "useSsl": true,
+      "options": {},
+      "lastTestedAt": "2024-01-01T12:00:00.000Z",
+      "lastTestResult": true,
+      "lastTestMessage": "Connection successful",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T12:00:00.000Z"
+    }
+  ],
+  "meta": {
+    "total": 10,
+    "page": 1,
+    "pageSize": 20,
+    "totalPages": 1
+  }
+}
+```
+
+**Field Descriptions:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | UUID | Unique identifier |
+| `name` | string | Connection name |
+| `description` | string \| null | Optional description |
+| `dbType` | enum | Database type |
+| `host` | string | Database hostname or IP |
+| `port` | number | Database port |
+| `databaseName` | string \| null | Database/catalog name |
+| `username` | string \| null | Database username |
+| `hasCredential` | boolean | Whether password is stored (never returns actual password) |
+| `useSsl` | boolean | Whether to use SSL/TLS connection |
+| `options` | object | Database-specific options (see below) |
+| `lastTestedAt` | string \| null | Last test timestamp |
+| `lastTestResult` | boolean \| null | Last test success status |
+| `lastTestMessage` | string \| null | Last test result message |
+| `createdAt` | string | Creation timestamp |
+| `updatedAt` | string | Last update timestamp |
+
+**Note:** Only returns connections owned by the current user. Password field is never returned; `hasCredential` indicates if a password is stored.
+
+---
+
+#### GET /connections/:id
+
+**Requires:** `connections:read` permission - Get connection by ID (own connections only).
+
+**Parameters:**
+- `id` (UUID) - Connection ID
+
+**Response:**
+```json
+{
+  "data": {
+    "id": "uuid",
+    "name": "Production DB",
+    "description": "Main production database",
+    "dbType": "postgresql",
+    "host": "db.example.com",
+    "port": 5432,
+    "databaseName": "myapp",
+    "username": "dbuser",
+    "hasCredential": true,
+    "useSsl": true,
+    "options": {},
+    "lastTestedAt": "2024-01-01T12:00:00.000Z",
+    "lastTestResult": true,
+    "lastTestMessage": "Connection successful",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T12:00:00.000Z"
+  }
+}
+```
+
+**Error Cases:**
+- 404 Not Found - Connection not found or belongs to another user
+
+---
+
+#### POST /connections
+
+**Requires:** `connections:write` permission - Create a new database connection.
+
+**Request Body:**
+```json
+{
+  "name": "Production DB",
+  "description": "Main production database",
+  "dbType": "postgresql",
+  "host": "db.example.com",
+  "port": 5432,
+  "databaseName": "myapp",
+  "username": "dbuser",
+  "password": "securepassword",
+  "useSsl": true,
+  "options": {}
+}
+```
+
+**Fields:**
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Connection name (1-200 chars) |
+| `description` | string | No | Optional description |
+| `dbType` | enum | Yes | Database type: `postgresql`, `mysql`, `sqlserver`, `databricks`, `snowflake` |
+| `host` | string | Yes | Database hostname or IP |
+| `port` | number | Yes | Database port |
+| `databaseName` | string | No | Database/catalog name |
+| `username` | string | No | Database username |
+| `password` | string | No | Database password (encrypted at rest with AES-256-GCM) |
+| `useSsl` | boolean | No | Use SSL/TLS connection (default: false) |
+| `options` | object | No | Database-specific options (JSONB) |
+
+**Database-Specific Options:**
+
+**Databricks:**
+```json
+{
+  "httpPath": "/sql/1.0/warehouses/abc123def456"
+}
+```
+
+**Snowflake:**
+```json
+{
+  "account": "xy12345.us-east-1",
+  "warehouse": "COMPUTE_WH",
+  "role": "ANALYST"
+}
+```
+
+**SQL Server:**
+```json
+{
+  "instanceName": "SQLEXPRESS",
+  "encrypt": true,
+  "trustServerCertificate": false
+}
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "id": "uuid",
+    "name": "Production DB",
+    "description": "Main production database",
+    "dbType": "postgresql",
+    "host": "db.example.com",
+    "port": 5432,
+    "databaseName": "myapp",
+    "username": "dbuser",
+    "hasCredential": true,
+    "useSsl": true,
+    "options": {},
+    "lastTestedAt": null,
+    "lastTestResult": null,
+    "lastTestMessage": null,
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  }
+}
+```
+
+**Error Cases:**
+- 400 Bad Request - Invalid input (name too long, invalid dbType, missing required fields)
+
+---
+
+#### PATCH /connections/:id
+
+**Requires:** `connections:write` permission - Update an existing connection.
+
+**Parameters:**
+- `id` (UUID) - Connection ID
+
+**Request Body:**
+```json
+{
+  "name": "Updated DB Name",
+  "description": "Updated description",
+  "password": "newpassword"
+}
+```
+
+**Fields:** All fields are optional. Only provided fields will be updated.
+
+**Note on Password Updates:**
+- Omitting `password` field preserves the existing credential
+- Setting `password` to an empty string (`""`) clears the stored credential
+- Setting `password` to a non-empty string updates the credential (encrypted)
+
+**Response:**
+```json
+{
+  "data": {
+    "id": "uuid",
+    "name": "Updated DB Name",
+    "description": "Updated description",
+    "dbType": "postgresql",
+    "host": "db.example.com",
+    "port": 5432,
+    "databaseName": "myapp",
+    "username": "dbuser",
+    "hasCredential": true,
+    "useSsl": true,
+    "options": {},
+    "lastTestedAt": "2024-01-01T12:00:00.000Z",
+    "lastTestResult": true,
+    "lastTestMessage": "Connection successful",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T13:00:00.000Z"
+  }
+}
+```
+
+**Error Cases:**
+- 404 Not Found - Connection not found or belongs to another user
+- 400 Bad Request - Invalid input
+
+---
+
+#### DELETE /connections/:id
+
+**Requires:** `connections:delete` permission - Delete a connection.
+
+**Parameters:**
+- `id` (UUID) - Connection ID
+
+**Response:** HTTP 204 No Content
+
+**Error Cases:**
+- 404 Not Found - Connection not found or belongs to another user
+
+**Note:** Cannot delete connections owned by other users. Credentials are securely wiped from database.
+
+---
+
+#### POST /connections/test
+
+**Requires:** `connections:test` permission - Test connection parameters without saving.
+
+**Request Body:**
+```json
+{
+  "dbType": "postgresql",
+  "host": "db.example.com",
+  "port": 5432,
+  "databaseName": "myapp",
+  "username": "dbuser",
+  "password": "securepassword",
+  "useSsl": true,
+  "options": {}
+}
+```
+
+**Fields:** Same as POST /connections, but `name` and `description` are not required.
+
+**Response (Success):**
+```json
+{
+  "data": {
+    "success": true,
+    "message": "Connection successful",
+    "latencyMs": 42
+  }
+}
+```
+
+**Response (Failure):**
+```json
+{
+  "data": {
+    "success": false,
+    "message": "Connection failed: ECONNREFUSED",
+    "latencyMs": 5000
+  }
+}
+```
+
+**Use Case:** Test connection parameters before creating or updating a connection.
+
+**Note:** Connection credentials are not persisted. This endpoint performs a real connection attempt to validate parameters.
+
+---
+
+#### POST /connections/:id/test
+
+**Requires:** `connections:test` permission - Test an existing saved connection.
+
+**Parameters:**
+- `id` (UUID) - Connection ID
+
+**Request:** No body required
+
+**Response (Success):**
+```json
+{
+  "data": {
+    "success": true,
+    "message": "Connection successful",
+    "latencyMs": 38
+  }
+}
+```
+
+**Response (Failure):**
+```json
+{
+  "data": {
+    "success": false,
+    "message": "Connection failed: authentication failed",
+    "latencyMs": 1200
+  }
+}
+```
+
+**Side Effects:**
+- Updates `lastTestedAt` timestamp
+- Updates `lastTestResult` (true/false)
+- Updates `lastTestMessage` with result message
+
+**Error Cases:**
+- 404 Not Found - Connection not found or belongs to another user
+
+**Use Case:** Verify that stored connection still works or troubleshoot connection issues.
+
+---
+
 ### Health
 
 **Public endpoints** - Used for Kubernetes liveness/readiness probes.
