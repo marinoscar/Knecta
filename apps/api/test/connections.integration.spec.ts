@@ -513,9 +513,9 @@ describe('Connections (Integration)', () => {
           password: 'testpass',
         });
 
-      // Should return 200 with test result (success: false due to invalid host)
+      // POST methods return 201 by default in NestJS
       // The driver will attempt connection and return the result
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(201);
       expect(response.body.data).toHaveProperty('success');
       expect(response.body.data).toHaveProperty('message');
     });
@@ -559,9 +559,9 @@ describe('Connections (Integration)', () => {
         .post('/api/connections/123e4567-e89b-12d3-a456-426614174001/test')
         .set(authHeader(contributor.accessToken));
 
-      // Should return 200 with test result (may fail due to invalid host)
+      // POST methods return 201 by default in NestJS
       // The driver will attempt connection and return the result
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(201);
       expect(response.body.data).toHaveProperty('success');
       expect(response.body.data).toHaveProperty('message');
 
