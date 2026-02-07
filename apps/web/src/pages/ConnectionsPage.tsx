@@ -32,7 +32,8 @@ import {
 } from '@mui/icons-material';
 import { useConnections } from '../hooks/useConnections';
 import { usePermissions } from '../hooks/usePermissions';
-import type { DataConnection, DatabaseType } from '../types';
+import type { DataConnection, DatabaseType, CreateConnectionPayload } from '../types';
+import { ConnectionDialog } from '../components/connections/ConnectionDialog';
 
 const DB_TYPE_CONFIG: Record<
   DatabaseType,
@@ -56,8 +57,11 @@ export default function ConnectionsPage() {
     isLoading,
     error,
     fetchConnections,
+    createConnection,
+    updateConnection,
     deleteConnection,
     testConnection,
+    testNewConnection,
   } = useConnections();
 
   const { hasPermission } = usePermissions();
@@ -68,6 +72,8 @@ export default function ConnectionsPage() {
   const [search, setSearch] = useState('');
   const [dbTypeFilter, setDbTypeFilter] = useState<string>('');
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingConnection, setEditingConnection] = useState<DataConnection | null>(null);
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
@@ -221,8 +227,8 @@ export default function ConnectionsPage() {
                 variant="contained"
                 startIcon={<AddIcon />}
                 onClick={() => {
-                  // Dialog will be added in next commit
-                  console.log('Add connection clicked');
+                  setEditingConnection(null);
+                  setDialogOpen(true);
                 }}
               >
                 Add Connection
@@ -311,8 +317,8 @@ export default function ConnectionsPage() {
                                 <IconButton
                                   size="small"
                                   onClick={() => {
-                                    // Edit dialog will be added in next commit
-                                    console.log('Edit connection:', connection.id);
+                                    setEditingConnection(connection);
+                                    setDialogOpen(true);
                                   }}
                                 >
                                   <EditIcon />
@@ -365,6 +371,25 @@ export default function ConnectionsPage() {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      <ConnectionDialog
+        open={dialogOpen}
+        onClose={() => {
+          setDialogOpen(false);
+          setEditingConnection(null);
+        }}
+        onSave={async (data) => {
+          if (editingConnection) {
+            await updateConnection(editingConnection.id, data);
+            setSnackbar({ open: true, message: 'Connection updated successfully', severity: 'success' });
+          } else {
+            await createConnection(data as CreateConnectionPayload);
+            setSnackbar({ open: true, message: 'Connection created successfully', severity: 'success' });
+          }
+        }}
+        onTestNew={testNewConnection}
+        connection={editingConnection}
+      />
     </Container>
   );
 }
