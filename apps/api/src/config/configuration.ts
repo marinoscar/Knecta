@@ -78,6 +78,11 @@ export default () => {
     partSize: parseInt(process.env.STORAGE_PART_SIZE || '10485760', 10), // 10MB default
   },
 
+  // Encryption
+  encryption: {
+    key: process.env.ENCRYPTION_KEY,
+  },
+
   logLevel: process.env.LOG_LEVEL || 'info',
   };
 };
