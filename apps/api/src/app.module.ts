@@ -19,6 +19,7 @@ import { DiscoveryModule } from './discovery/discovery.module';
 import { LlmModule } from './llm/llm.module';
 import { LoggerModule } from './common/logger/logger.module';
 import { TestAuthModule } from './test-auth/test-auth.module';
+import { SemanticModelsModule } from './semantic-models/semantic-models.module';
 
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -59,6 +60,7 @@ import configuration from './config/configuration';
     ConnectionsModule,
     DiscoveryModule,
     LlmModule,
+    SemanticModelsModule,
 
     // Test modules (non-production only)
     ...(process.env.NODE_ENV !== 'production' ? [TestAuthModule] : []),
