@@ -61,11 +61,11 @@ describe('Connections (Integration)', () => {
         .set(authHeader(contributor.accessToken))
         .expect(200);
 
-      expect(response.body.items).toEqual([]);
-      expect(response.body.total).toBe(0);
-      expect(response.body).toHaveProperty('page');
-      expect(response.body).toHaveProperty('pageSize');
-      expect(response.body).toHaveProperty('totalPages');
+      expect(response.body.data.items).toEqual([]);
+      expect(response.body.data.total).toBe(0);
+      expect(response.body.data).toHaveProperty('page');
+      expect(response.body.data).toHaveProperty('pageSize');
+      expect(response.body.data).toHaveProperty('totalPages');
     });
 
     it('should return paginated results', async () => {
@@ -94,8 +94,8 @@ describe('Connections (Integration)', () => {
         .set(authHeader(contributor.accessToken))
         .expect(200);
 
-      expect(response.body.items).toHaveLength(2);
-      expect(response.body.total).toBe(2);
+      expect(response.body.data.items).toHaveLength(2);
+      expect(response.body.data.total).toBe(2);
       expect(response.body.items[0]).toHaveProperty('hasCredential');
       expect(response.body.items[0]).not.toHaveProperty('encryptedCredential');
     });
@@ -167,11 +167,11 @@ describe('Connections (Integration)', () => {
         .set(authHeader(contributor.accessToken))
         .expect(200);
 
-      expect(response.body).toHaveProperty('id', '123e4567-e89b-12d3-a456-426614174001');
-      expect(response.body).toHaveProperty('name', 'Test DB');
-      expect(response.body).toHaveProperty('hasCredential', true);
-      expect(response.body).not.toHaveProperty('encryptedCredential');
-      expect(response.body).not.toHaveProperty('password');
+      expect(response.body.data).toHaveProperty('id', '123e4567-e89b-12d3-a456-426614174001');
+      expect(response.body.data).toHaveProperty('name', 'Test DB');
+      expect(response.body.data).toHaveProperty('hasCredential', true);
+      expect(response.body.data).not.toHaveProperty('encryptedCredential');
+      expect(response.body.data).not.toHaveProperty('password');
     });
 
     it('should return 404 for non-existent connection', async () => {
@@ -267,10 +267,10 @@ describe('Connections (Integration)', () => {
         })
         .expect(201);
 
-      expect(response.body).toHaveProperty('id');
-      expect(response.body).toHaveProperty('name', 'New DB');
-      expect(response.body).toHaveProperty('hasCredential');
-      expect(response.body).not.toHaveProperty('password');
+      expect(response.body.data).toHaveProperty('id');
+      expect(response.body.data).toHaveProperty('name', 'New DB');
+      expect(response.body.data).toHaveProperty('hasCredential');
+      expect(response.body.data).not.toHaveProperty('password');
       expect(context.prismaMock.dataConnection.create).toHaveBeenCalled();
     });
 
@@ -313,9 +313,9 @@ describe('Connections (Integration)', () => {
         })
         .expect(201);
 
-      expect(response.body).toHaveProperty('hasCredential', true);
-      expect(response.body).not.toHaveProperty('password');
-      expect(response.body).not.toHaveProperty('encryptedCredential');
+      expect(response.body.data).toHaveProperty('hasCredential', true);
+      expect(response.body.data).not.toHaveProperty('password');
+      expect(response.body.data).not.toHaveProperty('encryptedCredential');
     });
   });
 
@@ -365,7 +365,7 @@ describe('Connections (Integration)', () => {
         .send({ name: 'New Name' })
         .expect(200);
 
-      expect(response.body).toHaveProperty('name', 'New Name');
+      expect(response.body.data).toHaveProperty('name', 'New Name');
     });
 
     it('should preserve credential when password not provided', async () => {
@@ -514,11 +514,10 @@ describe('Connections (Integration)', () => {
         });
 
       // Should return 200 with test result (success: false due to invalid host)
-      expect([200, 400, 500]).toContain(response.status);
-      if (response.status === 200) {
-        expect(response.body).toHaveProperty('success');
-        expect(response.body).toHaveProperty('message');
-      }
+      // The driver will attempt connection and return the result
+      expect(response.status).toBe(200);
+      expect(response.body.data).toHaveProperty('success');
+      expect(response.body.data).toHaveProperty('message');
     });
   });
 
@@ -561,23 +560,22 @@ describe('Connections (Integration)', () => {
         .set(authHeader(contributor.accessToken));
 
       // Should return 200 with test result (may fail due to invalid host)
-      expect([200, 400, 500]).toContain(response.status);
-      if (response.status === 200) {
-        expect(response.body).toHaveProperty('success');
-        expect(response.body).toHaveProperty('message');
+      // The driver will attempt connection and return the result
+      expect(response.status).toBe(200);
+      expect(response.body.data).toHaveProperty('success');
+      expect(response.body.data).toHaveProperty('message');
 
-        // Verify test results were saved
-        expect(context.prismaMock.dataConnection.update).toHaveBeenCalledWith(
-          expect.objectContaining({
-            where: { id: '123e4567-e89b-12d3-a456-426614174001' },
-            data: expect.objectContaining({
-              lastTestedAt: expect.any(Date),
-              lastTestResult: expect.any(Boolean),
-              lastTestMessage: expect.any(String),
-            }),
+      // Verify test results were saved
+      expect(context.prismaMock.dataConnection.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: '123e4567-e89b-12d3-a456-426614174001' },
+          data: expect.objectContaining({
+            lastTestedAt: expect.any(Date),
+            lastTestResult: expect.any(Boolean),
+            lastTestMessage: expect.any(String),
           }),
-        );
-      }
+        }),
+      );
     });
 
     it('should return 400 for invalid UUID format', async () => {
