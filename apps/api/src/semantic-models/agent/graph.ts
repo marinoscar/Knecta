@@ -1,0 +1,47 @@
+import { StateGraph, END, START } from '@langchain/langgraph';
+import { MemorySaver } from '@langchain/langgraph';
+import { AgentState } from './state';
+import { createPlanNode } from './nodes/plan-discovery';
+import { createAwaitApprovalNode } from './nodes/await-approval';
+import { createAgentNode, createToolNode, shouldContinueTools } from './nodes/agent-loop';
+import { createGenerateModelNode } from './nodes/generate-model';
+import { createPersistNode } from './nodes/persist-model';
+import { createAgentTools } from './tools';
+import { buildSystemPrompt } from './prompts/system-prompt';
+import { DiscoveryService } from '../../discovery/discovery.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { SystemMessage } from '@langchain/core/messages';
+
+export function buildAgentGraph(
+  llm: BaseChatModel,
+  discoveryService: DiscoveryService,
+  prisma: PrismaService,
+  connectionId: string,
+  userId: string,
+  databaseName: string,
+  selectedSchemas: string[],
+  selectedTables: string[],
+) {
+  const tools = createAgentTools(discoveryService, connectionId, userId);
+
+  const workflow = new StateGraph(AgentState)
+    .addNode('plan_discovery', createPlanNode(llm))
+    .addNode('await_approval', createAwaitApprovalNode())
+    .addNode('agent', createAgentNode(llm, tools))
+    .addNode('tools', createToolNode(tools))
+    .addNode('generate_model', createGenerateModelNode(llm))
+    .addNode('persist_model', createPersistNode(prisma))
+    .addEdge(START, 'plan_discovery')
+    .addEdge('plan_discovery', 'await_approval')
+    .addConditionalEdges('await_approval', (state) => {
+      return state.planApproved ? 'agent' : END;
+    })
+    .addConditionalEdges('agent', shouldContinueTools)
+    .addEdge('tools', 'agent')
+    .addEdge('generate_model', 'persist_model')
+    .addEdge('persist_model', END);
+
+  const checkpointer = new MemorySaver();
+  return workflow.compile({ checkpointer });
+}
