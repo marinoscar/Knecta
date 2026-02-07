@@ -199,6 +199,12 @@ import type {
   UserListItem,
   DeviceActivationInfo,
   DeviceAuthorizationResponse,
+  ConnectionsResponse,
+  DataConnection,
+  CreateConnectionPayload,
+  UpdateConnectionPayload,
+  TestConnectionPayload,
+  ConnectionTestResult,
 } from '../types';
 
 // Allowlist API
@@ -276,4 +282,57 @@ export async function authorizeDevice(
     userCode,
     approve,
   });
+}
+
+// Connections API
+export async function getConnections(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  dbType?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}): Promise<ConnectionsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set('page', String(params.page));
+  if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
+  if (params?.search) searchParams.set('search', params.search);
+  if (params?.dbType) searchParams.set('dbType', params.dbType);
+  if (params?.sortBy) searchParams.set('sortBy', params.sortBy);
+  if (params?.sortOrder) searchParams.set('sortOrder', params.sortOrder);
+
+  return api.get<ConnectionsResponse>(`/connections?${searchParams}`);
+}
+
+export async function getConnection(id: string): Promise<DataConnection> {
+  return api.get<DataConnection>(`/connections/${id}`);
+}
+
+export async function createConnection(
+  data: CreateConnectionPayload,
+): Promise<DataConnection> {
+  return api.post<DataConnection>('/connections', data);
+}
+
+export async function updateConnection(
+  id: string,
+  data: UpdateConnectionPayload,
+): Promise<DataConnection> {
+  return api.patch<DataConnection>(`/connections/${id}`, data);
+}
+
+export async function deleteConnection(id: string): Promise<void> {
+  await api.delete<void>(`/connections/${id}`);
+}
+
+export async function testNewConnection(
+  data: TestConnectionPayload,
+): Promise<ConnectionTestResult> {
+  return api.post<ConnectionTestResult>('/connections/test', data);
+}
+
+export async function testExistingConnection(
+  id: string,
+): Promise<ConnectionTestResult> {
+  return api.post<ConnectionTestResult>(`/connections/${id}/test`);
 }

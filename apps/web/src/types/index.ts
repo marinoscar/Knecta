@@ -92,3 +92,79 @@ export interface DeviceAuthorizationResponse {
   success: boolean;
   message: string;
 }
+
+// =============================================================================
+// Database Connections
+// =============================================================================
+
+export type DatabaseType = 'postgresql' | 'mysql' | 'sqlserver' | 'databricks' | 'snowflake';
+
+export interface DataConnection {
+  id: string;
+  name: string;
+  description: string | null;
+  dbType: DatabaseType;
+  host: string;
+  port: number;
+  databaseName: string | null;
+  username: string | null;
+  hasCredential: boolean;
+  useSsl: boolean;
+  options: Record<string, unknown> | null;
+  lastTestedAt: string | null;
+  lastTestResult: boolean | null;
+  lastTestMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateConnectionPayload {
+  name: string;
+  description?: string;
+  dbType: DatabaseType;
+  host: string;
+  port: number;
+  databaseName?: string;
+  username?: string;
+  password?: string;
+  useSsl?: boolean;
+  options?: Record<string, unknown>;
+}
+
+export interface UpdateConnectionPayload {
+  name?: string;
+  description?: string;
+  dbType?: DatabaseType;
+  host?: string;
+  port?: number;
+  databaseName?: string;
+  username?: string;
+  password?: string;
+  useSsl?: boolean;
+  options?: Record<string, unknown>;
+}
+
+export interface TestConnectionPayload {
+  dbType: DatabaseType;
+  host: string;
+  port: number;
+  databaseName?: string;
+  username?: string;
+  password?: string;
+  useSsl?: boolean;
+  options?: Record<string, unknown>;
+}
+
+export interface ConnectionsResponse {
+  items: DataConnection[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface ConnectionTestResult {
+  success: boolean;
+  message: string;
+  latencyMs: number;
+}
