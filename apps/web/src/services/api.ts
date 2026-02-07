@@ -205,6 +205,15 @@ import type {
   UpdateConnectionPayload,
   TestConnectionPayload,
   ConnectionTestResult,
+  SemanticModelsResponse,
+  SemanticModel,
+  SemanticModelRun,
+  CreateRunPayload,
+  DatabaseInfo,
+  SchemaInfo,
+  TableInfo,
+  ColumnInfo,
+  LLMProviderInfo,
 } from '../types';
 
 // Allowlist API
@@ -335,4 +344,89 @@ export async function testExistingConnection(
   id: string,
 ): Promise<ConnectionTestResult> {
   return api.post<ConnectionTestResult>(`/connections/${id}/test`);
+}
+
+// ==========================================
+// Semantic Models API
+// ==========================================
+
+export async function getSemanticModels(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+  connectionId?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}): Promise<SemanticModelsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set('page', String(params.page));
+  if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
+  if (params?.search) searchParams.set('search', params.search);
+  if (params?.status) searchParams.set('status', params.status);
+  if (params?.connectionId) searchParams.set('connectionId', params.connectionId);
+  if (params?.sortBy) searchParams.set('sortBy', params.sortBy);
+  if (params?.sortOrder) searchParams.set('sortOrder', params.sortOrder);
+  const query = searchParams.toString();
+  return api.get<SemanticModelsResponse>(`/semantic-models${query ? `?${query}` : ''}`);
+}
+
+export async function getSemanticModel(id: string): Promise<SemanticModel> {
+  return api.get<SemanticModel>(`/semantic-models/${id}`);
+}
+
+export async function updateSemanticModel(id: string, data: { name?: string; description?: string }): Promise<SemanticModel> {
+  return api.patch<SemanticModel>(`/semantic-models/${id}`, data);
+}
+
+export async function deleteSemanticModel(id: string): Promise<void> {
+  await api.delete<void>(`/semantic-models/${id}`);
+}
+
+export async function exportSemanticModelYaml(id: string): Promise<string> {
+  return api.get<string>(`/semantic-models/${id}/yaml`);
+}
+
+export async function getSemanticModelRuns(modelId: string): Promise<SemanticModelRun[]> {
+  return api.get<SemanticModelRun[]>(`/semantic-models/${modelId}/runs`);
+}
+
+export async function createSemanticModelRun(data: CreateRunPayload): Promise<SemanticModelRun> {
+  return api.post<SemanticModelRun>('/semantic-models/runs', data);
+}
+
+export async function getSemanticModelRun(runId: string): Promise<SemanticModelRun> {
+  return api.get<SemanticModelRun>(`/semantic-models/runs/${runId}`);
+}
+
+export async function cancelSemanticModelRun(runId: string): Promise<SemanticModelRun> {
+  return api.post<SemanticModelRun>(`/semantic-models/runs/${runId}/cancel`);
+}
+
+// ==========================================
+// Discovery API
+// ==========================================
+
+export async function getConnectionDatabases(connectionId: string): Promise<DatabaseInfo[]> {
+  return api.get<DatabaseInfo[]>(`/connections/${connectionId}/databases`);
+}
+
+export async function getConnectionSchemas(connectionId: string, database: string): Promise<SchemaInfo[]> {
+  return api.get<SchemaInfo[]>(`/connections/${connectionId}/databases/${encodeURIComponent(database)}/schemas`);
+}
+
+export async function getConnectionTables(connectionId: string, database: string, schema: string): Promise<TableInfo[]> {
+  return api.get<TableInfo[]>(`/connections/${connectionId}/databases/${encodeURIComponent(database)}/schemas/${encodeURIComponent(schema)}/tables`);
+}
+
+export async function getConnectionColumns(connectionId: string, database: string, schema: string, table: string): Promise<ColumnInfo[]> {
+  return api.get<ColumnInfo[]>(`/connections/${connectionId}/databases/${encodeURIComponent(database)}/schemas/${encodeURIComponent(schema)}/tables/${encodeURIComponent(table)}/columns`);
+}
+
+// ==========================================
+// LLM Providers API
+// ==========================================
+
+export async function getLlmProviders(): Promise<{ providers: LLMProviderInfo[] }> {
+  return api.get<{ providers: LLMProviderInfo[] }>('/llm/providers');
 }

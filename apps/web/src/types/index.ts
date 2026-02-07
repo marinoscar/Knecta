@@ -168,3 +168,118 @@ export interface ConnectionTestResult {
   message: string;
   latencyMs: number;
 }
+
+// ==========================================
+// Semantic Models
+// ==========================================
+
+export type SemanticModelStatus = 'draft' | 'generating' | 'ready' | 'failed';
+
+export type RunStatus = 'pending' | 'planning' | 'awaiting_approval' | 'executing' | 'completed' | 'failed' | 'cancelled';
+
+export interface SemanticModel {
+  id: string;
+  name: string;
+  description: string | null;
+  connectionId: string;
+  databaseName: string;
+  status: SemanticModelStatus;
+  model: Record<string, unknown> | null;
+  modelVersion: number;
+  tableCount: number;
+  fieldCount: number;
+  relationshipCount: number;
+  metricCount: number;
+  ownerId: string;
+  createdAt: string;
+  updatedAt: string;
+  connection?: {
+    name: string;
+    dbType: DatabaseType;
+  };
+}
+
+export interface SemanticModelsResponse {
+  items: SemanticModel[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface SemanticModelRun {
+  id: string;
+  semanticModelId: string | null;
+  connectionId: string;
+  databaseName: string;
+  selectedSchemas: string[];
+  selectedTables: string[];
+  status: RunStatus;
+  plan: Record<string, unknown> | null;
+  progress: RunProgress | null;
+  errorMessage: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RunProgress {
+  currentStep: number;
+  totalSteps: number;
+  currentTable: string;
+  message: string;
+}
+
+export interface CreateRunPayload {
+  connectionId: string;
+  databaseName: string;
+  selectedSchemas: string[];
+  selectedTables: string[];
+}
+
+// ==========================================
+// Discovery
+// ==========================================
+
+export interface DatabaseInfo {
+  name: string;
+  catalog?: string;
+}
+
+export interface SchemaInfo {
+  name: string;
+  database: string;
+}
+
+export interface TableInfo {
+  name: string;
+  schema: string;
+  database: string;
+  type: 'TABLE' | 'VIEW';
+  rowCountEstimate?: number;
+}
+
+export interface ColumnInfo {
+  name: string;
+  dataType: string;
+  nativeType: string;
+  isNullable: boolean;
+  isPrimaryKey: boolean;
+  defaultValue?: string;
+  maxLength?: number;
+  numericPrecision?: number;
+  numericScale?: number;
+  comment?: string;
+}
+
+// ==========================================
+// LLM Providers
+// ==========================================
+
+export interface LLMProviderInfo {
+  name: string;
+  enabled: boolean;
+  model: string;
+  isDefault: boolean;
+}
