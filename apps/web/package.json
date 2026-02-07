@@ -16,6 +16,8 @@
     "test:ci": "vitest run --coverage --reporter=junit --outputFile=junit.xml"
   },
   "dependencies": {
+    "@copilotkit/react-core": "^1.51.3",
+    "@copilotkit/react-ui": "^1.51.3",
     "@emotion/react": "^11.x",
     "@emotion/styled": "^11.x",
     "@mui/icons-material": "^5.x",
