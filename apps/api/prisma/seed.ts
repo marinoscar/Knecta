@@ -51,6 +51,12 @@ const PERMISSIONS = [
   { name: 'connections:write', description: 'Create and edit database connections' },
   { name: 'connections:delete', description: 'Delete database connections' },
   { name: 'connections:test', description: 'Test database connections' },
+
+  // Semantic models management
+  { name: 'semantic_models:read', description: 'View semantic models' },
+  { name: 'semantic_models:write', description: 'Create and edit semantic models' },
+  { name: 'semantic_models:delete', description: 'Delete semantic models' },
+  { name: 'semantic_models:generate', description: 'Run AI agent to generate semantic models' },
 ] as const;
 
 // Role to permissions mapping
@@ -72,6 +78,10 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'connections:write',
     'connections:delete',
     'connections:test',
+    'semantic_models:read',
+    'semantic_models:write',
+    'semantic_models:delete',
+    'semantic_models:generate',
   ],
   contributor: [
     'user_settings:read',
@@ -82,12 +92,17 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'connections:write',
     'connections:delete',
     'connections:test',
+    'semantic_models:read',
+    'semantic_models:write',
+    'semantic_models:delete',
+    'semantic_models:generate',
   ],
   viewer: [
     'user_settings:read',
     'user_settings:write',
     'storage:read',
     'connections:read',
+    'semantic_models:read',
   ],
 };
 
