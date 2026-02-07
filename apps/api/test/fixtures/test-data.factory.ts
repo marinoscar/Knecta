@@ -59,6 +59,26 @@ export const mockPermissions = {
     name: 'allowlist:write',
     description: 'Modify allowlist',
   },
+  connectionsRead: {
+    id: randomUUID(),
+    name: 'connections:read',
+    description: 'Read connections',
+  },
+  connectionsWrite: {
+    id: randomUUID(),
+    name: 'connections:write',
+    description: 'Modify connections',
+  },
+  connectionsDelete: {
+    id: randomUUID(),
+    name: 'connections:delete',
+    description: 'Delete connections',
+  },
+  connectionsTest: {
+    id: randomUUID(),
+    name: 'connections:test',
+    description: 'Test connections',
+  },
 };
 
 export const mockRoles = {
@@ -350,16 +370,92 @@ export const rolePermissionsMap = {
     mockPermissions.rbacManage,
     mockPermissions.allowlistRead,
     mockPermissions.allowlistWrite,
+    mockPermissions.connectionsRead,
+    mockPermissions.connectionsWrite,
+    mockPermissions.connectionsDelete,
+    mockPermissions.connectionsTest,
   ],
   contributor: [
     mockPermissions.userSettingsRead,
     mockPermissions.userSettingsWrite,
+    mockPermissions.connectionsRead,
+    mockPermissions.connectionsWrite,
+    mockPermissions.connectionsDelete,
+    mockPermissions.connectionsTest,
   ],
   viewer: [
     mockPermissions.userSettingsRead,
     mockPermissions.userSettingsWrite,
   ],
 };
+
+// ============================================================================
+// Data Connection Factory
+// ============================================================================
+
+export interface CreateMockConnectionOptions {
+  id?: string;
+  name?: string;
+  description?: string | null;
+  dbType?: 'postgresql' | 'mysql' | 'sqlserver' | 'databricks' | 'snowflake';
+  host?: string;
+  port?: number;
+  databaseName?: string | null;
+  username?: string | null;
+  encryptedCredential?: string | null;
+  useSsl?: boolean;
+  options?: any;
+  ownerId: string;
+  lastTestedAt?: Date | null;
+  lastTestResult?: boolean | null;
+  lastTestMessage?: string | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export function createMockConnection(
+  options: CreateMockConnectionOptions,
+): any {
+  const {
+    id = randomUUID(),
+    name = 'Test Connection',
+    description = null,
+    dbType = 'postgresql',
+    host = 'localhost',
+    port = 5432,
+    databaseName = 'testdb',
+    username = 'testuser',
+    encryptedCredential = null,
+    useSsl = false,
+    options: connOptions = null,
+    ownerId,
+    lastTestedAt = null,
+    lastTestResult = null,
+    lastTestMessage = null,
+    createdAt = new Date(),
+    updatedAt = new Date(),
+  } = options;
+
+  return {
+    id,
+    name,
+    description,
+    dbType,
+    host,
+    port,
+    databaseName,
+    username,
+    encryptedCredential,
+    useSsl,
+    options: connOptions,
+    ownerId,
+    lastTestedAt,
+    lastTestResult,
+    lastTestMessage,
+    createdAt,
+    updatedAt,
+  };
+}
 
 // ============================================================================
 // Complete User with Relations
