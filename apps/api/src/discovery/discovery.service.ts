@@ -75,6 +75,72 @@ export class DiscoveryService {
   }
 
   /**
+   * Get foreign keys for a schema
+   */
+  async getForeignKeys(connectionId: string, database: string, schema: string, userId: string) {
+    const { params, dbType } = await this.getConnectionParams(connectionId, userId);
+    const driver = getDiscoveryDriver(dbType);
+    const foreignKeys = await driver.listForeignKeys(params, database, schema);
+
+    this.logger.log(`Listed ${foreignKeys.length} foreign keys in schema ${schema} for connection ${connectionId}`);
+
+    return { data: foreignKeys };
+  }
+
+  /**
+   * Get sample data from a table
+   */
+  async getSampleData(
+    connectionId: string,
+    database: string,
+    schema: string,
+    table: string,
+    limit: number,
+    userId: string,
+  ) {
+    const { params, dbType } = await this.getConnectionParams(connectionId, userId);
+    const driver = getDiscoveryDriver(dbType);
+    const sampleData = await driver.getSampleData(params, database, schema, table, limit);
+
+    this.logger.log(`Retrieved ${sampleData.rows.length} sample rows from table ${table} in connection ${connectionId}`);
+
+    return { data: sampleData };
+  }
+
+  /**
+   * Get column statistics
+   */
+  async getColumnStats(
+    connectionId: string,
+    database: string,
+    schema: string,
+    table: string,
+    column: string,
+    userId: string,
+  ) {
+    const { params, dbType } = await this.getConnectionParams(connectionId, userId);
+    const driver = getDiscoveryDriver(dbType);
+    const stats = await driver.getColumnStats(params, database, schema, table, column);
+
+    this.logger.log(`Retrieved stats for column ${column} in table ${table} for connection ${connectionId}`);
+
+    return { data: stats };
+  }
+
+  /**
+   * Execute a read-only SQL query
+   */
+  async executeQuery(connectionId: string, sql: string, userId: string, maxRows: number = 100) {
+    const { params, dbType } = await this.getConnectionParams(connectionId, userId);
+    const driver = getDiscoveryDriver(dbType);
+    const result = await driver.executeReadOnlyQuery(params, sql, maxRows);
+
+    this.logger.log(`Executed query returning ${result.rowCount} rows for connection ${connectionId}`);
+
+    return { data: result };
+  }
+
+  /**
    * Get connection params for a connection, with ownership check
    */
   private async getConnectionParams(
