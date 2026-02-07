@@ -38,6 +38,12 @@ export const PERMISSIONS = {
   STORAGE_READ: 'storage:read',
   STORAGE_WRITE: 'storage:write',
   STORAGE_DELETE_ANY: 'storage:delete_any',
+
+  // Connections
+  CONNECTIONS_READ: 'connections:read',
+  CONNECTIONS_WRITE: 'connections:write',
+  CONNECTIONS_DELETE: 'connections:delete',
+  CONNECTIONS_TEST: 'connections:test',
 } as const;
 
 export type PermissionName = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
