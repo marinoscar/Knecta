@@ -37,6 +37,7 @@ model User {
   allowlistEntry            AllowedEmail?    @relation("AllowlistClaimedBy")
   deviceCodes               DeviceCode[]     @relation("UserDeviceCodes")
   storageObjects            StorageObject[]  @relation("UserStorageObjects")
+  dataConnections           DataConnection[] @relation("UserDataConnections")
 
   @@map("users")
 }
@@ -245,6 +246,14 @@ enum StorageObjectStatus {
   failed     // Upload or processing failed
 }
 
+enum DatabaseType {
+  postgresql
+  mysql
+  sqlserver
+  databricks
+  snowflake
+}
+
 model StorageObject {
   id              String              @id @default(uuid()) @db.Uuid
   name            String              // Original filename
@@ -284,4 +293,35 @@ model StorageObjectChunk {
   @@unique([objectId, partNumber])
   @@index([objectId])
   @@map("storage_object_chunks")
+}
+
+// =============================================================================
+// Data Connections
+// =============================================================================
+
+model DataConnection {
+  id                  String       @id @default(uuid()) @db.Uuid
+  name                String
+  description         String?
+  dbType              DatabaseType @map("db_type")
+  host                String
+  port                Int
+  databaseName        String?      @map("database_name")
+  username            String?
+  encryptedCredential String?      @map("encrypted_credential")
+  useSsl              Boolean      @default(false) @map("use_ssl")
+  options             Json?
+  ownerId             String       @map("owner_id") @db.Uuid
+  lastTestedAt        DateTime?    @map("last_tested_at") @db.Timestamptz
+  lastTestResult      Boolean?     @map("last_test_result")
+  lastTestMessage     String?      @map("last_test_message")
+  createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime     @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  owner User @relation("UserDataConnections", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([dbType])
+  @@map("data_connections")
 }
