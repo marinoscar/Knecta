@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { DatabaseDriver } from './driver.interface';
+import { DatabaseDriver, DiscoveryDriver } from './driver.interface';
 import { PostgreSQLDriver } from './postgresql.driver';
 import { MySQLDriver } from './mysql.driver';
 import { SQLServerDriver } from './sqlserver.driver';
@@ -23,4 +23,13 @@ export function getDriver(dbType: string): DatabaseDriver {
   }
 }
 
-export { DatabaseDriver, ConnectionParams, ConnectionTestResult } from './driver.interface';
+export function getDiscoveryDriver(dbType: string): DiscoveryDriver {
+  switch (dbType) {
+    case 'postgresql':
+      return new PostgreSQLDriver() as DiscoveryDriver;
+    default:
+      throw new BadRequestException(`Schema discovery not yet implemented for ${dbType}`);
+  }
+}
+
+export { DatabaseDriver, DiscoveryDriver, ConnectionParams, ConnectionTestResult } from './driver.interface';
