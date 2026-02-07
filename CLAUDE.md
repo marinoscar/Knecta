@@ -275,6 +275,29 @@ cd apps/api && npm run prisma:migrate
 - `POST /api/connections/test` - Test new connection params
 - `POST /api/connections/:id/test` - Test existing connection
 
+### Semantic Models
+- `GET /api/semantic-models` - List semantic models (paginated)
+- `GET /api/semantic-models/:id` - Get semantic model by ID
+- `PATCH /api/semantic-models/:id` - Update semantic model
+- `DELETE /api/semantic-models/:id` - Delete semantic model
+- `GET /api/semantic-models/:id/yaml` - Export as YAML
+- `GET /api/semantic-models/:id/runs` - List runs for model
+- `POST /api/semantic-models/runs` - Create agent run
+- `GET /api/semantic-models/runs/:runId` - Get run status
+- `POST /api/semantic-models/runs/:runId/cancel` - Cancel run
+
+### Schema Discovery
+- `GET /api/connections/:id/databases` - List databases
+- `GET /api/connections/:id/databases/:db/schemas` - List schemas
+- `GET /api/connections/:id/databases/:db/schemas/:schema/tables` - List tables
+- `GET /api/connections/:id/databases/:db/schemas/:schema/tables/:table/columns` - List columns
+
+### LLM Providers
+- `GET /api/llm/providers` - List enabled LLM providers
+
+### CopilotKit
+- `POST /api/copilotkit` - CopilotKit runtime (SSE)
+
 ### Health
 - `GET /api/health/live` - Liveness check
 - `GET /api/health/ready` - Readiness check (includes DB)
@@ -295,6 +318,7 @@ cd apps/api && npm run prisma:migrate
 - `storage:read/write/delete` - Storage object access (own objects)
 - `storage:read_any/write_any/delete_any` - Storage object access (all objects, Admin only)
 - `connections:read/write/delete/test` - Database connection management
+- `semantic_models:read/write/delete/generate` - Semantic model management
 
 ## Database Tables
 
@@ -311,6 +335,8 @@ cd apps/api && npm run prisma:migrate
 - `storage_objects` - File metadata, status, storage references
 - `storage_object_chunks` - Multipart upload chunk tracking
 - `data_connections` - Database connection configurations (per-user, encrypted credentials)
+- `semantic_models` - AI-generated semantic models (OSI spec, JSON model, per-user)
+- `semantic_model_runs` - Agent execution tracking (status, plan, progress)
 
 ## Access Control: Email Allowlist
 
@@ -383,6 +409,12 @@ Note: `DATABASE_URL` is constructed automatically from these variables at runtim
 
 **Encryption:**
 - `ENCRYPTION_KEY` - 32-byte key for AES-256-GCM encryption of connection credentials
+
+**LLM Providers:**
+- `LLM_DEFAULT_PROVIDER` - Default LLM provider (openai|anthropic|azure)
+- `OPENAI_API_KEY` / `OPENAI_MODEL` - OpenAI configuration
+- `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` - Anthropic configuration
+- `AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_ENDPOINT` / `AZURE_OPENAI_DEPLOYMENT` / `AZURE_OPENAI_API_VERSION` - Azure OpenAI configuration
 
 **Observability:**
 - `OTEL_ENABLED` - Enable OpenTelemetry (default: true)
