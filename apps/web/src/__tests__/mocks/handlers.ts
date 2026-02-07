@@ -342,4 +342,78 @@ export const handlers = [
       },
     });
   }),
+
+  // Semantic Models endpoints
+  http.get(`${API_BASE}/semantic-models`, () => {
+    return HttpResponse.json({
+      data: {
+        items: [
+          {
+            id: 'model-1',
+            name: 'Test Semantic Model',
+            description: 'Test semantic model description',
+            connectionId: 'conn-1',
+            databaseName: 'testdb',
+            status: 'ready',
+            model: { tables: [], metrics: [] },
+            modelVersion: 1,
+            tableCount: 5,
+            fieldCount: 20,
+            relationshipCount: 3,
+            metricCount: 10,
+            ownerId: 'test-user-id',
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-15T10:30:00.000Z',
+            connection: { name: 'Test Connection', dbType: 'postgresql' },
+          },
+        ],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      },
+    });
+  }),
+
+  http.get(`${API_BASE}/semantic-models/:id`, ({ params }) => {
+    return HttpResponse.json({
+      data: {
+        id: params.id,
+        name: 'Test Semantic Model',
+        description: 'Test semantic model description',
+        connectionId: 'conn-1',
+        databaseName: 'testdb',
+        status: 'ready',
+        model: { tables: [], metrics: [] },
+        modelVersion: 1,
+        tableCount: 5,
+        fieldCount: 20,
+        relationshipCount: 3,
+        metricCount: 10,
+        ownerId: 'test-user-id',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-15T10:30:00.000Z',
+        connection: { name: 'Test Connection', dbType: 'postgresql' },
+      },
+    });
+  }),
+
+  http.delete(`${API_BASE}/semantic-models/:id`, () => {
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.get(`${API_BASE}/semantic-models/:id/yaml`, () => {
+    const mockYaml = `version: 1
+name: Test Semantic Model
+tables:
+  - name: users
+    fields:
+      - name: id
+        type: integer
+metrics:
+  - name: total_users
+    type: count
+`;
+    return HttpResponse.json({ data: mockYaml });
+  }),
 ];
