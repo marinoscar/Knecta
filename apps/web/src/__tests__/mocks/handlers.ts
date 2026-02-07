@@ -242,4 +242,104 @@ export const handlers = [
       },
     });
   }),
+
+  // Database Connections endpoints
+  http.get(`${API_BASE}/connections`, () => {
+    return HttpResponse.json({
+      data: {
+        items: [
+          {
+            id: 'conn-1',
+            name: 'Test PostgreSQL',
+            description: 'Test database',
+            dbType: 'postgresql',
+            host: 'localhost',
+            port: 5432,
+            databaseName: 'testdb',
+            username: 'testuser',
+            hasCredential: true,
+            useSsl: false,
+            options: null,
+            lastTestedAt: null,
+            lastTestResult: null,
+            lastTestMessage: null,
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-01T00:00:00.000Z',
+          },
+        ],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      },
+    });
+  }),
+
+  http.post(`${API_BASE}/connections`, async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    return HttpResponse.json(
+      {
+        data: {
+          id: 'conn-new',
+          ...body,
+          hasCredential: !!body.password,
+          lastTestedAt: null,
+          lastTestResult: null,
+          lastTestMessage: null,
+          createdAt: '2024-01-01T00:00:00.000Z',
+          updatedAt: '2024-01-01T00:00:00.000Z',
+        },
+      },
+      { status: 201 },
+    );
+  }),
+
+  http.patch(`${API_BASE}/connections/:id`, async ({ params, request }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    return HttpResponse.json({
+      data: {
+        id: params.id,
+        name: 'Updated Connection',
+        description: 'Updated description',
+        dbType: 'postgresql',
+        host: 'localhost',
+        port: 5432,
+        databaseName: 'testdb',
+        username: 'testuser',
+        hasCredential: true,
+        useSsl: false,
+        options: null,
+        lastTestedAt: null,
+        lastTestResult: null,
+        lastTestMessage: null,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: new Date().toISOString(),
+        ...body,
+      },
+    });
+  }),
+
+  http.delete(`${API_BASE}/connections/:id`, () => {
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.post(`${API_BASE}/connections/test`, () => {
+    return HttpResponse.json({
+      data: {
+        success: true,
+        message: 'Connection successful',
+        latencyMs: 42,
+      },
+    });
+  }),
+
+  http.post(`${API_BASE}/connections/:id/test`, () => {
+    return HttpResponse.json({
+      data: {
+        success: true,
+        message: 'Connection successful',
+        latencyMs: 42,
+      },
+    });
+  }),
 ];
