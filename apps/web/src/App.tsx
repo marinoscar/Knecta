@@ -17,6 +17,9 @@ const ActivateDevicePage = lazy(() => import('./pages/ActivateDevicePage'));
 const HomePage = lazy(() => import('./pages/HomePage'));
 const UserSettingsPage = lazy(() => import('./pages/UserSettingsPage'));
 const ConnectionsPage = lazy(() => import('./pages/ConnectionsPage'));
+const SemanticModelsPage = lazy(() => import('./pages/SemanticModelsPage'));
+const NewSemanticModelPage = lazy(() => import('./pages/NewSemanticModelPage'));
+const SemanticModelDetailPage = lazy(() => import('./pages/SemanticModelDetailPage'));
 const SystemSettingsPage = lazy(() => import('./pages/SystemSettingsPage'));
 const UserManagementPage = lazy(() => import('./pages/UserManagementPage'));
 
@@ -52,6 +55,9 @@ function AppRoutes() {
                 <Route path="/" element={<HomePage />} />
                 <Route path="/settings" element={<UserSettingsPage />} />
                 <Route path="/connections" element={<ConnectionsPage />} />
+                <Route path="/semantic-models" element={<SemanticModelsPage />} />
+                <Route path="/semantic-models/new" element={<NewSemanticModelPage />} />
+                <Route path="/semantic-models/:id" element={<SemanticModelDetailPage />} />
                 <Route path="/admin/users" element={<UserManagementPage />} />
                 <Route path="/admin/settings" element={<SystemSettingsPage />} />
               </Route>

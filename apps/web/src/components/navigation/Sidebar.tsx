@@ -17,6 +17,7 @@ import {
   AdminPanelSettings as AdminIcon,
   People as PeopleIcon,
   Storage as StorageIcon,
+  AccountTree as AccountTreeIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -32,7 +33,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAdmin } = usePermissions();
+  const { isAdmin, hasPermission } = usePermissions();
 
   const menuItems = [
     {
@@ -46,6 +47,12 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       icon: <StorageIcon />,
       path: '/connections',
       visible: true,
+    },
+    {
+      label: 'Semantic Models',
+      icon: <AccountTreeIcon />,
+      path: '/semantic-models',
+      visible: hasPermission('semantic_models:read'),
     },
     {
       label: 'User Settings',
