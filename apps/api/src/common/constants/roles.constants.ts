@@ -44,6 +44,12 @@ export const PERMISSIONS = {
   CONNECTIONS_WRITE: 'connections:write',
   CONNECTIONS_DELETE: 'connections:delete',
   CONNECTIONS_TEST: 'connections:test',
+
+  // Semantic Models
+  SEMANTIC_MODELS_READ: 'semantic_models:read',
+  SEMANTIC_MODELS_WRITE: 'semantic_models:write',
+  SEMANTIC_MODELS_DELETE: 'semantic_models:delete',
+  SEMANTIC_MODELS_GENERATE: 'semantic_models:generate',
 } as const;
 
 export type PermissionName = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
