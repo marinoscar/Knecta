@@ -35,7 +35,7 @@ export async function createTestApp(
 ): Promise<TestContext> {
   // Ensure ENCRYPTION_KEY is set for tests (ConnectionsService requires it at construction time)
   if (!process.env.ENCRYPTION_KEY) {
-    process.env.ENCRYPTION_KEY = 'test-encryption-key-32-bytes!!';
+    process.env.ENCRYPTION_KEY = 'test-encryption-key-32bytes!!!!!';
   }
 
   // Default to mocked database for unit/integration tests
