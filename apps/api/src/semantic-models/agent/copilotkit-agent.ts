@@ -71,6 +71,7 @@ export async function createSemanticModelAgent(context: AgentContext): Promise<a
      * AbstractAgent.clone() does not copy custom properties.
      */
     clone(): any {
+      console.log('[SemanticModelAgent] clone() called, context exists:', !!this.context);
       return new SemanticModelAgent(this.context);
     }
 
@@ -81,9 +82,11 @@ export async function createSemanticModelAgent(context: AgentContext): Promise<a
      * @returns Observable<BaseEvent> - Stream of AG-UI protocol events
      */
     run(input: any): any {
+      console.log('[SemanticModelAgent] run() called, context exists:', !!this.context, 'input keys:', Object.keys(input || {}));
       return new Observable((subscriber) => {
         this.executeAgent(subscriber, input, EventType, AIMessage, ToolMessage).catch(
           (error) => {
+            console.error('[SemanticModelAgent] executeAgent fatal error:', error.message, error.stack);
             // Emit error event instead of calling subscriber.error()
             // This keeps the Observable alive for proper cleanup
             subscriber.next({
@@ -110,6 +113,8 @@ export async function createSemanticModelAgent(context: AgentContext): Promise<a
       const threadId = input.threadId || `thread-${Date.now()}`;
 
       try {
+        console.log('[SemanticModelAgent] executeAgent starting, runId:', runId);
+
         // 1. Emit RUN_STARTED
         subscriber.next({
           type: EventType.RUN_STARTED,
@@ -118,11 +123,13 @@ export async function createSemanticModelAgent(context: AgentContext): Promise<a
         });
 
         // 2. Update run status to 'executing'
+        console.log('[SemanticModelAgent] updating run status to executing...');
         await this.context.semanticModelsService.updateRunStatus(
           runId,
           this.context.userId,
           'executing',
         );
+        console.log('[SemanticModelAgent] run status updated, creating agent graph...');
 
         // 3. Create agent graph with skipApproval: true
         const { graph, initialState } = await this.context.agentService.createAgentGraph(
@@ -136,9 +143,10 @@ export async function createSemanticModelAgent(context: AgentContext): Promise<a
           { skipApproval: true },
         );
 
-        // 4. Stream graph execution
+        // 4. Stream graph execution (thread_id required by MemorySaver checkpointer)
         const stream = (await graph.stream(initialState, {
           streamMode: 'updates' as any,
+          configurable: { thread_id: runId },
         })) as any;
 
         // 5. Process each node's output
@@ -176,6 +184,7 @@ export async function createSemanticModelAgent(context: AgentContext): Promise<a
 
         subscriber.complete();
       } catch (error: any) {
+        console.error('[SemanticModelAgent] executeAgent catch block:', error.message, error.stack);
         // 7. Handle errors
         await this.context.semanticModelsService.updateRunStatus(
           runId,
@@ -261,8 +270,9 @@ export async function createSemanticModelAgent(context: AgentContext): Promise<a
       if (message instanceof ToolMessage) {
         subscriber.next({
           type: EventType.TOOL_CALL_RESULT,
+          messageId: `tool-result-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           toolCallId: message.tool_call_id,
-          result:
+          content:
             typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
         });
       }
