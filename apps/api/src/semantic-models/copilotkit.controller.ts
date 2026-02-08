@@ -10,8 +10,13 @@ import { SemanticModelsService } from './semantic-models.service';
 /**
  * CopilotKit runtime endpoint for semantic model agent
  *
- * This controller provides the CopilotKit runtime endpoint for the semantic model generation agent.
- * It handles AG-UI protocol communication (Server-Sent Events) between the frontend and the LangGraph agent.
+ * Handles AG-UI protocol communication (SSE) between the frontend CopilotKit
+ * sidebar and the LangGraph agent. Implements the JSON-RPC envelope format
+ * with methods: info, agent/connect, agent/run.
+ *
+ * NOTE: This bypasses CopilotKit's CopilotRuntime to avoid the InMemoryAgentRunner's
+ * global thread tracking (globalThis GLOBAL_STORE) which causes "Thread already running"
+ * errors when previous SSE streams drop without cleanup.
  */
 @ApiTags('CopilotKit')
 @Controller('copilotkit')
@@ -24,17 +29,17 @@ export class CopilotKitController {
   ) {}
 
   /**
-   * CopilotKit runtime endpoint
+   * CopilotKit runtime endpoint — handles AG-UI protocol via SSE
    *
-   * This endpoint handles the AG-UI protocol for real-time agent communication.
-   * It creates a CopilotRuntime instance and registers the semantic model agent.
-   *
-   * Note: This endpoint uses SSE (Server-Sent Events) and bypasses the standard
-   * NestJS response transformation interceptor by using @Res() decorator.
+   * JSON-RPC envelope: { method, params: { agentId }, body: { threadId, messages, state } }
+   * Methods:
+   * - info: returns agent metadata
+   * - agent/connect: returns empty SSE (no history to replay)
+   * - agent/run: streams AG-UI events from our LangGraph agent
    */
   @Post()
   @Auth({ permissions: [PERMISSIONS.SEMANTIC_MODELS_GENERATE] })
-  @ApiExcludeEndpoint() // Exclude from Swagger since it uses SSE protocol
+  @ApiExcludeEndpoint()
   async handleCopilotRequest(
     @Req() req: FastifyRequest,
     @Res() res: FastifyReply,
@@ -52,84 +57,124 @@ export class CopilotKitController {
     }
 
     const body = req.body as any;
-    console.log('[CopilotKit DEBUG] method:', body?.method, 'agentId:', body?.params?.agentId, 'bodyKeys:', body ? Object.keys(body) : 'null');
+    const method = body?.method;
 
-    try {
-      // Fetch run data to get connection context
-      const run = await this.semanticModelsService.getRun(runId, userId);
+    console.log('[CopilotKit] method:', method, 'runId:', runId);
 
-      // Dynamically import CopilotKit runtime to handle ESM/CJS compatibility
-      const { CopilotRuntime, OpenAIAdapter, copilotRuntimeNestEndpoint } = await import(
-        '@copilotkit/runtime'
-      );
-
-      // Import our custom agent factory
-      const { createSemanticModelAgent } = await import('./agent/copilotkit-agent');
-
-      // Create agent with full context
-      const agent = await createSemanticModelAgent({
-        agentService: this.agentService,
-        semanticModelsService: this.semanticModelsService,
-        runId,
-        userId,
-        connectionId: run.connectionId,
-        databaseName: run.databaseName,
-        selectedSchemas: run.selectedSchemas as string[],
-        selectedTables: run.selectedTables as string[],
+    // --- Handle "info" method ---
+    if (method === 'info') {
+      res.send({
+        agents: [{ agentId: 'default', description: 'Semantic Model Agent' }],
       });
-
-      // Create runtime with the registered agent
-      // The agent ID must be 'default' to match CopilotSidebar frontend configuration
-      const runtime = new CopilotRuntime({
-        agents: {
-          default: agent,
-        },
-      });
-
-      // OpenAIAdapter required by CopilotKit runtime for telemetry
-      const serviceAdapter = new OpenAIAdapter();
-
-      // Create the endpoint handler
-      const handler = copilotRuntimeNestEndpoint({
-        runtime,
-        serviceAdapter,
-        endpoint: '/api/copilotkit',
-      });
-
-      // Fastify consumes the request body stream during parsing.
-      // CopilotKit's handler checks req.body on the raw Node.js request to
-      // rebuild the payload when the stream is already consumed.
-      const rawReq = req.raw as any;
-      rawReq.body = req.body;
-      const rawRes = res.raw;
-
-      // Tell Fastify to NOT close the response when the controller returns.
-      // Without this, Fastify calls res.end() after the handler promise resolves,
-      // killing the SSE stream before events can flow through the pipe.
-      res.hijack();
-
-      // Tell Nginx to not buffer this SSE response
-      rawRes.setHeader('X-Accel-Buffering', 'no');
-      rawRes.setHeader('Cache-Control', 'no-cache');
-
-      console.log('[CopilotKit DEBUG] runtime agents:', Object.keys(await runtime.instance?.agents || {}));
-      console.log('[CopilotKit DEBUG] calling handler...');
-
-      await handler(rawReq, rawRes);
-
-      console.log('[CopilotKit DEBUG] handler completed');
-    } catch (error) {
-      this.logger.error('CopilotKit request failed', error);
-
-      // Only send error response if response hasn't been ended yet
-      if (!res.raw.writableEnded) {
-        res.raw.statusCode = 500;
-        res.raw.setHeader('Content-Type', 'application/json');
-        res.raw.end(JSON.stringify({
-          code: 'COPILOTKIT_RUNTIME_ERROR',
-          message: 'Failed to process CopilotKit request',
-        }));
-      }
+      return;
     }
+
+    // --- Handle "agent/connect" method ---
+    // Returns empty SSE stream — no history to replay for our use case
+    if (method === 'agent/connect') {
+      res.hijack();
+      const rawRes = res.raw;
+      rawRes.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      });
+      rawRes.end();
+      return;
+    }
+
+    // --- Handle "agent/run" method ---
+    if (method === 'agent/run') {
+      try {
+        // Fetch run data to get connection context
+        const run = await this.semanticModelsService.getRun(runId, userId);
+
+        // Import agent factory (dynamic for ESM compat)
+        const { createSemanticModelAgent } = await import('./agent/copilotkit-agent');
+
+        // Create agent with full context
+        const agent = await createSemanticModelAgent({
+          agentService: this.agentService,
+          semanticModelsService: this.semanticModelsService,
+          runId,
+          userId,
+          connectionId: run.connectionId,
+          databaseName: run.databaseName,
+          selectedSchemas: run.selectedSchemas as string[],
+          selectedTables: run.selectedTables as string[],
+        });
+
+        // Hijack Fastify response for SSE streaming
+        res.hijack();
+        const rawRes = res.raw;
+        rawRes.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no',
+        });
+
+        // Extract inner body from JSON-RPC envelope
+        const input = body.body || {};
+
+        // Call agent.run() which returns an RxJS Observable of AG-UI events
+        const observable = agent.run({
+          threadId: input.threadId || `thread-${Date.now()}`,
+          runId: input.runId || runId,
+          messages: input.messages || [],
+          state: input.state || {},
+        });
+
+        // Subscribe to the Observable and write SSE events
+        observable.subscribe({
+          next: (event: any) => {
+            if (!rawRes.writableEnded) {
+              // AG-UI SSE format: data: <json>\n\n
+              rawRes.write(`data: ${JSON.stringify(event)}\n\n`);
+            }
+          },
+          error: (err: any) => {
+            this.logger.error('Agent stream error', err);
+            if (!rawRes.writableEnded) {
+              rawRes.write(`data: ${JSON.stringify({ type: 'RUN_ERROR', message: err.message || 'Agent execution failed' })}\n\n`);
+              rawRes.end();
+            }
+          },
+          complete: () => {
+            console.log('[CopilotKit] agent/run SSE stream complete');
+            if (!rawRes.writableEnded) {
+              rawRes.end();
+            }
+          },
+        });
+      } catch (error) {
+        this.logger.error('Agent run setup failed', error);
+        // If hijacked, use raw response; otherwise use res
+        if (!res.raw.writableEnded) {
+          res.raw.statusCode = 500;
+          res.raw.setHeader('Content-Type', 'application/json');
+          res.raw.end(
+            JSON.stringify({
+              code: 'COPILOTKIT_RUNTIME_ERROR',
+              message: 'Failed to start agent run',
+            }),
+          );
+        }
+      }
+      return;
+    }
+
+    // --- Handle "agent/stop" method ---
+    if (method === 'agent/stop') {
+      res.send({ success: true });
+      return;
+    }
+
+    // Unknown method
+    res.status(400).send({
+      code: 'UNKNOWN_METHOD',
+      message: `Unknown method: ${method}`,
+    });
   }
 }
