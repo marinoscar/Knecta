@@ -41,21 +41,19 @@ export class CopilotKitController {
     try {
       // Dynamically import CopilotKit runtime to handle ESM/CJS compatibility
       const { CopilotRuntime, copilotRuntimeNestEndpoint } = await import('@copilotkit/runtime');
-      // @ts-ignore - Module exists at runtime but TypeScript moduleResolution:node can't resolve /langgraph path
-      const { LangGraphAgent } = await import('@copilotkit/runtime/langgraph');
 
-      // TODO: Get connection and model generation parameters from request
-      // For now, we create a stub runtime without the agent
-      // In a full implementation, we would:
-      // 1. Extract connectionId, databaseName, schemas, tables from request properties
-      // 2. Call agentService.createAgentGraph() to get the compiled graph
-      // 3. Create a LangGraphAgent wrapping the compiled graph
-      // 4. Register the agent with the runtime
+      // Import our custom agent factory
+      const { createSemanticModelAgent } = await import('./agent/copilotkit-agent');
 
+      // Create the semantic model agent instance
+      const agent = await createSemanticModelAgent();
+
+      // Create runtime with the registered agent
+      // The agent ID must be 'default' to match CopilotSidebar frontend configuration
       const runtime = new CopilotRuntime({
-        // agents: {
-        //   semantic_model_agent: langGraphAgent,
-        // },
+        agents: {
+          default: agent,
+        },
       });
 
       // Create the endpoint handler

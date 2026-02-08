@@ -6,8 +6,6 @@ import { ThemeContextProvider, useThemeContext } from './contexts/ThemeContext';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
 import { Layout } from './components/common/Layout';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
-import { CopilotKit } from '@copilotkit/react-core';
-import '@copilotkit/react-ui/styles.css';
 
 // Pages (lazy loaded)
 import { Suspense, lazy } from 'react';
@@ -58,22 +56,8 @@ function AppRoutes() {
                 <Route path="/settings" element={<UserSettingsPage />} />
                 <Route path="/connections" element={<ConnectionsPage />} />
                 <Route path="/semantic-models" element={<SemanticModelsPage />} />
-                <Route
-                  path="/semantic-models/new"
-                  element={
-                    <CopilotKit runtimeUrl="/api/copilotkit">
-                      <NewSemanticModelPage />
-                    </CopilotKit>
-                  }
-                />
-                <Route
-                  path="/semantic-models/:id"
-                  element={
-                    <CopilotKit runtimeUrl="/api/copilotkit">
-                      <SemanticModelDetailPage />
-                    </CopilotKit>
-                  }
-                />
+                <Route path="/semantic-models/new" element={<NewSemanticModelPage />} />
+                <Route path="/semantic-models/:id" element={<SemanticModelDetailPage />} />
                 <Route path="/admin/users" element={<UserManagementPage />} />
                 <Route path="/admin/settings" element={<SystemSettingsPage />} />
               </Route>
