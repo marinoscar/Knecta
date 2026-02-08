@@ -1,5 +1,4 @@
 import { StateGraph, END, START } from '@langchain/langgraph';
-import { MemorySaver } from '@langchain/langgraph';
 import { AgentState } from './state';
 import { createPlanNode } from './nodes/plan-discovery';
 import { createAwaitApprovalNode } from './nodes/await-approval';
@@ -47,6 +46,5 @@ export function buildAgentGraph(
     .addEdge('generate_model', 'persist_model')
     .addEdge('persist_model', END);
 
-  const checkpointer = new MemorySaver();
-  return workflow.compile({ checkpointer });
+  return workflow.compile();
 }

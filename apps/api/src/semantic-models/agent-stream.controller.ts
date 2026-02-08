@@ -107,6 +107,11 @@ export class AgentStreamController {
       // 1. Validate run exists and user has access
       const run = await this.semanticModelsService.getRun(runId, userId);
 
+      // Guard against duplicate execution (e.g., React StrictMode double-firing)
+      if (run.status === 'executing') {
+        throw { status: 409, code: 'RUN_ALREADY_EXECUTING', message: 'This run is already being executed' };
+      }
+
       // 2. Hijack response for SSE streaming (CRITICAL: prevents Fastify from closing the response)
       res.hijack();
       const raw = res.raw;
@@ -150,7 +155,6 @@ export class AgentStreamController {
 
         const stream = await graph.stream(initialState, {
           streamMode: 'updates',
-          configurable: { thread_id: runId },
           callbacks: [sseHandler],
         });
 
