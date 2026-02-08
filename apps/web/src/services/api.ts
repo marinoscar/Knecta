@@ -403,6 +403,23 @@ export async function cancelSemanticModelRun(runId: string): Promise<SemanticMod
   return api.post<SemanticModelRun>(`/semantic-models/runs/${runId}/cancel`);
 }
 
+export async function listAllRuns(opts?: {
+  page?: number;
+  pageSize?: number;
+  status?: string;
+}): Promise<{ runs: SemanticModelRun[]; total: number; page: number; pageSize: number }> {
+  const params = new URLSearchParams();
+  if (opts?.page) params.set('page', String(opts.page));
+  if (opts?.pageSize) params.set('pageSize', String(opts.pageSize));
+  if (opts?.status) params.set('status', opts.status);
+  const query = params.toString();
+  return api.get(`/semantic-models/runs${query ? `?${query}` : ''}`);
+}
+
+export async function deleteSemanticModelRun(runId: string): Promise<void> {
+  await api.delete<void>(`/semantic-models/runs/${runId}`);
+}
+
 // ==========================================
 // Discovery API
 // ==========================================

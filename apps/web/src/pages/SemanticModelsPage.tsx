@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -29,16 +29,20 @@ import {
   DialogContent,
   DialogContentText,
   DialogActions,
+  Tab,
+  Tabs,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Visibility as VisibilityIcon,
   Download as DownloadIcon,
   Delete as DeleteIcon,
+  Replay as ReplayIcon,
 } from '@mui/icons-material';
 import { useSemanticModels } from '../hooks/useSemanticModels';
 import { usePermissions } from '../hooks/usePermissions';
-import type { SemanticModel, SemanticModelStatus } from '../types';
+import { listAllRuns, deleteSemanticModelRun, cancelSemanticModelRun } from '../services/api';
+import type { SemanticModel, SemanticModelStatus, SemanticModelRun } from '../types';
 
 const STATUS_CONFIG: Record<
   SemanticModelStatus,
@@ -51,6 +55,19 @@ const STATUS_CONFIG: Record<
 };
 
 const STATUS_OPTIONS: SemanticModelStatus[] = ['draft', 'generating', 'ready', 'failed'];
+
+const RUN_STATUS_CONFIG: Record<
+  string,
+  { label: string; color: 'default' | 'warning' | 'success' | 'error' | 'info' }
+> = {
+  pending: { label: 'Pending', color: 'default' },
+  planning: { label: 'Planning', color: 'info' },
+  awaiting_approval: { label: 'Awaiting Approval', color: 'info' },
+  executing: { label: 'Executing', color: 'warning' },
+  completed: { label: 'Completed', color: 'success' },
+  failed: { label: 'Failed', color: 'error' },
+  cancelled: { label: 'Cancelled', color: 'default' },
+};
 
 export default function SemanticModelsPage() {
   const navigate = useNavigate();
@@ -80,6 +97,16 @@ export default function SemanticModelsPage() {
     severity: 'success' | 'error';
   }>({ open: false, message: '', severity: 'success' });
 
+  const [activeTab, setActiveTab] = useState(0);
+  const [runs, setRuns] = useState<SemanticModelRun[]>([]);
+  const [runsTotal, setRunsTotal] = useState(0);
+  const [runsPage, setRunsPage] = useState(1);
+  const [runsPageSize, setRunsPageSize] = useState(20);
+  const [runsLoading, setRunsLoading] = useState(false);
+  const [runsStatusFilter, setRunsStatusFilter] = useState<string>('');
+  const [runToDelete, setRunToDelete] = useState<SemanticModelRun | null>(null);
+  const [deleteRunDialogOpen, setDeleteRunDialogOpen] = useState(false);
+
   useEffect(() => {
     fetchModels({
       page,
@@ -88,6 +115,33 @@ export default function SemanticModelsPage() {
       status: statusFilter || undefined,
     });
   }, [page, pageSize, search, statusFilter, fetchModels]);
+
+  const fetchRunsData = useCallback(async () => {
+    setRunsLoading(true);
+    try {
+      const result = await listAllRuns({
+        page: runsPage,
+        pageSize: runsPageSize,
+        status: runsStatusFilter || undefined,
+      });
+      setRuns(result.runs);
+      setRunsTotal(result.total);
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        message: err instanceof Error ? err.message : 'Failed to fetch runs',
+        severity: 'error',
+      });
+    } finally {
+      setRunsLoading(false);
+    }
+  }, [runsPage, runsPageSize, runsStatusFilter]);
+
+  useEffect(() => {
+    if (activeTab === 1) {
+      fetchRunsData();
+    }
+  }, [activeTab, fetchRunsData]);
 
   const handlePageChange = (_: unknown, newPage: number) => {
     fetchModels({
@@ -181,6 +235,47 @@ export default function SemanticModelsPage() {
     setModelToDelete(null);
   };
 
+  const handleRetryRun = (run: SemanticModelRun) => {
+    navigate('/semantic-models/new', {
+      state: {
+        retryRun: {
+          connectionId: run.connectionId,
+          databaseName: run.databaseName,
+          selectedSchemas: run.selectedSchemas,
+          selectedTables: run.selectedTables,
+        },
+      },
+    });
+  };
+
+  const handleDeleteRunClick = (run: SemanticModelRun) => {
+    setRunToDelete(run);
+    setDeleteRunDialogOpen(true);
+  };
+
+  const handleDeleteRunConfirm = async () => {
+    if (!runToDelete) return;
+    try {
+      await deleteSemanticModelRun(runToDelete.id);
+      setSnackbar({ open: true, message: 'Run deleted successfully', severity: 'success' });
+      fetchRunsData();
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        message: err instanceof Error ? err.message : 'Failed to delete run',
+        severity: 'error',
+      });
+    } finally {
+      setDeleteRunDialogOpen(false);
+      setRunToDelete(null);
+    }
+  };
+
+  const handleDeleteRunCancel = () => {
+    setDeleteRunDialogOpen(false);
+    setRunToDelete(null);
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString();
   };
@@ -197,6 +292,12 @@ export default function SemanticModelsPage() {
           </Typography>
         </Box>
 
+        <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2 }}>
+          <Tab label="Models" />
+          <Tab label="Runs" />
+        </Tabs>
+
+        {activeTab === 0 && (
         <Paper>
           <Box sx={{ p: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
             <TextField
@@ -344,6 +445,118 @@ export default function SemanticModelsPage() {
             </>
           )}
         </Paper>
+        )}
+
+        {activeTab === 1 && (
+          <Paper>
+            <Box sx={{ p: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
+              <FormControl size="small" sx={{ minWidth: 150 }}>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={runsStatusFilter}
+                  onChange={(e) => setRunsStatusFilter(e.target.value)}
+                  label="Status"
+                >
+                  <MenuItem value="">All</MenuItem>
+                  {Object.entries(RUN_STATUS_CONFIG).map(([key, config]) => (
+                    <MenuItem key={key} value={key}>{config.label}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+
+            {runsLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                <CircularProgress />
+              </Box>
+            ) : runs.length === 0 ? (
+              <Box sx={{ p: 4, textAlign: 'center' }}>
+                <Typography color="text.secondary">
+                  {runsStatusFilter ? 'No runs found matching your filter' : 'No runs found'}
+                </Typography>
+              </Box>
+            ) : (
+              <>
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Database</TableCell>
+                        <TableCell>Tables</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell>Error</TableCell>
+                        <TableCell>Created</TableCell>
+                        <TableCell align="right">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {runs.map((run) => (
+                        <TableRow key={run.id} hover>
+                          <TableCell>{run.databaseName}</TableCell>
+                          <TableCell>{run.selectedTables.length}</TableCell>
+                          <TableCell>
+                            <Chip
+                              label={RUN_STATUS_CONFIG[run.status]?.label || run.status}
+                              color={RUN_STATUS_CONFIG[run.status]?.color || 'default'}
+                              size="small"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            {run.errorMessage ? (
+                              <Tooltip title={run.errorMessage}>
+                                <Typography variant="caption" color="error" noWrap sx={{ maxWidth: 200, display: 'block' }}>
+                                  {run.errorMessage}
+                                </Typography>
+                              </Tooltip>
+                            ) : '-'}
+                          </TableCell>
+                          <TableCell>{formatDate(run.createdAt)}</TableCell>
+                          <TableCell align="right">
+                            <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
+                              {run.status === 'completed' && run.semanticModelId && (
+                                <Tooltip title="View Model">
+                                  <IconButton size="small" onClick={() => navigate(`/semantic-models/${run.semanticModelId}`)}>
+                                    <VisibilityIcon />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                              {['failed', 'cancelled'].includes(run.status) && canGenerate && (
+                                <Tooltip title="Retry">
+                                  <IconButton size="small" onClick={() => handleRetryRun(run)}>
+                                    <ReplayIcon />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                              {['failed', 'cancelled'].includes(run.status) && canDelete && (
+                                <Tooltip title="Delete run">
+                                  <IconButton size="small" onClick={() => handleDeleteRunClick(run)} color="error">
+                                    <DeleteIcon />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                            </Box>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+                <TablePagination
+                  component="div"
+                  count={runsTotal}
+                  page={runsPage - 1}
+                  onPageChange={(_, newPage) => setRunsPage(newPage + 1)}
+                  rowsPerPage={runsPageSize}
+                  onRowsPerPageChange={(e) => {
+                    setRunsPageSize(parseInt(e.target.value, 10));
+                    setRunsPage(1);
+                  }}
+                  rowsPerPageOptions={[10, 20, 50]}
+                />
+              </>
+            )}
+          </Paper>
+        )}
       </Box>
 
       <Snackbar
@@ -374,6 +587,21 @@ export default function SemanticModelsPage() {
         <DialogActions>
           <Button onClick={handleDeleteCancel}>Cancel</Button>
           <Button onClick={handleDeleteConfirm} color="error" variant="contained">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={deleteRunDialogOpen} onClose={handleDeleteRunCancel}>
+        <DialogTitle>Delete Run</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete this run? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteRunCancel}>Cancel</Button>
+          <Button onClick={handleDeleteRunConfirm} color="error" variant="contained">
             Delete
           </Button>
         </DialogActions>

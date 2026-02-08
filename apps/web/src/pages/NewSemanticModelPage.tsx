@@ -30,7 +30,7 @@ import {
   ArrowForward as ArrowForwardIcon,
   PlayArrow as PlayArrowIcon,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useConnections } from '../hooks/useConnections';
 import { useDiscovery } from '../hooks/useDiscovery';
 import { usePermissions } from '../hooks/usePermissions';
@@ -42,6 +42,7 @@ const steps = ['Select Connection', 'Select Database', 'Select Tables', 'Generat
 
 export default function NewSemanticModelPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { hasPermission } = usePermissions();
   const canGenerate = hasPermission('semantic_models:generate');
 
@@ -97,6 +98,20 @@ export default function NewSemanticModelPage() {
       });
     }
   }, [selectedConnection, selectedDatabase, schemas, fetchTables]);
+
+  // Handle retry state from location
+  useEffect(() => {
+    const retryRun = (location.state as any)?.retryRun;
+    if (retryRun && connections.length > 0) {
+      const conn = connections.find((c) => c.id === retryRun.connectionId);
+      if (conn) {
+        setSelectedConnection(conn);
+        setSelectedDatabase(retryRun.databaseName);
+        setSelectedTables(retryRun.selectedTables);
+        setActiveStep(3); // Go directly to Review step
+      }
+    }
+  }, [location.state, connections]);
 
   // Filter only successfully tested connections
   const testedConnections = useMemo(
