@@ -6,7 +6,7 @@ interface AgentSidebarProps {
   runId: string;
 }
 
-export function AgentSidebar({ open, runId }: AgentSidebarProps) {
+export function AgentSidebar({ open }: AgentSidebarProps) {
   if (!open) return null;
 
   return (

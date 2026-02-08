@@ -123,7 +123,6 @@ export default function SemanticModelDetailPage() {
   }
 
   const modelData = model.model as any;
-  const datasets = modelData?.datasets || [];
   const relationships = modelData?.relationships || [];
   const metrics = modelData?.metrics || [];
 

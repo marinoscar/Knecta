@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Container,
   Box,
@@ -41,7 +40,6 @@ import { AgentSidebar } from '../components/semantic-models/AgentSidebar';
 const steps = ['Select Connection', 'Select Database', 'Select Tables', 'Generate Model'];
 
 export default function NewSemanticModelPage() {
-  const navigate = useNavigate();
   const { hasPermission } = usePermissions();
   const canGenerate = hasPermission('semantic_models:generate');
 
@@ -119,15 +117,6 @@ export default function NewSemanticModelPage() {
     const schemaTables = tablesBySchema.get(schemaName) || [];
     if (schemaTables.length === 0) return false;
     return schemaTables.every((t) => selectedTables.includes(`${t.schema}.${t.name}`));
-  };
-
-  // Check if some (but not all) tables in a schema are selected
-  const isSchemaPartiallySelected = (schemaName: string): boolean => {
-    const schemaTables = tablesBySchema.get(schemaName) || [];
-    const selectedCount = schemaTables.filter((t) =>
-      selectedTables.includes(`${t.schema}.${t.name}`)
-    ).length;
-    return selectedCount > 0 && selectedCount < schemaTables.length;
   };
 
   const handleSelectAllSchema = (schemaName: string) => {
