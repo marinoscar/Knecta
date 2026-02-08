@@ -14,21 +14,38 @@ import {
 } from '@mui/material';
 import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
 
-interface Field {
-  name: string;
-  type: string;
-  isPrimaryKey?: boolean;
-  dimension?: string | null;
+interface OSIDialectExpression {
+  dialect: string;
+  expression: string;
 }
 
-interface Dataset {
+interface OSIExpression {
+  dialects: OSIDialectExpression[];
+}
+
+interface OSIDimension {
+  is_time: boolean;
+}
+
+interface OSIField {
   name: string;
-  fields: Field[];
+  expression: OSIExpression;
+  dimension?: OSIDimension;
+  label?: string;
+  description?: string;
+}
+
+interface OSIDataset {
+  name: string;
+  source?: string;
+  primary_key?: string[];
+  fields?: OSIField[];
+  description?: string;
 }
 
 interface ModelViewerProps {
   model: {
-    datasets?: Dataset[];
+    datasets?: OSIDataset[];
     relationships?: any[];
     metrics?: any[];
   };
@@ -64,7 +81,7 @@ export function ModelViewer({ model }: ModelViewerProps) {
               <Typography variant="subtitle1" fontWeight="medium">
                 {dataset.name}
               </Typography>
-              <Chip label={`${dataset.fields.length} fields`} size="small" />
+              <Chip label={`${(dataset.fields || []).length} fields`} size="small" />
             </Box>
           </AccordionSummary>
           <AccordionDetails>
@@ -73,23 +90,25 @@ export function ModelViewer({ model }: ModelViewerProps) {
                 <TableHead>
                   <TableRow>
                     <TableCell>Field Name</TableCell>
-                    <TableCell>Type</TableCell>
+                    <TableCell>Expression</TableCell>
                     <TableCell>Primary Key</TableCell>
                     <TableCell>Dimension</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {dataset.fields.map((field, fieldIndex) => (
+                  {(dataset.fields || []).map((field, fieldIndex) => (
                     <TableRow key={fieldIndex}>
                       <TableCell>{field.name}</TableCell>
                       <TableCell>
-                        <Chip label={field.type} size="small" variant="outlined" />
+                        <Chip label={field.expression?.dialects?.[0]?.expression || '-'} size="small" variant="outlined" />
                       </TableCell>
                       <TableCell>
-                        {field.isPrimaryKey && <Chip label="PK" color="primary" size="small" />}
+                        {dataset.primary_key?.includes(field.name) && <Chip label="PK" color="primary" size="small" />}
                       </TableCell>
                       <TableCell>
-                        {field.dimension && <Typography variant="body2">{field.dimension}</Typography>}
+                        {field.dimension && (
+                          <Typography variant="body2">{field.dimension.is_time ? 'Time' : 'Yes'}</Typography>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
