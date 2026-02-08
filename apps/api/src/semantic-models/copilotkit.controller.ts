@@ -40,7 +40,7 @@ export class CopilotKitController {
 
     try {
       // Dynamically import CopilotKit runtime to handle ESM/CJS compatibility
-      const { CopilotRuntime, copilotRuntimeNestEndpoint } = await import('@copilotkit/runtime');
+      const { CopilotRuntime, OpenAIAdapter, copilotRuntimeNestEndpoint } = await import('@copilotkit/runtime');
 
       // Import our custom agent factory
       const { createSemanticModelAgent } = await import('./agent/copilotkit-agent');
@@ -56,9 +56,13 @@ export class CopilotKitController {
         },
       });
 
+      // Create the service adapter (uses OPENAI_API_KEY env var)
+      const serviceAdapter = new OpenAIAdapter();
+
       // Create the endpoint handler
       const handler = copilotRuntimeNestEndpoint({
         runtime,
+        serviceAdapter,
         endpoint: '/api/copilotkit',
       });
 
