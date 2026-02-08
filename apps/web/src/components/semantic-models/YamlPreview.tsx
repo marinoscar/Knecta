@@ -45,7 +45,7 @@ export function YamlPreview({ yaml, fileName = 'semantic-model.yaml' }: YamlPrev
       <Paper
         sx={{
           p: 2,
-          bgcolor: 'grey.100',
+          bgcolor: (theme) => theme.palette.mode === 'dark' ? theme.palette.grey[900] : theme.palette.grey[100],
           maxHeight: 600,
           overflow: 'auto',
           fontFamily: 'monospace',
