@@ -22,12 +22,17 @@ export function buildAgentGraph(
   databaseName: string,
   selectedSchemas: string[],
   selectedTables: string[],
+  options?: { skipApproval?: boolean },
 ) {
   const tools = createAgentTools(discoveryService, connectionId, userId);
 
+  const approvalNode = options?.skipApproval
+    ? async () => ({ planApproved: true })
+    : createAwaitApprovalNode();
+
   const workflow = new StateGraph(AgentState)
     .addNode('plan_discovery', createPlanNode(llm))
-    .addNode('await_approval', createAwaitApprovalNode())
+    .addNode('await_approval', approvalNode)
     .addNode('agent', createAgentNode(llm, tools))
     .addNode('tools', createToolNode(tools))
     .addNode('generate_model', createGenerateModelNode(llm))

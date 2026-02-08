@@ -22,6 +22,7 @@ export class AgentService {
     selectedTables: string[],
     runId: string,
     llmProvider?: string,
+    options?: { skipApproval?: boolean },
   ) {
     const llm = this.llmService.getChatModel(llmProvider);
 
@@ -34,6 +35,7 @@ export class AgentService {
       databaseName,
       selectedSchemas,
       selectedTables,
+      options,
     );
 
     const systemPrompt = buildSystemPrompt({
