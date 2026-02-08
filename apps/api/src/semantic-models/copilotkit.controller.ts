@@ -51,7 +51,8 @@ export class CopilotKitController {
       return;
     }
 
-    this.logger.log(`CopilotKit request from user ${userId}, runId: ${runId}`);
+    const body = req.body as any;
+    console.log('[CopilotKit DEBUG] method:', body?.method, 'agentId:', body?.params?.agentId, 'bodyKeys:', body ? Object.keys(body) : 'null');
 
     try {
       // Fetch run data to get connection context
@@ -102,7 +103,12 @@ export class CopilotKitController {
       rawReq.body = req.body;
       const rawRes = res.raw;
 
+      console.log('[CopilotKit DEBUG] runtime agents:', Object.keys(await runtime.instance?.agents || {}));
+      console.log('[CopilotKit DEBUG] calling handler...');
+
       await handler(rawReq, rawRes);
+
+      console.log('[CopilotKit DEBUG] handler completed');
     } catch (error) {
       this.logger.error('CopilotKit request failed', error);
 
