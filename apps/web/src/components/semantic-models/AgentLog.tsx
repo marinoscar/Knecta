@@ -30,6 +30,7 @@ type StreamEvent =
   | { type: 'run_start' }
   | { type: 'step_start'; step: string; label: string }
   | { type: 'text'; content: string }
+  | { type: 'text_delta'; content: string }
   | { type: 'tool_start'; tool: string; args: Record<string, unknown> }
   | { type: 'tool_result'; tool: string; content: string }
   | { type: 'step_end'; step: string }
@@ -150,6 +151,34 @@ export function AgentLog({ runId }: AgentLogProps) {
                 isActive: true,
               },
             ];
+          });
+          break;
+
+        case 'text_delta':
+          setSections((prev) => {
+            if (prev.length === 0) return prev;
+            const updated = [...prev];
+            const current = { ...updated[updated.length - 1] };
+            updated[updated.length - 1] = current;
+            const entries = [...current.entries];
+            current.entries = entries;
+
+            const lastEntry = entries[entries.length - 1];
+            if (lastEntry && lastEntry.type === 'text') {
+              // Append to existing text entry (immutable update)
+              entries[entries.length - 1] = {
+                ...lastEntry,
+                content: lastEntry.content + event.content,
+              };
+            } else {
+              // Create new text entry
+              entries.push({
+                type: 'text',
+                content: event.content,
+                timestamp,
+              });
+            }
+            return updated;
           });
           break;
 

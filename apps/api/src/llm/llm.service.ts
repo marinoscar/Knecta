@@ -65,14 +65,14 @@ export class LlmService {
         const apiKey = this.configService.get<string>('llm.openai.apiKey');
         if (!apiKey) throw new BadRequestException('OpenAI API key not configured');
         const model = this.configService.get<string>('llm.openai.model') || 'gpt-4o';
-        return new ChatOpenAI({ openAIApiKey: apiKey, modelName: model, temperature: 0 });
+        return new ChatOpenAI({ openAIApiKey: apiKey, modelName: model, temperature: 0, streaming: true });
       }
 
       case 'anthropic': {
         const apiKey = this.configService.get<string>('llm.anthropic.apiKey');
         if (!apiKey) throw new BadRequestException('Anthropic API key not configured');
         const model = this.configService.get<string>('llm.anthropic.model') || 'claude-sonnet-4-5-20250929';
-        return new ChatAnthropic({ anthropicApiKey: apiKey, modelName: model, temperature: 0 });
+        return new ChatAnthropic({ anthropicApiKey: apiKey, modelName: model, temperature: 0, streaming: true });
       }
 
       case 'azure': {
@@ -91,6 +91,7 @@ export class LlmService {
             defaultHeaders: { 'api-key': apiKey },
           },
           temperature: 0,
+          streaming: true,
         });
       }
 

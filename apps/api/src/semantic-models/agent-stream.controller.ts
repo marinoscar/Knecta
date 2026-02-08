@@ -103,65 +103,96 @@ export class AgentStreamController {
         // 7. Emit run_start event
         emit({ type: 'run_start' });
 
-        // 8. Stream graph execution
+        // 8. Stream graph execution with dual mode for token-level + node-level events
+        let currentNode: string | null = null;
+
         const stream = (await graph.stream(initialState, {
-          streamMode: 'updates' as any,
+          streamMode: ['messages', 'updates'] as any,
           configurable: { thread_id: runId },
         })) as any;
 
-        // 9. Process each chunk (node output)
+        // 9. Process each chunk (either messages or updates mode)
         for await (const chunk of stream) {
-          // Extract node name and output
-          const nodeName = Object.keys(chunk)[0];
-          const output = chunk[nodeName];
+          const [mode, data] = chunk as [string, any];
 
-          // Emit step_start
-          emit({
-            type: 'step_start',
-            step: nodeName,
-            label: STEP_LABELS[nodeName] || nodeName,
-          });
+          if (mode === 'messages') {
+            const [msgChunk, metadata] = data as [any, { langgraph_node?: string }];
+            const nodeName = metadata?.langgraph_node;
 
-          // Process messages in the output
-          if (output?.messages && Array.isArray(output.messages)) {
-            for (const msg of output.messages) {
-              const msgType = msg._getType?.();
-
-              // AI message with tool calls
-              if (msgType === 'ai' && msg.tool_calls?.length > 0) {
-                for (const tc of msg.tool_calls) {
-                  emit({
-                    type: 'tool_start',
-                    tool: tc.name,
-                    args: tc.args,
-                  });
-                }
+            // Detect node transition → emit step_start
+            if (nodeName && nodeName !== currentNode) {
+              if (currentNode) {
+                emit({ type: 'step_end', step: currentNode });
               }
+              currentNode = nodeName;
+              emit({
+                type: 'step_start',
+                step: nodeName,
+                label: STEP_LABELS[nodeName] || nodeName,
+              });
+            }
 
-              // AI message with text content
-              if (msgType === 'ai' && typeof msg.content === 'string' && msg.content.trim().length > 0) {
-                emit({
-                  type: 'text',
-                  content: msg.content,
-                });
-              }
+            // AI text token → emit text_delta (skip if this chunk has tool_call_chunks)
+            if (
+              msgChunk._getType?.() === 'ai' &&
+              typeof msgChunk.content === 'string' &&
+              msgChunk.content.length > 0 &&
+              !msgChunk.tool_call_chunks?.length
+            ) {
+              emit({ type: 'text_delta', content: msgChunk.content });
+            }
 
-              // Tool result message
-              if (msgType === 'tool') {
-                emit({
-                  type: 'tool_result',
-                  tool: msg.name,
-                  content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
-                });
-              }
+            // Tool result message → emit tool_result
+            if (msgChunk._getType?.() === 'tool') {
+              emit({
+                type: 'tool_result',
+                tool: msgChunk.name,
+                content:
+                  typeof msgChunk.content === 'string'
+                    ? msgChunk.content
+                    : JSON.stringify(msgChunk.content),
+              });
             }
           }
 
-          // Emit step_end
-          emit({
-            type: 'step_end',
-            step: nodeName,
-          });
+          if (mode === 'updates') {
+            const nodeName = Object.keys(data)[0];
+            const output = data[nodeName];
+
+            // Handle non-message nodes (persist_model, await_approval) that don't emit messages
+            if (nodeName !== currentNode) {
+              if (currentNode) {
+                emit({ type: 'step_end', step: currentNode });
+              }
+              currentNode = nodeName;
+              emit({
+                type: 'step_start',
+                step: nodeName,
+                label: STEP_LABELS[nodeName] || nodeName,
+              });
+            }
+
+            // Extract tool_start from completed AI messages (for full args)
+            if (output?.messages && Array.isArray(output.messages)) {
+              for (const msg of output.messages) {
+                const msgType = msg._getType?.();
+                if (msgType === 'ai' && msg.tool_calls?.length > 0) {
+                  for (const tc of msg.tool_calls) {
+                    emit({ type: 'tool_start', tool: tc.name, args: tc.args });
+                  }
+                }
+              }
+            }
+
+            // End current step from updates mode
+            emit({ type: 'step_end', step: nodeName });
+            currentNode = null;
+          }
+        }
+
+        // Close final step if still open
+        if (currentNode) {
+          emit({ type: 'step_end', step: currentNode });
         }
 
         // 10. Fetch updated run to get semanticModelId
