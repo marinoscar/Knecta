@@ -16,15 +16,15 @@
     "test:ci": "vitest run --coverage --reporter=junit --outputFile=junit.xml"
   },
   "dependencies": {
-    "@copilotkit/react-core": "^1.51.3",
-    "@copilotkit/react-ui": "^1.51.3",
     "@emotion/react": "^11.x",
     "@emotion/styled": "^11.x",
     "@mui/icons-material": "^5.x",
     "@mui/material": "^5.x",
     "react": "^18.x",
     "react-dom": "^18.x",
-    "react-router-dom": "^6.x"
+    "react-markdown": "^8.0.7",
+    "react-router-dom": "^6.x",
+    "react-syntax-highlighter": "^15.6.6"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.x",
@@ -32,6 +32,7 @@
     "@testing-library/user-event": "^14.x",
     "@types/react": "^18.x",
     "@types/react-dom": "^18.x",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "@vitejs/plugin-react": "^5.1.2",
     "@vitest/coverage-v8": "^4.0.17",
     "@vitest/ui": "^4.0.17",

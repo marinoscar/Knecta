@@ -35,7 +35,7 @@ import { useDiscovery } from '../hooks/useDiscovery';
 import { usePermissions } from '../hooks/usePermissions';
 import { createSemanticModelRun } from '../services/api';
 import type { DataConnection, TableInfo } from '../types';
-import { AgentSidebar } from '../components/semantic-models/AgentSidebar';
+import { AgentLog } from '../components/semantic-models/AgentLog';
 
 const steps = ['Select Connection', 'Select Database', 'Select Tables', 'Generate Model'];
 
@@ -213,9 +213,7 @@ export default function NewSemanticModelPage() {
           Follow the steps to configure and generate a new semantic model
         </Typography>
 
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <Box sx={{ flex: 1 }}>
-            <Paper sx={{ p: 3, mb: 3 }}>
+        <Paper sx={{ p: 3, mb: 3 }}>
               <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
                 {steps.map((label) => (
                   <Step key={label}>
@@ -419,58 +417,64 @@ export default function NewSemanticModelPage() {
               {/* Step 4: Review and Start */}
               {activeStep === 3 && (
                 <Box>
-                  <Typography variant="h6" gutterBottom>
-                    Review and Generate
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                    Review your selections and start the semantic model generation
-                  </Typography>
-
-                  <Card variant="outlined" sx={{ mb: 3 }}>
-                    <CardContent>
-                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                        Connection
-                      </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                        <Typography variant="body1">{selectedConnection?.name}</Typography>
-                        <Chip label={selectedConnection?.dbType} size="small" />
-                      </Box>
-
-                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                        Database
-                      </Typography>
-                      <Typography variant="body1" sx={{ mb: 2 }}>
-                        {selectedDatabase}
-                      </Typography>
-
-                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                        Selection Summary
-                      </Typography>
-                      <Box>
-                        <Typography variant="body2">
-                          • {new Set(selectedTables.map((t) => t.split('.')[0])).size} schema(s)
-                        </Typography>
-                        <Typography variant="body2">• {selectedTables.length} table(s)</Typography>
-                      </Box>
-                    </CardContent>
-                  </Card>
-
                   {runId ? (
-                    <Alert severity="success" sx={{ mb: 2 }}>
-                      Agent started successfully! The agent will now analyze your database and create a
-                      semantic model. Use the sidebar to interact with the agent.
-                    </Alert>
+                    <Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          {selectedConnection?.name} • {selectedDatabase} • {selectedTables.length} tables
+                        </Typography>
+                      </Box>
+                      <AgentLog runId={runId} />
+                    </Box>
                   ) : (
-                    <Button
-                      variant="contained"
-                      size="large"
-                      startIcon={isStarting ? <CircularProgress size={20} /> : <PlayArrowIcon />}
-                      onClick={handleStartAgent}
-                      disabled={isStarting}
-                      fullWidth
-                    >
-                      {isStarting ? 'Starting Agent...' : 'Start Agent'}
-                    </Button>
+                    <>
+                      <Typography variant="h6" gutterBottom>
+                        Review and Generate
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        Review your selections and start the semantic model generation
+                      </Typography>
+
+                      <Card variant="outlined" sx={{ mb: 3 }}>
+                        <CardContent>
+                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                            Connection
+                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                            <Typography variant="body1">{selectedConnection?.name}</Typography>
+                            <Chip label={selectedConnection?.dbType} size="small" />
+                          </Box>
+
+                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                            Database
+                          </Typography>
+                          <Typography variant="body1" sx={{ mb: 2 }}>
+                            {selectedDatabase}
+                          </Typography>
+
+                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                            Selection Summary
+                          </Typography>
+                          <Box>
+                            <Typography variant="body2">
+                              • {new Set(selectedTables.map((t) => t.split('.')[0])).size} schema(s)
+                            </Typography>
+                            <Typography variant="body2">• {selectedTables.length} table(s)</Typography>
+                          </Box>
+                        </CardContent>
+                      </Card>
+
+                      <Button
+                        variant="contained"
+                        size="large"
+                        startIcon={isStarting ? <CircularProgress size={20} /> : <PlayArrowIcon />}
+                        onClick={handleStartAgent}
+                        disabled={isStarting}
+                        fullWidth
+                      >
+                        {isStarting ? 'Starting Agent...' : 'Start Agent'}
+                      </Button>
+                    </>
                   )}
                 </Box>
               )}
@@ -494,15 +498,6 @@ export default function NewSemanticModelPage() {
                 </Button>
               </Box>
             </Paper>
-          </Box>
-
-          {/* Agent Sidebar */}
-          {runId && (
-            <Box sx={{ width: 400 }}>
-              <AgentSidebar open={true} runId={runId} />
-            </Box>
-          )}
-        </Box>
       </Box>
     </Container>
   );
