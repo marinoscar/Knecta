@@ -18,6 +18,7 @@ import {
   Build as BuildIcon,
   Replay as ReplayIcon,
   ArrowBack as ArrowBackIcon,
+  ArrowForward as ArrowForwardIcon,
 } from '@mui/icons-material';
 import Markdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -324,6 +325,12 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
             </Typography>
           </Box>
 
+          {section.step === 'generate_model' && section.isActive && (
+            <Typography variant="body2" color="text.secondary" sx={{ pl: 3.5, fontStyle: 'italic', mt: 0.5 }}>
+              Grab a coffee — this step analyzes all your data and may take a few minutes...
+            </Typography>
+          )}
+
           <Box sx={{ pl: 3.5 }}>
             {section.entries.map((entry, entryIdx) => {
               if (entry.type === 'text') {
@@ -454,23 +461,17 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
 
       {status === 'completed' && (
         <Box sx={{ mt: 2 }}>
-          <Alert
-            severity="success"
-            icon={<CheckCircleIcon />}
-            action={
-              semanticModelId ? (
-                <Button color="inherit" size="small" onClick={handleViewModel}>
-                  View Semantic Model
-                </Button>
-              ) : undefined
-            }
-          >
+          <Alert severity="success" icon={<CheckCircleIcon />}>
             Model generated successfully
           </Alert>
-          {onExit && (
-            <Box sx={{ mt: 1 }}>
-              <Button size="small" startIcon={<ArrowBackIcon />} onClick={onExit}>
-                Back to List
+          {semanticModelId && (
+            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
+              <Button
+                variant="contained"
+                onClick={handleViewModel}
+                endIcon={<ArrowForwardIcon />}
+              >
+                View Semantic Model
               </Button>
             </Box>
           )}

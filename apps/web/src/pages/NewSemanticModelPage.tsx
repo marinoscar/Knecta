@@ -514,14 +514,16 @@ export default function NewSemanticModelPage() {
                 >
                   Back
                 </Button>
-                <Button
-                  endIcon={<ArrowForwardIcon />}
-                  variant="contained"
-                  onClick={handleNext}
-                  disabled={!canProceed() || activeStep === steps.length - 1 || runId !== null}
-                >
-                  Next
-                </Button>
+                {activeStep < steps.length - 1 && (
+                  <Button
+                    endIcon={<ArrowForwardIcon />}
+                    variant="contained"
+                    onClick={handleNext}
+                    disabled={!canProceed() || runId !== null}
+                  >
+                    Next
+                  </Button>
+                )}
               </Box>
             </Paper>
       </Box>
