@@ -262,11 +262,11 @@ export default function SemanticModelDetailPage() {
                     <TableBody>
                       {relationships.map((rel: any, index: number) => (
                         <TableRow key={index}>
-                          <TableCell>{rel.name || '-'}</TableCell>
-                          <TableCell>{rel.from || '-'}</TableCell>
-                          <TableCell>{rel.from_columns?.join(', ') || '-'}</TableCell>
-                          <TableCell>{rel.to || '-'}</TableCell>
-                          <TableCell>{rel.to_columns?.join(', ') || '-'}</TableCell>
+                          <TableCell>{rel.name || rel.constraintName || '-'}</TableCell>
+                          <TableCell>{rel.from || rel.fromTable || '-'}</TableCell>
+                          <TableCell>{(rel.from_columns || rel.fromColumns)?.join(', ') || '-'}</TableCell>
+                          <TableCell>{rel.to || rel.toTable || '-'}</TableCell>
+                          <TableCell>{(rel.to_columns || rel.toColumns)?.join(', ') || '-'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
