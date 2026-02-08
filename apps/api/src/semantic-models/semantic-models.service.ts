@@ -452,8 +452,9 @@ export class SemanticModelsService {
       name: model.name,
       description: model.description,
       connectionId: model.connectionId,
-      connectionName: model.connection?.name,
-      connectionDbType: model.connection?.dbType,
+      connection: model.connection
+        ? { name: model.connection.name, dbType: model.connection.dbType }
+        : null,
       databaseName: model.databaseName,
       status: model.status,
       model: model.model,

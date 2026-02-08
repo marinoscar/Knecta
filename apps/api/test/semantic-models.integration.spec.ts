@@ -118,8 +118,9 @@ describe('Semantic Models (Integration)', () => {
       expect(response.body.data.items).toHaveLength(2);
       expect(response.body.data.total).toBe(2);
       expect(response.body.data.items[0]).toHaveProperty('status');
-      expect(response.body.data.items[0]).toHaveProperty('connectionName');
-      expect(response.body.data.items[0]).toHaveProperty('connectionDbType');
+      expect(response.body.data.items[0]).toHaveProperty('connection');
+      expect(response.body.data.items[0].connection).toHaveProperty('name');
+      expect(response.body.data.items[0].connection).toHaveProperty('dbType');
     });
 
     it('should filter by status', async () => {
@@ -265,8 +266,7 @@ describe('Semantic Models (Integration)', () => {
       expect(response.body.data).toHaveProperty('id', '123e4567-e89b-12d3-a456-426614174011');
       expect(response.body.data).toHaveProperty('name', 'Sales Model');
       expect(response.body.data).toHaveProperty('status');
-      expect(response.body.data).toHaveProperty('connectionName', 'Test DB');
-      expect(response.body.data).toHaveProperty('connectionDbType', 'postgresql');
+      expect(response.body.data.connection).toEqual({ name: 'Test DB', dbType: 'postgresql' });
     });
 
     it('should return 404 for non-existent model', async () => {
