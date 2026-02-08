@@ -30,6 +30,7 @@ import {
   ArrowForward as ArrowForwardIcon,
   PlayArrow as PlayArrowIcon,
 } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import { useConnections } from '../hooks/useConnections';
 import { useDiscovery } from '../hooks/useDiscovery';
 import { usePermissions } from '../hooks/usePermissions';
@@ -40,6 +41,7 @@ import { AgentLog } from '../components/semantic-models/AgentLog';
 const steps = ['Select Connection', 'Select Database', 'Select Tables', 'Generate Model'];
 
 export default function NewSemanticModelPage() {
+  const navigate = useNavigate();
   const { hasPermission } = usePermissions();
   const canGenerate = hasPermission('semantic_models:generate');
 
@@ -174,6 +176,15 @@ export default function NewSemanticModelPage() {
     } finally {
       setIsStarting(false);
     }
+  };
+
+  const handleRetry = () => {
+    setRunId(null);
+    setError(null);
+  };
+
+  const handleExit = () => {
+    navigate('/semantic-models');
   };
 
   const canProceed = () => {
@@ -424,7 +435,7 @@ export default function NewSemanticModelPage() {
                           {selectedConnection?.name} • {selectedDatabase} • {selectedTables.length} tables
                         </Typography>
                       </Box>
-                      <AgentLog runId={runId} />
+                      <AgentLog runId={runId} onRetry={handleRetry} onExit={handleExit} />
                     </Box>
                   ) : (
                     <>

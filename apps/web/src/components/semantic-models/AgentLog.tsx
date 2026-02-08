@@ -16,6 +16,8 @@ import {
   Error as ErrorIcon,
   ExpandMore as ExpandMoreIcon,
   Build as BuildIcon,
+  Replay as ReplayIcon,
+  ArrowBack as ArrowBackIcon,
 } from '@mui/icons-material';
 import Markdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -24,6 +26,8 @@ import { api } from '../../services/api';
 
 interface AgentLogProps {
   runId: string;
+  onRetry?: () => void;
+  onExit?: () => void;
 }
 
 type StreamEvent =
@@ -64,7 +68,7 @@ interface StepSection {
 
 type LogStatus = 'connecting' | 'running' | 'completed' | 'error';
 
-export function AgentLog({ runId }: AgentLogProps) {
+export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
   const navigate = useNavigate();
   const [status, setStatus] = useState<LogStatus>('connecting');
   const [sections, setSections] = useState<StepSection[]>([]);
@@ -455,6 +459,13 @@ export function AgentLog({ runId }: AgentLogProps) {
           >
             Model generated successfully
           </Alert>
+          {onExit && (
+            <Box sx={{ mt: 1 }}>
+              <Button size="small" startIcon={<ArrowBackIcon />} onClick={onExit}>
+                Back to List
+              </Button>
+            </Box>
+          )}
         </Box>
       )}
 
@@ -463,6 +474,18 @@ export function AgentLog({ runId }: AgentLogProps) {
           <Alert severity="error" icon={<ErrorIcon />}>
             {errorMessage}
           </Alert>
+          <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+            {onRetry && (
+              <Button variant="contained" startIcon={<ReplayIcon />} onClick={onRetry}>
+                Retry
+              </Button>
+            )}
+            {onExit && (
+              <Button variant="outlined" startIcon={<ArrowBackIcon />} onClick={onExit}>
+                Back to List
+              </Button>
+            )}
+          </Box>
         </Box>
       )}
 
