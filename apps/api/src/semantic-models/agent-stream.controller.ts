@@ -172,7 +172,7 @@ export class AgentStreamController {
               });
             }
 
-            // Extract tool_start from completed AI messages (for full args)
+            // Extract tool_start and tool_result from completed node messages
             if (output?.messages && Array.isArray(output.messages)) {
               for (const msg of output.messages) {
                 const msgType = msg._getType?.();
@@ -180,6 +180,17 @@ export class AgentStreamController {
                   for (const tc of msg.tool_calls) {
                     emit({ type: 'tool_start', tool: tc.name, args: tc.args });
                   }
+                }
+                // ToolMessages from ToolNode only appear in updates mode (not messages mode)
+                if (msgType === 'tool') {
+                  emit({
+                    type: 'tool_result',
+                    tool: msg.name,
+                    content:
+                      typeof msg.content === 'string'
+                        ? msg.content
+                        : JSON.stringify(msg.content),
+                  });
                 }
               }
             }
