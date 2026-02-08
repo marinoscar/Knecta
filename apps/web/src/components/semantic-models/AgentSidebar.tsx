@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { CopilotKit } from '@copilotkit/react-core';
 import { CopilotSidebar } from '@copilotkit/react-ui';
 import '@copilotkit/react-ui/styles.css';
+import { api } from '../../services/api';
 
 interface AgentSidebarProps {
   open: boolean;
@@ -8,10 +10,15 @@ interface AgentSidebarProps {
 }
 
 export function AgentSidebar({ open, runId }: AgentSidebarProps) {
+  const headers = useMemo(() => {
+    const token = api.getAccessToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }, []);
+
   if (!open) return null;
 
   return (
-    <CopilotKit runtimeUrl="/api/copilotkit">
+    <CopilotKit runtimeUrl="/api/copilotkit" headers={headers}>
       <CopilotSidebar
         defaultOpen={true}
         labels={{
