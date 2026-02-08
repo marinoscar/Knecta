@@ -86,7 +86,8 @@ export function useSemanticModels(): UseSemanticModelsResult {
 
   const exportYaml = useCallback(async (id: string) => {
     try {
-      return await exportSemanticModelYaml(id);
+      const result = await exportSemanticModelYaml(id);
+      return result.yaml;
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to export YAML';
