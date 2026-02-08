@@ -287,6 +287,42 @@ export class SemanticModelsService {
   }
 
   /**
+   * Update a semantic model run status
+   */
+  async updateRunStatus(
+    runId: string,
+    userId: string,
+    status: string,
+    errorMessage?: string,
+  ) {
+    const run = await this.prisma.semanticModelRun.findFirst({
+      where: { id: runId, ownerId: userId },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`Semantic model run with ID ${runId} not found`);
+    }
+
+    const data: Record<string, any> = { status };
+    if (status === 'executing') {
+      data.startedAt = new Date();
+    }
+    if (status === 'failed') {
+      data.completedAt = new Date();
+      if (errorMessage) {
+        data.errorMessage = errorMessage;
+      }
+    }
+
+    const updatedRun = await this.prisma.semanticModelRun.update({
+      where: { id: runId },
+      data,
+    });
+
+    return this.mapRun(updatedRun);
+  }
+
+  /**
    * Cancel a semantic model run
    */
   async cancelRun(runId: string, userId: string) {
