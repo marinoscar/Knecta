@@ -212,8 +212,8 @@ cd apps/api && npm run prisma:migrate
 
 ## Service URLs (Development)
 
-- **Application**: http://localhost:3535 (via Nginx)
-- **Swagger UI**: http://localhost:3535/api/docs
+- **Application**: http://localhost:3636 (via Nginx)
+- **Swagger UI**: http://localhost:3636/api/docs
 - **Uptrace**: http://localhost:14318 (when otel stack running)
 
 ## API Endpoints (MVP)
