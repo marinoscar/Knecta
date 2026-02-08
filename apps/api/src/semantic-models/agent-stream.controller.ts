@@ -1,6 +1,7 @@
 import { Controller, Post, Param, Req, Res, Logger } from '@nestjs/common';
 import { ApiTags, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { FastifyRequest, FastifyReply } from 'fastify';
+import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import { Auth } from '../auth/decorators/auth.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { PERMISSIONS } from '../common/constants/roles.constants';
@@ -18,6 +19,47 @@ const STEP_LABELS: Record<string, string> = {
   generate_model: 'Generating Semantic Model',
   persist_model: 'Saving Model',
 };
+
+/**
+ * Callback handler that emits SSE events during LLM execution.
+ * Used alongside streamMode: 'updates' to provide token-level streaming
+ * without the state corruption caused by streamMode: ['messages', 'updates'].
+ */
+class SSEStreamHandler extends BaseCallbackHandler {
+  name = 'SSEStreamHandler';
+  currentNode: string | null = null;
+
+  constructor(
+    private emit: (event: object) => void,
+    private stepLabels: Record<string, string>,
+  ) {
+    super();
+  }
+
+  handleChatModelStart(
+    _llm: any, _messages: any, _runId: string, _parentRunId?: string,
+    _extraParams?: any, _tags?: string[], metadata?: Record<string, unknown>,
+  ) {
+    const nodeName = metadata?.langgraph_node as string | undefined;
+    if (nodeName && nodeName !== this.currentNode) {
+      if (this.currentNode) {
+        this.emit({ type: 'step_end', step: this.currentNode });
+      }
+      this.currentNode = nodeName;
+      this.emit({
+        type: 'step_start',
+        step: nodeName,
+        label: this.stepLabels[nodeName] || nodeName,
+      });
+    }
+  }
+
+  handleLLMNewToken(token: string) {
+    if (token && token.length > 0) {
+      this.emit({ type: 'text_delta', content: token });
+    }
+  }
+}
 
 /**
  * Agent Stream Controller
@@ -103,107 +145,65 @@ export class AgentStreamController {
         // 7. Emit run_start event
         emit({ type: 'run_start' });
 
-        // 8. Stream graph execution with dual mode for token-level + node-level events
-        let currentNode: string | null = null;
+        // 8. Stream graph execution with 'updates' mode + callbacks for token streaming
+        const sseHandler = new SSEStreamHandler(emit, STEP_LABELS);
 
-        const stream = (await graph.stream(initialState, {
-          streamMode: ['messages', 'updates'] as any,
+        const stream = await graph.stream(initialState, {
+          streamMode: 'updates',
           configurable: { thread_id: runId },
-        })) as any;
+          callbacks: [sseHandler],
+        });
 
-        // 9. Process each chunk (either messages or updates mode)
-        for await (const chunk of stream) {
-          const [mode, data] = chunk as [string, any];
+        // 9. Process updates for node-level events (tool_start, tool_result, step tracking)
+        for await (const data of stream) {
+          const nodeName = Object.keys(data)[0];
+          const output = data[nodeName];
 
-          if (mode === 'messages') {
-            const [msgChunk, metadata] = data as [any, { langgraph_node?: string }];
-            const nodeName = metadata?.langgraph_node;
+          // For non-LLM nodes (tools, await_approval, persist_model),
+          // the callback didn't fire — emit step_start from updates mode
+          if (nodeName !== sseHandler.currentNode) {
+            if (sseHandler.currentNode) {
+              emit({ type: 'step_end', step: sseHandler.currentNode });
+            }
+            sseHandler.currentNode = nodeName;
+            emit({
+              type: 'step_start',
+              step: nodeName,
+              label: STEP_LABELS[nodeName] || nodeName,
+            });
+          }
 
-            // Detect node transition → emit step_start
-            if (nodeName && nodeName !== currentNode) {
-              if (currentNode) {
-                emit({ type: 'step_end', step: currentNode });
+          // Extract tool_start and tool_result from node output messages
+          if (output?.messages && Array.isArray(output.messages)) {
+            for (const msg of output.messages) {
+              const msgType = msg._getType?.();
+              // AI message with tool_calls → emit tool_start for each
+              if (msgType === 'ai' && msg.tool_calls?.length > 0) {
+                for (const tc of msg.tool_calls) {
+                  emit({ type: 'tool_start', tool: tc.name, args: tc.args });
+                }
               }
-              currentNode = nodeName;
-              emit({
-                type: 'step_start',
-                step: nodeName,
-                label: STEP_LABELS[nodeName] || nodeName,
-              });
-            }
-
-            // AI text token → emit text_delta (skip if this chunk has tool_call_chunks)
-            if (
-              msgChunk._getType?.() === 'ai' &&
-              typeof msgChunk.content === 'string' &&
-              msgChunk.content.length > 0 &&
-              !msgChunk.tool_call_chunks?.length
-            ) {
-              emit({ type: 'text_delta', content: msgChunk.content });
-            }
-
-            // Tool result message → emit tool_result
-            if (msgChunk._getType?.() === 'tool') {
-              emit({
-                type: 'tool_result',
-                tool: msgChunk.name,
-                content:
-                  typeof msgChunk.content === 'string'
-                    ? msgChunk.content
-                    : JSON.stringify(msgChunk.content),
-              });
+              // ToolMessage → emit tool_result
+              if (msgType === 'tool') {
+                emit({
+                  type: 'tool_result',
+                  tool: msg.name,
+                  content: typeof msg.content === 'string'
+                    ? msg.content
+                    : JSON.stringify(msg.content),
+                });
+              }
             }
           }
 
-          if (mode === 'updates') {
-            const nodeName = Object.keys(data)[0];
-            const output = data[nodeName];
-
-            // Handle non-message nodes (persist_model, await_approval) that don't emit messages
-            if (nodeName !== currentNode) {
-              if (currentNode) {
-                emit({ type: 'step_end', step: currentNode });
-              }
-              currentNode = nodeName;
-              emit({
-                type: 'step_start',
-                step: nodeName,
-                label: STEP_LABELS[nodeName] || nodeName,
-              });
-            }
-
-            // Extract tool_start and tool_result from completed node messages
-            if (output?.messages && Array.isArray(output.messages)) {
-              for (const msg of output.messages) {
-                const msgType = msg._getType?.();
-                if (msgType === 'ai' && msg.tool_calls?.length > 0) {
-                  for (const tc of msg.tool_calls) {
-                    emit({ type: 'tool_start', tool: tc.name, args: tc.args });
-                  }
-                }
-                // ToolMessages from ToolNode only appear in updates mode (not messages mode)
-                if (msgType === 'tool') {
-                  emit({
-                    type: 'tool_result',
-                    tool: msg.name,
-                    content:
-                      typeof msg.content === 'string'
-                        ? msg.content
-                        : JSON.stringify(msg.content),
-                  });
-                }
-              }
-            }
-
-            // End current step from updates mode
-            emit({ type: 'step_end', step: nodeName });
-            currentNode = null;
-          }
+          // Emit step_end for this node
+          emit({ type: 'step_end', step: nodeName });
+          sseHandler.currentNode = null;
         }
 
-        // Close final step if still open
-        if (currentNode) {
-          emit({ type: 'step_end', step: currentNode });
+        // Close final step if still open from callback
+        if (sseHandler.currentNode) {
+          emit({ type: 'step_end', step: sseHandler.currentNode });
         }
 
         // 10. Fetch updated run to get semanticModelId
