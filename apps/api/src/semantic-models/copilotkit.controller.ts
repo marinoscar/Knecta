@@ -103,6 +103,11 @@ export class CopilotKitController {
       rawReq.body = req.body;
       const rawRes = res.raw;
 
+      // Tell Fastify to NOT close the response when the controller returns.
+      // Without this, Fastify calls res.end() after the handler promise resolves,
+      // killing the SSE stream before events can flow through the pipe.
+      res.hijack();
+
       // Tell Nginx to not buffer this SSE response
       rawRes.setHeader('X-Accel-Buffering', 'no');
       rawRes.setHeader('Cache-Control', 'no-cache');
@@ -116,12 +121,14 @@ export class CopilotKitController {
     } catch (error) {
       this.logger.error('CopilotKit request failed', error);
 
-      // Only send error response if response hasn't been sent yet
-      if (!res.sent) {
-        res.status(500).send({
+      // Only send error response if response hasn't been ended yet
+      if (!res.raw.writableEnded) {
+        res.raw.statusCode = 500;
+        res.raw.setHeader('Content-Type', 'application/json');
+        res.raw.end(JSON.stringify({
           code: 'COPILOTKIT_RUNTIME_ERROR',
           message: 'Failed to process CopilotKit request',
-        });
+        }));
       }
     }
   }
