@@ -156,8 +156,9 @@ export class AgentStreamController {
 
         // 9. Process updates for node-level events (tool_start, tool_result, step tracking)
         for await (const data of stream) {
-          const nodeName = Object.keys(data)[0];
-          const output = data[nodeName];
+          const update = data as Record<string, any>;
+          const nodeName = Object.keys(update)[0];
+          const output = update[nodeName];
 
           // For non-LLM nodes (tools, await_approval, persist_model),
           // the callback didn't fire — emit step_start from updates mode
