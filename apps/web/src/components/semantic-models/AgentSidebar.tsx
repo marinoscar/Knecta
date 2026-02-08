@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { CopilotKit } from '@copilotkit/react-core';
+import { useMemo, useEffect, useRef } from 'react';
+import { CopilotKit, useCopilotChat } from '@copilotkit/react-core';
 import { CopilotSidebar } from '@copilotkit/react-ui';
 import '@copilotkit/react-ui/styles.css';
 import { api } from '../../services/api';
@@ -7,6 +7,24 @@ import { api } from '../../services/api';
 interface AgentSidebarProps {
   open: boolean;
   runId: string;
+}
+
+function AutoStartAgent() {
+  const { sendMessage } = useCopilotChat();
+  const hasSent = useRef(false);
+
+  useEffect(() => {
+    if (!hasSent.current) {
+      hasSent.current = true;
+      sendMessage({
+        id: `auto-start-${Date.now()}`,
+        role: 'user',
+        content: 'Start analyzing the database and generate a semantic model',
+      } as any);
+    }
+  }, [sendMessage]);
+
+  return null;
 }
 
 export function AgentSidebar({ open, runId }: AgentSidebarProps) {
@@ -27,10 +45,11 @@ export function AgentSidebar({ open, runId }: AgentSidebarProps) {
         defaultOpen={true}
         labels={{
           title: 'Semantic Model Agent',
-          initial: 'I will analyze your database and create a semantic model. Let me start by creating a discovery plan...',
         }}
         clickOutsideToClose={false}
-      />
+      >
+        <AutoStartAgent />
+      </CopilotSidebar>
     </CopilotKit>
   );
 }
