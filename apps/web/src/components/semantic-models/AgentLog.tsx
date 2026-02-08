@@ -80,6 +80,7 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
 
   useEffect(() => {
     let isMounted = true;
+    const abortController = new AbortController();
 
     const connectToStream = async () => {
       try {
@@ -89,6 +90,7 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
+          signal: abortController.signal,
         });
 
         if (!response.ok) {
@@ -126,6 +128,7 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
           }
         }
       } catch (err) {
+        if (abortController.signal.aborted) return;
         if (isMounted) {
           setStatus('error');
           setErrorMessage(err instanceof Error ? err.message : 'Stream connection failed');
@@ -260,6 +263,7 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
 
     return () => {
       isMounted = false;
+      abortController.abort();
       if (readerRef.current) {
         readerRef.current.cancel().catch(() => {
           // Ignore cancellation errors
