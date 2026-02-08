@@ -11,9 +11,13 @@ interface AgentSidebarProps {
 
 export function AgentSidebar({ open, runId }: AgentSidebarProps) {
   const headers = useMemo(() => {
+    const h: Record<string, string> = { 'X-Run-Id': runId };
     const token = api.getAccessToken();
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  }, []);
+    if (token) {
+      h['Authorization'] = `Bearer ${token}`;
+    }
+    return h;
+  }, [runId]);
 
   if (!open) return null;
 
