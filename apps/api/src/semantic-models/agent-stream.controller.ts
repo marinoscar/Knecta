@@ -132,6 +132,9 @@ export class AgentStreamController {
         }
       };
 
+      // Keep-alive heartbeat (prevents Nginx proxy_read_timeout during long LLM calls)
+      let keepAlive: ReturnType<typeof setInterval> | null = null;
+
       try {
         // 5. Create agent graph
         const { graph, initialState } = await this.agentService.createAgentGraph(
@@ -145,10 +148,17 @@ export class AgentStreamController {
           { skipApproval: true },
         );
 
-        // 6. Emit run_start event
+        // 6. Start keep-alive heartbeat
+        keepAlive = setInterval(() => {
+          if (!raw.writableEnded) {
+            raw.write(': keep-alive\n\n');
+          }
+        }, 30_000);
+
+        // 7. Emit run_start event
         emit({ type: 'run_start' });
 
-        // 7. Stream graph execution with 'updates' mode + callbacks for token streaming
+        // 8. Stream graph execution with 'updates' mode + callbacks for step tracking
         const sseHandler = new SSEStreamHandler(emit, STEP_LABELS);
 
         const stream = await graph.stream(initialState, {
@@ -222,9 +232,13 @@ export class AgentStreamController {
           semanticModelId: updatedRun.semanticModelId,
         });
 
-        // 11. End SSE stream
+        // 11. Stop keep-alive and end SSE stream
+        if (keepAlive) clearInterval(keepAlive);
         raw.end();
       } catch (error: any) {
+        // Stop keep-alive
+        if (keepAlive) clearInterval(keepAlive);
+
         // Error during agent execution
         this.logger.error(`Agent execution failed for run ${runId}`, error.stack);
 
