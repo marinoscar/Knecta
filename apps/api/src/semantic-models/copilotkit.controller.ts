@@ -45,26 +45,32 @@ export class CopilotKitController {
     @Res() res: FastifyReply,
     @CurrentUser('id') userId: string,
   ) {
+    const body = req.body as any;
+    const method = body?.method;
     const runId = req.headers['x-run-id'] as string;
+
+    console.log('[CopilotKit] method:', method, 'runId:', runId || '(none)');
+
+    // --- Handle "info" method (no X-Run-Id needed) ---
+    if (method === 'info') {
+      res.send({
+        agents: {
+          default: {
+            name: 'default',
+            description: 'Analyzes database schemas and generates semantic models using AI',
+            className: 'SemanticModelAgent',
+          },
+        },
+        audioFileTranscriptionEnabled: false,
+      });
+      return;
+    }
 
     if (!runId) {
       this.logger.warn('CopilotKit request without X-Run-Id header');
       res.status(400).send({
         code: 'MISSING_RUN_ID',
         message: 'X-Run-Id header is required',
-      });
-      return;
-    }
-
-    const body = req.body as any;
-    const method = body?.method;
-
-    console.log('[CopilotKit] method:', method, 'runId:', runId);
-
-    // --- Handle "info" method ---
-    if (method === 'info') {
-      res.send({
-        agents: [{ agentId: 'default', description: 'Semantic Model Agent' }],
       });
       return;
     }
