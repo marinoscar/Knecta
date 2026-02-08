@@ -123,8 +123,9 @@ export default function SemanticModelDetailPage() {
   }
 
   const modelData = model.model as any;
-  const relationships = modelData?.relationships || [];
-  const metrics = modelData?.metrics || [];
+  const osiDef = modelData?.semantic_model?.[0];
+  const relationships = osiDef?.relationships || [];
+  const metrics = osiDef?.metrics || [];
 
   return (
     <Container maxWidth="lg">
@@ -236,7 +237,7 @@ export default function SemanticModelDetailPage() {
 
           <TabPanel value={activeTab} index={1}>
             <Box sx={{ px: 3 }}>
-              <ModelViewer model={modelData} />
+              <ModelViewer model={osiDef || {}} />
             </Box>
           </TabPanel>
 
