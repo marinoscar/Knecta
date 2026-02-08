@@ -66,6 +66,15 @@ export async function createSemanticModelAgent(context: AgentContext): Promise<a
     }
 
     /**
+     * Override clone() to preserve the agent context.
+     * CopilotKit runtime calls clone() before running agents, and the default
+     * AbstractAgent.clone() does not copy custom properties.
+     */
+    clone(): any {
+      return new SemanticModelAgent(this.context);
+    }
+
+    /**
      * Execute the agent run
      *
      * @param input RunAgentInput - Contains runId, threadId, messages, state
