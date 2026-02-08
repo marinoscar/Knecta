@@ -19,13 +19,13 @@ export class DeviceCodeResponseDto {
 
   @ApiProperty({
     description: 'End-user verification URI',
-    example: 'http://localhost:3535/device',
+    example: 'http://localhost:8319/device',
   })
   verificationUri!: string;
 
   @ApiProperty({
     description: 'Complete verification URI with user code pre-filled',
-    example: 'http://localhost:3535/device?code=ABCD-1234',
+    example: 'http://localhost:8319/device?code=ABCD-1234',
   })
   verificationUriComplete!: string;
 

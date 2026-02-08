@@ -149,10 +149,10 @@ function Show-Help {
     Write-Host "  .\dev.ps1 clean               # Reset everything (destroys data)"
     Write-Host ""
     Write-Host "URLs (after start):"
-    Write-Host "  Application:    http://localhost:3535"
-    Write-Host "  API:            http://localhost:3535/api"
-    Write-Host "  Swagger UI:     http://localhost:3535/api/docs"
-    Write-Host "  API Health:     http://localhost:3535/api/health/live"
+    Write-Host "  Application:    http://localhost:8319"
+    Write-Host "  API:            http://localhost:8319/api"
+    Write-Host "  Swagger UI:     http://localhost:8319/api/docs"
+    Write-Host "  API Health:     http://localhost:8319/api/health/live"
     Write-Host "  Uptrace:        http://localhost:14318 (with -Otel flag)"
     Write-Host ""
 }
@@ -190,8 +190,8 @@ function Start-Services {
     }
     Write-Success "Services started!"
     Write-Host ""
-    Write-Info "Application:  http://localhost:3535"
-    Write-Info "Swagger UI:   http://localhost:3535/api/docs"
+    Write-Info "Application:  http://localhost:8319"
+    Write-Info "Swagger UI:   http://localhost:8319/api/docs"
     if ($Otel) {
         Write-Info "Uptrace:      http://localhost:14318"
     }
@@ -232,8 +232,8 @@ function Rebuild-Services {
     }
     Write-Success "Services rebuilt and started!"
     Write-Host ""
-    Write-Info "Application:  http://localhost:3535"
-    Write-Info "Swagger UI:   http://localhost:3535/api/docs"
+    Write-Info "Application:  http://localhost:8319"
+    Write-Info "Swagger UI:   http://localhost:8319/api/docs"
     if ($Otel) {
         Write-Info "Uptrace:      http://localhost:14318"
     }

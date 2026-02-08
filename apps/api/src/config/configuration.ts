@@ -17,7 +17,7 @@ export default () => {
     // Application
     nodeEnv: process.env.NODE_ENV || 'development',
     port: parseInt(process.env.PORT || '3000', 10),
-    appUrl: process.env.APP_URL || 'http://localhost:3535',
+    appUrl: process.env.APP_URL || 'http://localhost:8319',
 
     // Database
     database: {

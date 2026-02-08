@@ -85,8 +85,8 @@ Generates a new device code pair to initiate the authorization flow.
   "data": {
     "deviceCode": "a4f3b8c9d2e1f5a6b7c8d9e0f1a2b3c4",
     "userCode": "ABCD-1234",
-    "verificationUri": "http://localhost:3535/activate",
-    "verificationUriComplete": "http://localhost:3535/activate?code=ABCD-1234",
+    "verificationUri": "http://localhost:8319/activate",
+    "verificationUriComplete": "http://localhost:8319/activate?code=ABCD-1234",
     "expiresIn": 900,
     "interval": 5
   }
@@ -147,7 +147,7 @@ Returns information for the device activation page.
 ```json
 {
   "data": {
-    "verificationUri": "http://localhost:3535/activate"
+    "verificationUri": "http://localhost:8319/activate"
   }
 }
 ```
@@ -156,7 +156,7 @@ Returns information for the device activation page.
 ```json
 {
   "data": {
-    "verificationUri": "http://localhost:3535/activate",
+    "verificationUri": "http://localhost:8319/activate",
     "userCode": "ABCD-1234",
     "clientInfo": {
       "deviceName": "CLI Tool"
@@ -344,7 +344,7 @@ The module follows RFC 8628 error codes for consistency:
 
 1. Generate a device code:
 ```bash
-curl -X POST http://localhost:3535/api/auth/activate/code \
+curl -X POST http://localhost:8319/api/auth/activate/code \
   -H "Content-Type: application/json" \
   -d '{"clientInfo": {"deviceName": "Test CLI"}}'
 ```
@@ -353,7 +353,7 @@ curl -X POST http://localhost:3535/api/auth/activate/code \
 
 3. Poll for tokens:
 ```bash
-curl -X POST http://localhost:3535/api/auth/activate/token \
+curl -X POST http://localhost:8319/api/auth/activate/token \
   -H "Content-Type: application/json" \
   -d '{"deviceCode": "YOUR_DEVICE_CODE"}'
 ```

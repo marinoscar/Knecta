@@ -8,7 +8,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   use: {
-    baseURL: process.env.BASE_URL || 'http://localhost:3535',
+    baseURL: process.env.BASE_URL || 'http://localhost:8319',
     trace: 'on-first-retry',
   },
   projects: [
@@ -20,7 +20,7 @@ export default defineConfig({
   // Start local dev server if not running
   webServer: process.env.CI ? undefined : {
     command: 'cd ../../infra/compose && docker compose -f base.compose.yml -f dev.compose.yml up',
-    url: 'http://localhost:3535/api/health/live',
+    url: 'http://localhost:8319/api/health/live',
     reuseExistingServer: true,
     timeout: 120000,
   },

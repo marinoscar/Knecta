@@ -10,7 +10,7 @@ export interface AppConfig {
   appUrl?: string;
 }
 
-const DEFAULT_APP_URL = 'http://localhost:3535';
+const DEFAULT_APP_URL = 'http://localhost:8319';
 
 /**
  * Get the config directory path

@@ -74,10 +74,10 @@ export function blank(): void {
  */
 export function printServiceUrls(includeOtel: boolean = false): void {
   blank();
-  info('Application:  http://localhost:3535');
-  info('API:          http://localhost:3535/api');
-  info('Swagger UI:   http://localhost:3535/api/docs');
-  info('API Health:   http://localhost:3535/api/health/live');
+  info('Application:  http://localhost:8319');
+  info('API:          http://localhost:8319/api');
+  info('Swagger UI:   http://localhost:8319/api/docs');
+  info('API Health:   http://localhost:8319/api/health/live');
   if (includeOtel) {
     info('Uptrace:      http://localhost:14318');
   }

@@ -42,7 +42,7 @@ Command-line tools that need user authentication without opening a local web bro
 **Example:** A deployment CLI that needs access to your organization's API:
 ```bash
 $ deploy-cli login
-Please visit: http://localhost:3535/device
+Please visit: http://localhost:8319/device
 Enter code: ABCD-1234
 Waiting for authorization...
 ✓ Authorized successfully!
@@ -140,8 +140,8 @@ The API responds with device and user codes:
   "data": {
     "deviceCode": "a4f3b8c9d2e1f5a6b7c8d9e0f1a2b3c4",
     "userCode": "ABCD-1234",
-    "verificationUri": "http://localhost:3535/device",
-    "verificationUriComplete": "http://localhost:3535/device?code=ABCD-1234",
+    "verificationUri": "http://localhost:8319/device",
+    "verificationUriComplete": "http://localhost:8319/device?code=ABCD-1234",
     "expiresIn": 900,
     "interval": 5
   }
@@ -238,8 +238,8 @@ Generate a new device code pair to initiate the device authorization flow.
   "data": {
     "deviceCode": "a4f3b8c9d2e1f5a6b7c8d9e0f1a2b3c4",
     "userCode": "ABCD-1234",
-    "verificationUri": "http://localhost:3535/device",
-    "verificationUriComplete": "http://localhost:3535/device?code=ABCD-1234",
+    "verificationUri": "http://localhost:8319/device",
+    "verificationUriComplete": "http://localhost:8319/device?code=ABCD-1234",
     "expiresIn": 900,
     "interval": 5
   }
@@ -324,7 +324,7 @@ Authorization: Bearer <token>
 ```json
 {
   "data": {
-    "verificationUri": "http://localhost:3535/device"
+    "verificationUri": "http://localhost:8319/device"
   }
 }
 ```
@@ -339,7 +339,7 @@ Authorization: Bearer <token>
 ```json
 {
   "data": {
-    "verificationUri": "http://localhost:3535/device",
+    "verificationUri": "http://localhost:8319/device",
     "userCode": "ABCD-1234",
     "clientInfo": {
       "name": "My CLI Tool",
@@ -466,7 +466,7 @@ Authorization: Bearer <token>
 ```javascript
 const axios = require('axios');
 
-const API_BASE = 'http://localhost:3535/api';
+const API_BASE = 'http://localhost:8319/api';
 
 async function loginWithDeviceFlow() {
   // Step 1: Request device code
@@ -550,7 +550,7 @@ import requests
 import time
 import sys
 
-API_BASE = 'http://localhost:3535/api'
+API_BASE = 'http://localhost:8319/api'
 
 def login_with_device_flow():
     # Step 1: Request device code
@@ -661,7 +661,7 @@ function DeviceAuthScreen() {
   }, []);
 
   async function initiateDeviceAuth() {
-    const response = await axios.post('http://localhost:3535/api/auth/device/code', {
+    const response = await axios.post('http://localhost:8319/api/auth/device/code', {
       clientInfo: {
         name: 'My Mobile App',
         version: '1.0.0',
@@ -685,7 +685,7 @@ function DeviceAuthScreen() {
 
     const poll = async () => {
       try {
-        const response = await axios.post('http://localhost:3535/api/auth/device/token', {
+        const response = await axios.post('http://localhost:8319/api/auth/device/token', {
           deviceCode,
         });
 
@@ -1058,7 +1058,7 @@ async function pollForToken(deviceCode, interval) {
 ## Additional Resources
 
 - **RFC 8628 Specification:** https://datatracker.ietf.org/doc/html/rfc8628
-- **API Documentation:** http://localhost:3535/api/docs
+- **API Documentation:** http://localhost:8319/api/docs
 - **Security Architecture:** [SECURITY-ARCHITECTURE.md](SECURITY-ARCHITECTURE.md)
 - **API Reference:** [API.md](API.md)
 

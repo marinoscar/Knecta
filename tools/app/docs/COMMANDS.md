@@ -67,7 +67,7 @@ Arguments:
 ```bash
 app config set-url                          # Interactive with prompts
 app config set-url https://myapp.com        # Direct command
-app config set-url http://localhost:3535    # Set to default
+app config set-url http://localhost:8319    # Set to default
 ```
 
 ### app config reset
@@ -79,8 +79,8 @@ Usage: app config reset
 ```
 
 Prompts for confirmation before proceeding. After reset:
-- App URL: `http://localhost:3535`
-- API URL: `http://localhost:3535/api`
+- App URL: `http://localhost:8319`
+- API URL: `http://localhost:8319/api`
 
 **Example:**
 ```bash
@@ -360,7 +360,7 @@ Usage: app auth token
 
 **Example:**
 ```bash
-curl -H "Authorization: Bearer $(app auth token)" http://localhost:3535/api/users
+curl -H "Authorization: Bearer $(app auth token)" http://localhost:8319/api/users
 ```
 
 ---
@@ -579,7 +579,7 @@ The CLI determines which server to connect to using this priority order:
 
 1. **Environment variable** `APP_URL` (highest priority)
 2. **Saved configuration** in `~/.config/app/config.json`
-3. **Default** `http://localhost:3535` (lowest priority)
+3. **Default** `http://localhost:8319` (lowest priority)
 
 ### Configuration File
 
@@ -606,7 +606,7 @@ This matches the same-origin routing pattern where the web UI is served at `/` a
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `APP_URL` | Application URL (takes precedence over saved config) | `http://localhost:3535` |
+| `APP_URL` | Application URL (takes precedence over saved config) | `http://localhost:8319` |
 | `APP_API_URL` | API base URL (overrides derived URL if set) | Derived from `APP_URL` |
 | `APP_CONFIG_DIR` | Config directory location | `~/.config/app` |
 | `APP_NO_EMOJI` | Disable emojis (set to `1`) | `0` |

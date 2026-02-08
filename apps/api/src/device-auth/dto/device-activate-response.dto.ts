@@ -6,7 +6,7 @@ import { ApiProperty } from '@nestjs/swagger';
 export class DeviceActivateResponseDto {
   @ApiProperty({
     description: 'Verification URI base',
-    example: 'http://localhost:3535/device',
+    example: 'http://localhost:8319/device',
   })
   verificationUri!: string;
 

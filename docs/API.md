@@ -2,7 +2,7 @@
 
 ## Base URL
 
-- **Development**: http://localhost:3535/api
+- **Development**: http://localhost:8319/api
 - **Production**: https://yourdomain.com/api
 
 ## Authentication
@@ -220,8 +220,8 @@ The Device Authorization Flow enables input-constrained devices (CLI tools, IoT 
   "data": {
     "deviceCode": "a4f3b8c9d2e1f5a6b7c8d9e0f1a2b3c4",
     "userCode": "ABCD-1234",
-    "verificationUri": "http://localhost:3535/device",
-    "verificationUriComplete": "http://localhost:3535/device?code=ABCD-1234",
+    "verificationUri": "http://localhost:8319/device",
+    "verificationUriComplete": "http://localhost:8319/device?code=ABCD-1234",
     "expiresIn": 900,
     "interval": 5
   }
@@ -333,7 +333,7 @@ Authorization: Bearer <token>
 ```json
 {
   "data": {
-    "verificationUri": "http://localhost:3535/device"
+    "verificationUri": "http://localhost:8319/device"
   }
 }
 ```
@@ -348,7 +348,7 @@ Authorization: Bearer <token>
 ```json
 {
   "data": {
-    "verificationUri": "http://localhost:3535/device",
+    "verificationUri": "http://localhost:8319/device",
     "userCode": "ABCD-1234",
     "clientInfo": {
       "name": "My CLI Tool",
@@ -1778,7 +1778,7 @@ Readiness check - includes database connectivity test.
 
 Interactive API documentation with request/response examples is available at:
 
-**Development:** http://localhost:3535/api/docs
+**Development:** http://localhost:8319/api/docs
 
 The Swagger UI allows you to:
 - Explore all endpoints
@@ -1792,8 +1792,8 @@ The Swagger UI allows you to:
 
 The API uses a **same-origin architecture**. Both the frontend and API are served from the same host (via Nginx reverse proxy):
 
-- Frontend: `http://localhost:3535/`
-- API: `http://localhost:3535/api`
+- Frontend: `http://localhost:8319/`
+- API: `http://localhost:8319/api`
 
 This eliminates CORS complexity and improves security. No cross-origin requests are required.
 

@@ -93,7 +93,7 @@ describe('config-store (integration)', () => {
   describe('getAppUrl', () => {
     it('should return default URL when nothing is configured', () => {
       const url = configStore.getAppUrl();
-      expect(url).toBe('http://localhost:3535');
+      expect(url).toBe('http://localhost:8319');
     });
 
     it('should return URL from environment variable', () => {
@@ -130,7 +130,7 @@ describe('config-store (integration)', () => {
   describe('getApiUrl', () => {
     it('should derive API URL from app URL by appending /api', () => {
       const apiUrl = configStore.getApiUrl();
-      expect(apiUrl).toBe('http://localhost:3535/api');
+      expect(apiUrl).toBe('http://localhost:8319/api');
     });
 
     it('should use explicit APP_API_URL env var if provided', () => {

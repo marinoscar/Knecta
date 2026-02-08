@@ -144,7 +144,7 @@ npm run test:e2e -- oauth
    DATABASE_URL=postgresql://user:pass@localhost:5432/testdb
    JWT_SECRET=test-secret-key-minimum-32-chars
    INITIAL_ADMIN_EMAIL=admin@example.com
-   APP_URL=http://localhost:3535
+   APP_URL=http://localhost:8319
    ```
 
 3. **Run Database**:

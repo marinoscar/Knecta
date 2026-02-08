@@ -88,9 +88,9 @@ This application uses **Fastify** as the HTTP adapter, not Express. This has imp
    - Seeds are idempotent - safe to run multiple times
 
 5. **Access the application**
-   - Frontend: http://localhost:3535
-   - API: http://localhost:3535/api
-   - Swagger: http://localhost:3535/api/docs
+   - Frontend: http://localhost:8319
+   - API: http://localhost:8319/api
+   - Swagger: http://localhost:8319/api/docs
 
 ### First Login
 
@@ -511,7 +511,7 @@ const response = await request(app.getHttpServer())
 2. **Verify Callback URL:**
    - Must match exactly in Google Cloud Console
    - Include protocol: `http://` or `https://`
-   - Include port if not 80/443: `http://localhost:3535/api/auth/google/callback`
+   - Include port if not 80/443: `http://localhost:8319/api/auth/google/callback`
 
 3. **Check Container Logs:**
    ```bash
@@ -520,7 +520,7 @@ const response = await request(app.getHttpServer())
 
 4. **Test OAuth Provider Endpoint:**
    ```bash
-   curl http://localhost:3535/api/auth/providers
+   curl http://localhost:8319/api/auth/providers
    ```
 
 ### Debugging Database Issues

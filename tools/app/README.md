@@ -246,7 +246,7 @@ The CLI needs to know where your application is deployed. You only need to provi
    app auth login
    ```
 
-**URL Priority**: Environment variable (`APP_URL`) > Saved config > Default (`http://localhost:3535`)
+**URL Priority**: Environment variable (`APP_URL`) > Saved config > Default (`http://localhost:8319`)
 
 **Examples:**
 ```bash
@@ -275,7 +275,7 @@ $ app auth login
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `APP_URL` | Application URL | `http://localhost:3535` |
+| `APP_URL` | Application URL | `http://localhost:8319` |
 | `APP_API_URL` | API base URL (if different from APP_URL/api) | Derived from `APP_URL` |
 | `APP_CONFIG_DIR` | Config directory | `~/.config/app` |
 | `APP_NO_EMOJI` | Disable emojis | `0` |
@@ -299,10 +299,10 @@ After running `app start`:
 
 | Service | URL |
 |---------|-----|
-| Application | http://localhost:3535 |
-| API | http://localhost:3535/api |
-| Swagger UI | http://localhost:3535/api/docs |
-| API Health | http://localhost:3535/api/health/live |
+| Application | http://localhost:8319 |
+| API | http://localhost:8319/api |
+| Swagger UI | http://localhost:8319/api/docs |
+| API Health | http://localhost:8319/api/health/live |
 | Uptrace (with --otel) | http://localhost:14318 |
 
 ## Examples
@@ -321,7 +321,7 @@ app users list
 app allowlist add newuser@company.com
 
 # Switch back to local development
-app config set-url http://localhost:3535
+app config set-url http://localhost:8319
 ```
 
 ### Complete Development Workflow
@@ -351,7 +351,7 @@ app stop
 ```bash
 # Login (opens browser)
 app auth login
-# → Opening browser to: http://localhost:3535/device?code=ABCD-1234
+# → Opening browser to: http://localhost:8319/device?code=ABCD-1234
 # → Your code: ABCD-1234
 # → Waiting for authorization...
 # → Successfully authenticated as user@example.com

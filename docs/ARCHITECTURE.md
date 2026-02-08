@@ -69,7 +69,7 @@ The Enterprise Application Foundation is a production-grade web application temp
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              NGINX REVERSE PROXY                             │
 │                           (Security Headers, Routing)                        │
-│                              http://localhost:3535                           │
+│                              http://localhost:8319                           │
 ├────────────────────────────────────┬────────────────────────────────────────┤
 │         /* → Frontend (Web)        │           /api/* → Backend (API)       │
 ├────────────────────────────────────┼────────────────────────────────────────┤
@@ -927,7 +927,7 @@ interface AuthContext {
 ```yaml
 # Core Services (base.compose.yml)
 services:
-  nginx:        # Reverse proxy (port 3535)
+  nginx:        # Reverse proxy (port 8319)
   api:          # NestJS backend (port 3000)
   web:          # React frontend (port 5173)
   db:           # PostgreSQL (port 5432)
@@ -947,7 +947,7 @@ services:
 │                                                             │
 │  ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐  │
 │  │  nginx  │    │   api   │    │   web   │    │   db    │  │
-│  │  :3535  │───▶│  :3000  │    │  :5173  │    │  :5432  │  │
+│  │  :8319  │───▶│  :3000  │    │  :5173  │    │  :5432  │  │
 │  │         │    └─────────┘    └─────────┘    └─────────┘  │
 │  │         │         │                            ▲        │
 │  │         │─────────┼────────────────────────────┘        │
@@ -967,7 +967,7 @@ services:
         │
         ▼
    External Access
-   http://localhost:3535
+   http://localhost:8319
 ```
 
 ### 10.3 Environment Configuration
@@ -978,7 +978,7 @@ Key environment variables (see `infra/compose/.env.example`):
 # Application
 NODE_ENV=development
 PORT=3000
-APP_URL=http://localhost:3535
+APP_URL=http://localhost:8319
 
 # Database
 POSTGRES_HOST=db
@@ -995,7 +995,7 @@ JWT_REFRESH_TTL_DAYS=14
 # OAuth
 GOOGLE_CLIENT_ID=<from-google-console>
 GOOGLE_CLIENT_SECRET=<from-google-console>
-GOOGLE_CALLBACK_URL=http://localhost:3535/api/auth/google/callback
+GOOGLE_CALLBACK_URL=http://localhost:8319/api/auth/google/callback
 
 # Admin Bootstrap
 INITIAL_ADMIN_EMAIL=admin@example.com
@@ -1516,9 +1516,9 @@ cd /app/apps/api && npx tsx prisma/seed.ts
 exit
 
 # 5. Access application
-# UI: http://localhost:3535
-# API: http://localhost:3535/api
-# Swagger: http://localhost:3535/api/docs
+# UI: http://localhost:8319
+# API: http://localhost:8319/api
+# Swagger: http://localhost:8319/api/docs
 ```
 
 ### 14.2 Database Changes
@@ -1580,8 +1580,8 @@ cd apps/web && npm run typecheck
 
 | Service | URL |
 |---------|-----|
-| Application | http://localhost:3535 |
-| Swagger UI | http://localhost:3535/api/docs |
+| Application | http://localhost:8319 |
+| Swagger UI | http://localhost:8319/api/docs |
 | Uptrace | http://localhost:14318 |
 | PostgreSQL | localhost:5432 |
 
