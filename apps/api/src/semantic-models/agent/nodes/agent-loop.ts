@@ -1,11 +1,12 @@
 import { AgentStateType } from '../state';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { DynamicStructuredTool } from '@langchain/core/tools';
+// @ts-ignore - ToolNode exists at runtime but TypeScript moduleResolution:node can't resolve /prebuilt path
 import { ToolNode } from '@langchain/langgraph/prebuilt';
 import { AIMessage } from '@langchain/core/messages';
 
 export function createAgentNode(llm: BaseChatModel, tools: DynamicStructuredTool[]) {
-  const llmWithTools = llm.bindTools(tools);
+  const llmWithTools = llm.bindTools!(tools);
 
   return async (state: AgentStateType) => {
     const response = await llmWithTools.invoke(state.messages);

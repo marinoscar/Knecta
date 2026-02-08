@@ -41,6 +41,7 @@ export class CopilotKitController {
     try {
       // Dynamically import CopilotKit runtime to handle ESM/CJS compatibility
       const { CopilotRuntime, copilotRuntimeNestEndpoint } = await import('@copilotkit/runtime');
+      // @ts-ignore - Module exists at runtime but TypeScript moduleResolution:node can't resolve /langgraph path
       const { LangGraphAgent } = await import('@copilotkit/runtime/langgraph');
 
       // TODO: Get connection and model generation parameters from request

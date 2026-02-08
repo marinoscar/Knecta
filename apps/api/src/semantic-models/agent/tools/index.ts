@@ -6,18 +6,18 @@ export function createAgentTools(
   discoveryService: DiscoveryService,
   connectionId: string,
   userId: string,
-) {
+): DynamicStructuredTool[] {
   const listSchemas = new DynamicStructuredTool({
     name: 'list_schemas',
     description: 'List all schemas in the target database. Use this first to understand what schemas are available.',
     schema: z.object({
       database: z.string().describe('The database name to list schemas for'),
     }),
-    func: async ({ database }) => {
+    func: async ({ database }: { database: string }) => {
       const result = await discoveryService.listSchemas(connectionId, database, userId);
       return JSON.stringify(result);
     },
-  });
+  } as any);
 
   const listTables = new DynamicStructuredTool({
     name: 'list_tables',
@@ -26,11 +26,11 @@ export function createAgentTools(
       database: z.string().describe('The database name'),
       schema: z.string().describe('The schema name'),
     }),
-    func: async ({ database, schema }) => {
+    func: async ({ database, schema }: { database: string; schema: string }) => {
       const result = await discoveryService.listTables(connectionId, database, schema, userId);
       return JSON.stringify(result);
     },
-  });
+  } as any);
 
   const listColumns = new DynamicStructuredTool({
     name: 'list_columns',
@@ -40,11 +40,11 @@ export function createAgentTools(
       schema: z.string().describe('The schema name'),
       table: z.string().describe('The table name'),
     }),
-    func: async ({ database, schema, table }) => {
+    func: async ({ database, schema, table }: { database: string; schema: string; table: string }) => {
       const result = await discoveryService.listColumns(connectionId, database, schema, table, userId);
       return JSON.stringify(result);
     },
-  });
+  } as any);
 
   const getForeignKeys = new DynamicStructuredTool({
     name: 'get_foreign_keys',
@@ -53,11 +53,11 @@ export function createAgentTools(
       database: z.string().describe('The database name'),
       schema: z.string().describe('The schema name'),
     }),
-    func: async ({ database, schema }) => {
+    func: async ({ database, schema }: { database: string; schema: string }) => {
       const result = await discoveryService.getForeignKeys(connectionId, database, schema, userId);
       return JSON.stringify(result);
     },
-  });
+  } as any);
 
   const getSampleData = new DynamicStructuredTool({
     name: 'get_sample_data',
@@ -68,11 +68,11 @@ export function createAgentTools(
       table: z.string().describe('The table name'),
       limit: z.number().min(1).max(10).default(5).describe('Number of rows to sample'),
     }),
-    func: async ({ database, schema, table, limit }) => {
+    func: async ({ database, schema, table, limit }: { database: string; schema: string; table: string; limit: number }) => {
       const result = await discoveryService.getSampleData(connectionId, database, schema, table, limit, userId);
       return JSON.stringify(result);
     },
-  });
+  } as any);
 
   const getColumnStats = new DynamicStructuredTool({
     name: 'get_column_stats',
@@ -83,11 +83,11 @@ export function createAgentTools(
       table: z.string().describe('The table name'),
       column: z.string().describe('The column name'),
     }),
-    func: async ({ database, schema, table, column }) => {
+    func: async ({ database, schema, table, column }: { database: string; schema: string; table: string; column: string }) => {
       const result = await discoveryService.getColumnStats(connectionId, database, schema, table, column, userId);
       return JSON.stringify(result);
     },
-  });
+  } as any);
 
   const runQuery = new DynamicStructuredTool({
     name: 'run_query',
@@ -95,11 +95,11 @@ export function createAgentTools(
     schema: z.object({
       sql: z.string().describe('The SQL SELECT query to execute'),
     }),
-    func: async ({ sql }) => {
+    func: async ({ sql }: { sql: string }) => {
       const result = await discoveryService.executeQuery(connectionId, sql, userId);
       return JSON.stringify(result);
     },
-  });
+  } as any);
 
   return [listSchemas, listTables, listColumns, getForeignKeys, getSampleData, getColumnStats, runQuery];
 }
