@@ -252,23 +252,21 @@ export default function SemanticModelDetailPage() {
                   <Table>
                     <TableHead>
                       <TableRow>
-                        <TableCell>From Table</TableCell>
-                        <TableCell>From Column</TableCell>
-                        <TableCell>To Table</TableCell>
-                        <TableCell>To Column</TableCell>
-                        <TableCell>Type</TableCell>
+                        <TableCell>Name</TableCell>
+                        <TableCell>From Dataset</TableCell>
+                        <TableCell>From Columns</TableCell>
+                        <TableCell>To Dataset</TableCell>
+                        <TableCell>To Columns</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       {relationships.map((rel: any, index: number) => (
                         <TableRow key={index}>
-                          <TableCell>{rel.fromTable || rel.from?.table || '-'}</TableCell>
-                          <TableCell>{rel.fromColumn || rel.from?.column || '-'}</TableCell>
-                          <TableCell>{rel.toTable || rel.to?.table || '-'}</TableCell>
-                          <TableCell>{rel.toColumn || rel.to?.column || '-'}</TableCell>
-                          <TableCell>
-                            <Chip label={rel.type || 'unknown'} size="small" />
-                          </TableCell>
+                          <TableCell>{rel.name || '-'}</TableCell>
+                          <TableCell>{rel.from || '-'}</TableCell>
+                          <TableCell>{rel.from_columns?.join(', ') || '-'}</TableCell>
+                          <TableCell>{rel.to || '-'}</TableCell>
+                          <TableCell>{rel.to_columns?.join(', ') || '-'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -300,7 +298,7 @@ export default function SemanticModelDetailPage() {
                           <TableCell>{metric.name || '-'}</TableCell>
                           <TableCell>
                             <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
-                              {metric.expression || '-'}
+                              {metric.expression?.dialects?.[0]?.expression || '-'}
                             </Typography>
                           </TableCell>
                           <TableCell>{metric.description || '-'}</TableCell>
