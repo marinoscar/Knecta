@@ -84,7 +84,7 @@ export default function SemanticModelDetailPage() {
       setIsLoadingYaml(true);
       try {
         const result = await exportSemanticModelYaml(id);
-        setYaml(result);
+        setYaml(result.yaml);
       } catch (err) {
         console.error('Failed to load YAML:', err);
       } finally {

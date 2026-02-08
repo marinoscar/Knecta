@@ -383,8 +383,8 @@ export async function deleteSemanticModel(id: string): Promise<void> {
   await api.delete<void>(`/semantic-models/${id}`);
 }
 
-export async function exportSemanticModelYaml(id: string): Promise<string> {
-  return api.get<string>(`/semantic-models/${id}/yaml`);
+export async function exportSemanticModelYaml(id: string): Promise<{ yaml: string; name: string }> {
+  return api.get<{ yaml: string; name: string }>(`/semantic-models/${id}/yaml`);
 }
 
 export async function getSemanticModelRuns(modelId: string): Promise<SemanticModelRun[]> {
