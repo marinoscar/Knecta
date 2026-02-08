@@ -41,7 +41,7 @@ import {
 } from '@mui/icons-material';
 import { useSemanticModels } from '../hooks/useSemanticModels';
 import { usePermissions } from '../hooks/usePermissions';
-import { listAllRuns, deleteSemanticModelRun, cancelSemanticModelRun } from '../services/api';
+import { listAllRuns, deleteSemanticModelRun } from '../services/api';
 import type { SemanticModel, SemanticModelStatus, SemanticModelRun } from '../types';
 
 const STATUS_CONFIG: Record<
