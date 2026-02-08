@@ -103,6 +103,10 @@ export class CopilotKitController {
       rawReq.body = req.body;
       const rawRes = res.raw;
 
+      // Tell Nginx to not buffer this SSE response
+      rawRes.setHeader('X-Accel-Buffering', 'no');
+      rawRes.setHeader('Cache-Control', 'no-cache');
+
       console.log('[CopilotKit DEBUG] runtime agents:', Object.keys(await runtime.instance?.agents || {}));
       console.log('[CopilotKit DEBUG] calling handler...');
 
