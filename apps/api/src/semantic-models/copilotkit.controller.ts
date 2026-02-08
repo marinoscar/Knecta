@@ -66,12 +66,13 @@ export class CopilotKitController {
         endpoint: '/api/copilotkit',
       });
 
-      // Fastify uses raw Node.js request/response objects
-      // CopilotKit expects standard Node.js http.IncomingMessage and http.ServerResponse
-      const rawReq = req.raw;
+      // Fastify consumes the request body stream during parsing.
+      // CopilotKit's handler checks req.body on the raw Node.js request to
+      // rebuild the payload when the stream is already consumed.
+      const rawReq = req.raw as any;
+      rawReq.body = req.body;
       const rawRes = res.raw;
 
-      // Call the handler with raw Node.js objects
       await handler(rawReq, rawRes);
     } catch (error) {
       this.logger.error('CopilotKit request failed', error);
