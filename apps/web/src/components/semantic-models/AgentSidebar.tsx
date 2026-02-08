@@ -1,5 +1,5 @@
 import { useMemo, useEffect, useRef } from 'react';
-import { CopilotKit, useCopilotChat } from '@copilotkit/react-core';
+import { CopilotKit, useCopilotChatInternal } from '@copilotkit/react-core';
 import { CopilotSidebar } from '@copilotkit/react-ui';
 import '@copilotkit/react-ui/styles.css';
 import { api } from '../../services/api';
@@ -10,7 +10,7 @@ interface AgentSidebarProps {
 }
 
 function AutoStartAgent() {
-  const { sendMessage } = useCopilotChat();
+  const { sendMessage } = useCopilotChatInternal();
   const hasSent = useRef(false);
 
   useEffect(() => {
