@@ -89,6 +89,41 @@ export class SemanticModelsController {
     return this.service.cancelRun(runId, userId);
   }
 
+  @Get('runs')
+  @Auth({ permissions: [PERMISSIONS.SEMANTIC_MODELS_READ] })
+  @ApiOperation({ summary: 'List all runs for current user' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
+  @ApiQuery({ name: 'status', required: false, type: String })
+  @ApiResponse({ status: 200, description: 'Paginated list of runs' })
+  async listAllRuns(
+    @CurrentUser('id') userId: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.service.listAllRuns(userId, {
+      page: page ? parseInt(page, 10) : undefined,
+      pageSize: pageSize ? parseInt(pageSize, 10) : undefined,
+      status,
+    });
+  }
+
+  @Delete('runs/:runId')
+  @Auth({ permissions: [PERMISSIONS.SEMANTIC_MODELS_DELETE] })
+  @ApiOperation({ summary: 'Delete a failed or cancelled run' })
+  @ApiParam({ name: 'runId', type: String, format: 'uuid' })
+  @ApiResponse({ status: 204, description: 'Run deleted' })
+  @ApiResponse({ status: 404, description: 'Run not found' })
+  @ApiResponse({ status: 400, description: 'Only failed or cancelled runs can be deleted' })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteRun(
+    @Param('runId', ParseUUIDPipe) runId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    await this.service.deleteRun(runId, userId);
+  }
+
   @Get(':id')
   @Auth({ permissions: [PERMISSIONS.SEMANTIC_MODELS_READ] })
   @ApiOperation({ summary: 'Get semantic model by ID' })

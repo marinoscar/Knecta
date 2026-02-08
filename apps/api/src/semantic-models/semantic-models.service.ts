@@ -369,6 +369,69 @@ export class SemanticModelsService {
   }
 
   /**
+   * List all runs for a user (paginated)
+   */
+  async listAllRuns(
+    userId: string,
+    opts: { page?: number; pageSize?: number; status?: string },
+  ) {
+    const { page = 1, pageSize = 20, status } = opts;
+    const skip = (page - 1) * pageSize;
+    const where: any = { ownerId: userId };
+    if (status) where.status = status;
+
+    const [runs, total] = await Promise.all([
+      this.prisma.semanticModelRun.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+        include: {
+          semanticModel: { select: { id: true, name: true } },
+        },
+      }),
+      this.prisma.semanticModelRun.count({ where }),
+    ]);
+
+    return {
+      runs: runs.map((run) => ({
+        ...this.mapRun(run),
+        semanticModel: run.semanticModel,
+      })),
+      total,
+      page,
+      pageSize,
+    };
+  }
+
+  /**
+   * Delete a semantic model run (only failed or cancelled)
+   */
+  async deleteRun(runId: string, userId: string) {
+    const run = await this.prisma.semanticModelRun.findFirst({
+      where: { id: runId, ownerId: userId },
+    });
+    if (!run) {
+      throw new NotFoundException('Run not found');
+    }
+    if (!['failed', 'cancelled'].includes(run.status)) {
+      throw new BadRequestException('Only failed or cancelled runs can be deleted');
+    }
+    await this.prisma.semanticModelRun.delete({ where: { id: runId } });
+
+    // Create audit event
+    await this.createAuditEvent(
+      userId,
+      'semantic_models:run:delete',
+      'semantic_model_run',
+      runId,
+      { status: run.status },
+    );
+
+    this.logger.log(`Semantic model run ${runId} deleted by user ${userId}`);
+  }
+
+  /**
    * Map Prisma semantic model to API response
    */
   private mapModel(model: any) {
