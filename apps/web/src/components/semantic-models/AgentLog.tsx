@@ -84,6 +84,10 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
 
     const connectToStream = async () => {
       try {
+        // Delay to handle React StrictMode double-firing: cleanup aborts before fetch starts
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        if (abortController.signal.aborted) return;
+
         const token = api.getAccessToken();
         const response = await fetch(`/api/semantic-models/runs/${runId}/stream`, {
           method: 'POST',
