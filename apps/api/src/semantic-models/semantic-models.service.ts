@@ -323,6 +323,18 @@ export class SemanticModelsService {
   }
 
   /**
+   * Atomically claim a run for execution (pending → executing).
+   * Returns true if this request claimed it, false if another request already did.
+   */
+  async claimRun(runId: string, userId: string): Promise<boolean> {
+    const result = await this.prisma.semanticModelRun.updateMany({
+      where: { id: runId, ownerId: userId, status: 'pending' },
+      data: { status: 'executing', startedAt: new Date(), updatedAt: new Date() },
+    });
+    return result.count > 0;
+  }
+
+  /**
    * Cancel a semantic model run
    */
   async cancelRun(runId: string, userId: string) {

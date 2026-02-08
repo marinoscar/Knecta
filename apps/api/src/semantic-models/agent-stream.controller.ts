@@ -107,8 +107,9 @@ export class AgentStreamController {
       // 1. Validate run exists and user has access
       const run = await this.semanticModelsService.getRun(runId, userId);
 
-      // Guard against duplicate execution (e.g., React StrictMode double-firing)
-      if (run.status === 'executing') {
+      // Atomically claim the run (prevents race condition with duplicate requests)
+      const claimed = await this.semanticModelsService.claimRun(runId, userId);
+      if (!claimed) {
         throw { status: 409, code: 'RUN_ALREADY_EXECUTING', message: 'This run is already being executed' };
       }
 
@@ -144,13 +145,10 @@ export class AgentStreamController {
           { skipApproval: true },
         );
 
-        // 6. Update run status to 'executing'
-        await this.semanticModelsService.updateRunStatus(runId, userId, 'executing');
-
-        // 7. Emit run_start event
+        // 6. Emit run_start event
         emit({ type: 'run_start' });
 
-        // 8. Stream graph execution with 'updates' mode + callbacks for token streaming
+        // 7. Stream graph execution with 'updates' mode + callbacks for token streaming
         const sseHandler = new SSEStreamHandler(emit, STEP_LABELS);
 
         const stream = await graph.stream(initialState, {
@@ -158,7 +156,7 @@ export class AgentStreamController {
           callbacks: [sseHandler],
         });
 
-        // 9. Process updates for node-level events (tool_start, tool_result, step tracking)
+        // 8. Process updates for node-level events (tool_start, tool_result, step tracking)
         for await (const data of stream) {
           const update = data as Record<string, any>;
           const nodeName = Object.keys(update)[0];
@@ -198,6 +196,10 @@ export class AgentStreamController {
                     : JSON.stringify(msg.content),
                 });
               }
+              // AI message with text content (non-tool-call) → emit text
+              if (msgType === 'ai' && typeof msg.content === 'string' && msg.content.length > 0 && !msg.tool_calls?.length) {
+                emit({ type: 'text', content: msg.content });
+              }
             }
           }
 
@@ -211,16 +213,16 @@ export class AgentStreamController {
           emit({ type: 'step_end', step: sseHandler.currentNode });
         }
 
-        // 10. Fetch updated run to get semanticModelId
+        // 9. Fetch updated run to get semanticModelId
         const updatedRun = await this.semanticModelsService.getRun(runId, userId);
 
-        // 11. Emit run_complete
+        // 10. Emit run_complete
         emit({
           type: 'run_complete',
           semanticModelId: updatedRun.semanticModelId,
         });
 
-        // 12. End SSE stream
+        // 11. End SSE stream
         raw.end();
       } catch (error: any) {
         // Error during agent execution
