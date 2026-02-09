@@ -7,19 +7,16 @@ import {
   CircularProgress,
   Alert,
   Button,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   Chip,
+  LinearProgress,
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
-  ExpandMore as ExpandMoreIcon,
-  Build as BuildIcon,
   Replay as ReplayIcon,
   ArrowBack as ArrowBackIcon,
   ArrowForward as ArrowForwardIcon,
+  Timer as TimerIcon,
 } from '@mui/icons-material';
 import Markdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -35,13 +32,13 @@ interface AgentLogProps {
 type StreamEvent =
   | { type: 'run_start' }
   | { type: 'step_start'; step: string; label: string }
-  | { type: 'text'; content: string }
-  | { type: 'text_delta'; content: string }
-  | { type: 'tool_start'; tool: string; args: Record<string, unknown> }
-  | { type: 'tool_result'; tool: string; content: string }
   | { type: 'step_end'; step: string }
+  | { type: 'progress'; currentTable: number; totalTables: number; tableName: string; phase: 'discover' | 'generate'; percentComplete: number }
+  | { type: 'table_complete'; tableName: string; tableIndex: number; totalTables: number; datasetName: string }
+  | { type: 'table_error'; tableName: string; error: string }
+  | { type: 'text'; content: string }
   | { type: 'token_update'; tokensUsed: { prompt: number; completion: number; total: number } }
-  | { type: 'run_complete'; semanticModelId: string | null; tokensUsed?: { prompt: number; completion: number; total: number } }
+  | { type: 'run_complete'; semanticModelId: string | null; tokensUsed?: { prompt: number; completion: number; total: number }; failedTables?: string[]; duration?: number }
   | { type: 'run_error'; message: string };
 
 interface TextEntry {
@@ -50,15 +47,15 @@ interface TextEntry {
   timestamp: string;
 }
 
-interface ToolEntry {
-  type: 'tool';
-  tool: string;
-  args: Record<string, unknown>;
-  result?: string;
+interface TableProgressEntry {
+  type: 'table_progress';
+  tableName: string;
+  phase: 'pending' | 'discovering' | 'generating' | 'completed' | 'failed';
+  error?: string;
   timestamp: string;
 }
 
-type LogEntry = TextEntry | ToolEntry;
+type LogEntry = TextEntry | TableProgressEntry;
 
 interface StepSection {
   step: string;
@@ -78,9 +75,26 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
   const [semanticModelId, setSemanticModelId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [tokensUsed, setTokensUsed] = useState<{ prompt: number; completion: number; total: number }>({ prompt: 0, completion: 0, total: 0 });
+  const [percentComplete, setPercentComplete] = useState<number>(0);
+  const [failedTables, setFailedTables] = useState<string[]>([]);
+  const [duration, setDuration] = useState<number>(0);
+  const [startTime] = useState<number>(Date.now());
+  const [elapsed, setElapsed] = useState<string>('0:00');
   const containerRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
+
+  // Elapsed timer
+  useEffect(() => {
+    if (status !== 'running' && status !== 'connecting') return;
+    const interval = setInterval(() => {
+      const seconds = Math.floor((Date.now() - startTime) / 1000);
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      setElapsed(`${mins}:${secs.toString().padStart(2, '0')}`);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [status, startTime]);
 
   useEffect(() => {
     let isMounted = true;
@@ -169,7 +183,8 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
           });
           break;
 
-        case 'text_delta':
+        case 'progress':
+          setPercentComplete(event.percentComplete);
           setSections((prev) => {
             if (prev.length === 0) return prev;
             const updated = [...prev];
@@ -178,20 +193,58 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
             const entries = [...current.entries];
             current.entries = entries;
 
-            const lastEntry = entries[entries.length - 1];
-            if (lastEntry && lastEntry.type === 'text') {
-              // Append to existing text entry (immutable update)
-              entries[entries.length - 1] = {
-                ...lastEntry,
-                content: lastEntry.content + event.content,
-              };
+            // Find existing entry for this table or create new one
+            const existingIdx = entries.findIndex(
+              (e) => e.type === 'table_progress' && e.tableName === event.tableName,
+            );
+            const phase = event.phase === 'discover' ? 'discovering' : 'generating';
+            if (existingIdx >= 0) {
+              entries[existingIdx] = { ...entries[existingIdx] as TableProgressEntry, phase, timestamp };
             } else {
-              // Create new text entry
               entries.push({
-                type: 'text',
-                content: event.content,
+                type: 'table_progress',
+                tableName: event.tableName,
+                phase,
                 timestamp,
               });
+            }
+            return updated;
+          });
+          break;
+
+        case 'table_complete':
+          setSections((prev) => {
+            if (prev.length === 0) return prev;
+            const updated = [...prev];
+            const current = { ...updated[updated.length - 1] };
+            updated[updated.length - 1] = current;
+            const entries = [...current.entries];
+            current.entries = entries;
+
+            const existingIdx = entries.findIndex(
+              (e) => e.type === 'table_progress' && e.tableName === event.tableName,
+            );
+            if (existingIdx >= 0) {
+              entries[existingIdx] = { ...entries[existingIdx] as TableProgressEntry, phase: 'completed', timestamp };
+            }
+            return updated;
+          });
+          break;
+
+        case 'table_error':
+          setSections((prev) => {
+            if (prev.length === 0) return prev;
+            const updated = [...prev];
+            const current = { ...updated[updated.length - 1] };
+            updated[updated.length - 1] = current;
+            const entries = [...current.entries];
+            current.entries = entries;
+
+            const existingIdx = entries.findIndex(
+              (e) => e.type === 'table_progress' && e.tableName === event.tableName,
+            );
+            if (existingIdx >= 0) {
+              entries[existingIdx] = { ...entries[existingIdx] as TableProgressEntry, phase: 'failed', error: event.error, timestamp };
             }
             return updated;
           });
@@ -207,38 +260,6 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
               content: event.content,
               timestamp,
             });
-            return updated;
-          });
-          break;
-
-        case 'tool_start':
-          setSections((prev) => {
-            if (prev.length === 0) return prev;
-            const updated = [...prev];
-            const current = updated[updated.length - 1];
-            current.entries.push({
-              type: 'tool',
-              tool: event.tool,
-              args: event.args,
-              timestamp,
-            });
-            return updated;
-          });
-          break;
-
-        case 'tool_result':
-          setSections((prev) => {
-            if (prev.length === 0) return prev;
-            const updated = [...prev];
-            const current = updated[updated.length - 1];
-            // Find the most recent tool entry matching this tool name
-            for (let i = current.entries.length - 1; i >= 0; i--) {
-              const entry = current.entries[i];
-              if (entry.type === 'tool' && entry.tool === event.tool && !entry.result) {
-                entry.result = event.content;
-                break;
-              }
-            }
             return updated;
           });
           break;
@@ -264,6 +285,12 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
           setSemanticModelId(event.semanticModelId);
           if (event.tokensUsed) {
             setTokensUsed(event.tokensUsed);
+          }
+          if (event.failedTables) {
+            setFailedTables(event.failedTables);
+          }
+          if (event.duration) {
+            setDuration(event.duration);
           }
           break;
 
@@ -310,13 +337,40 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
         bgcolor: 'background.default',
       }}
     >
-      {(status === 'running' || status === 'completed') && tokensUsed.total > 0 && (
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+      {(status === 'running' || status === 'completed') && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 1 }}>
           <Chip
             size="small"
             variant="outlined"
-            label={`${tokensUsed.total.toLocaleString()} tokens`}
+            icon={<TimerIcon />}
+            label={elapsed}
             sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}
+          />
+          {tokensUsed.total > 0 && (
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`${tokensUsed.total.toLocaleString()} tokens`}
+              sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}
+            />
+          )}
+        </Box>
+      )}
+
+      {status === 'running' && (
+        <Box sx={{ mb: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+            <Typography variant="body2" color="text.secondary">
+              Overall Progress
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {percentComplete}%
+            </Typography>
+          </Box>
+          <LinearProgress
+            variant="determinate"
+            value={percentComplete}
+            sx={{ height: 8, borderRadius: 4 }}
           />
         </Box>
       )}
@@ -345,18 +399,6 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
               {section.startTime}
             </Typography>
           </Box>
-
-          {section.step === 'generate_model' && section.isActive && (
-            <Typography variant="body2" color="text.secondary" sx={{ pl: 3.5, fontStyle: 'italic', mt: 0.5 }}>
-              Grab a coffee — this step analyzes all your data and may take a few minutes...
-            </Typography>
-          )}
-
-          {section.step === 'validate_model' && section.isActive && (
-            <Typography variant="body2" color="text.secondary" sx={{ pl: 3.5, fontStyle: 'italic', mt: 0.5 }}>
-              Checking the model against the OSI specification...
-            </Typography>
-          )}
 
           <Box sx={{ pl: 3.5 }}>
             {section.entries.map((entry, entryIdx) => {
@@ -397,90 +439,41 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
                     </Markdown>
                   </Typography>
                 );
-              } else {
-                // Tool entry
-                const hasResult = entry.result !== undefined;
+              } else if (entry.type === 'table_progress') {
                 return (
-                  <Accordion
+                  <Box
                     key={entryIdx}
                     sx={{
-                      mb: 0.5,
-                      boxShadow: 'none',
-                      '&:before': { display: 'none' },
-                      bgcolor: 'transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      py: 0.5,
+                      px: 1,
+                      bgcolor: entry.phase === 'failed' ? 'error.50' : 'transparent',
+                      borderRadius: 1,
                     }}
-                    disableGutters
                   >
-                    <AccordionSummary
-                      expandIcon={<ExpandMoreIcon fontSize="small" />}
-                      sx={{
-                        minHeight: 32,
-                        '& .MuiAccordionSummary-content': {
-                          my: 0.5,
-                          alignItems: 'center',
-                        },
-                        px: 1,
-                        bgcolor: 'background.paper',
-                        borderRadius: 1,
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                        <BuildIcon fontSize="small" color="action" />
-                        <Typography variant="body2" fontFamily="monospace">
-                          {entry.tool}
-                        </Typography>
-                        {hasResult ? (
-                          <CheckCircleIcon
-                            fontSize="small"
-                            color="success"
-                            sx={{ ml: 'auto' }}
-                          />
-                        ) : (
-                          <CircularProgress size={12} sx={{ ml: 'auto' }} />
-                        )}
-                      </Box>
-                    </AccordionSummary>
-                    <AccordionDetails sx={{ pt: 1, pb: 1, px: 1 }}>
-                      <Typography variant="caption" color="text.secondary" fontWeight="bold">
-                        Arguments:
-                      </Typography>
-                      <Box
-                        component="pre"
-                        sx={{
-                          fontSize: '0.75rem',
-                          bgcolor: 'background.default',
-                          p: 1,
-                          borderRadius: 1,
-                          overflow: 'auto',
-                          mb: hasResult ? 1 : 0,
-                        }}
-                      >
-                        {JSON.stringify(entry.args, null, 2)}
-                      </Box>
-                      {hasResult && (
-                        <>
-                          <Typography variant="caption" color="text.secondary" fontWeight="bold">
-                            Result:
-                          </Typography>
-                          <Box
-                            component="pre"
-                            sx={{
-                              fontSize: '0.75rem',
-                              bgcolor: 'background.default',
-                              p: 1,
-                              borderRadius: 1,
-                              overflow: 'auto',
-                              maxHeight: 200,
-                            }}
-                          >
-                            {entry.result}
-                          </Box>
-                        </>
-                      )}
-                    </AccordionDetails>
-                  </Accordion>
+                    {entry.phase === 'completed' ? (
+                      <CheckCircleIcon color="success" fontSize="small" />
+                    ) : entry.phase === 'failed' ? (
+                      <ErrorIcon color="error" fontSize="small" />
+                    ) : (
+                      <CircularProgress size={14} />
+                    )}
+                    <Typography variant="body2" fontFamily="monospace" sx={{ flex: 1 }}>
+                      {entry.tableName}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {entry.phase === 'discovering' && 'Discovering...'}
+                      {entry.phase === 'generating' && 'Generating...'}
+                      {entry.phase === 'completed' && 'Complete'}
+                      {entry.phase === 'failed' && `Failed: ${entry.error || 'Unknown error'}`}
+                      {entry.phase === 'pending' && 'Pending'}
+                    </Typography>
+                  </Box>
                 );
               }
+              return null;
             })}
           </Box>
         </Box>
@@ -488,8 +481,16 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
 
       {status === 'completed' && (
         <Box sx={{ mt: 2 }}>
+          {failedTables.length > 0 && (
+            <Alert severity="warning" sx={{ mb: 1 }}>
+              {failedTables.length} table(s) failed during generation and were skipped:
+              <br />
+              {failedTables.join(', ')}
+            </Alert>
+          )}
           <Alert severity="success" icon={<CheckCircleIcon />}>
             Model generated successfully
+            {duration > 0 && ` in ${Math.floor(duration / 1000)}s`}
           </Alert>
           {semanticModelId && (
             <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
