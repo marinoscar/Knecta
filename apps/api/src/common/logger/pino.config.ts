@@ -45,18 +45,27 @@ function buildTransport(): pino.TransportSingleOptions | pino.TransportMultiOpti
   return undefined;
 }
 
-export const pinoConfig: pino.LoggerOptions = {
-  level: process.env.LOG_LEVEL || 'info',
-  formatters: {
-    level: (label) => ({ level: label }),
-    bindings: (bindings) => ({
-      pid: bindings.pid,
-      host: bindings.hostname,
-      service: serviceName,
-    }),
-  },
-  timestamp: pino.stdTimeFunctions.isoTime,
-  transport: buildTransport(),
-};
+export function createLogger() {
+  const transport = buildTransport();
+  const isMultiTarget = transport && 'targets' in transport;
 
-export const createLogger = () => pino(pinoConfig);
+  const config: pino.LoggerOptions = {
+    level: process.env.LOG_LEVEL || 'info',
+    timestamp: pino.stdTimeFunctions.isoTime,
+    transport,
+  };
+
+  // Pino doesn't allow custom level formatters with multi-target transport
+  if (!isMultiTarget) {
+    config.formatters = {
+      level: (label) => ({ level: label }),
+      bindings: (bindings) => ({
+        pid: bindings.pid,
+        host: bindings.hostname,
+        service: serviceName,
+      }),
+    };
+  }
+
+  return pino(config);
+}
