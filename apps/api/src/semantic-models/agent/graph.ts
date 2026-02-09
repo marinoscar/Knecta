@@ -47,7 +47,7 @@ export function buildAgentGraph(
     .addEdge('tools', 'agent')
     .addEdge('generate_model', 'validate_model')
     .addConditionalEdges('validate_model', (state) => {
-      if (!state.semanticModel && state.validationAttempts < 2) {
+      if (!state.semanticModel && state.validationAttempts < 5) {
         return 'generate_model';
       }
       return 'persist_model';
