@@ -12,7 +12,7 @@ export function createPersistNode(prisma: PrismaService) {
     }
 
     const modelDef = (state.semanticModel as any)?.semantic_model?.[0];
-    const name = modelDef?.name || `Model for ${state.databaseName}`;
+    const name = state.modelName || modelDef?.name || `Model for ${state.databaseName}`;
     const description = modelDef?.description || '';
     const datasets = modelDef?.datasets || [];
     const relationships = modelDef?.relationships || [];
