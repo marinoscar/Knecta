@@ -110,13 +110,13 @@ The feature follows a sophisticated agent-based architecture with human-in-the-l
 #### Agent Graph Flow
 
 ```
-START → planDiscovery → agentLoop ↔ toolExecution → generateModel → persistModel → END
+START → discoverAndGenerate → generateRelationships → assembleModel → validateModel → persistModel → END
 ```
 
-1. **planDiscovery**: Agent analyzes selected tables and creates discovery plan
-2. **agentLoop**: ReAct loop with reasoning and tool calling
-3. **toolExecution**: Execute selected tool (list_schemas, run_query, etc.)
-4. **generateModel**: Convert gathered metadata into OSI-compliant JSON
+1. **discoverAndGenerate**: Table-by-table processing - programmatic discovery + focused LLM call per table
+2. **generateRelationships**: Generate relationships + model-level metadata from FK data
+3. **assembleModel**: Pure programmatic JSON assembly
+4. **validateModel**: Programmatic structural checks + optional LLM quality review
 5. **persistModel**: Save model to database with statistics
 
 ---
@@ -238,8 +238,8 @@ model SemanticModelRun {
 | `selectedSchemas` | String[] | Yes | User-selected schemas for discovery |
 | `selectedTables` | String[] | Yes | User-selected tables for model generation |
 | `status` | Enum | Yes | Run status (pending, planning, executing, completed, failed, cancelled) |
-| `plan` | JSONB | No | Agent's discovery plan |
-| `progress` | JSONB | No | Real-time progress updates (steps, current step, percentage) |
+| `plan` | JSONB | No | Reserved for future use (unused in current implementation) |
+| `progress` | JSONB | No | Per-table progress: `{ completedTables, totalTables, percentComplete, partialModel, tableStatus[], tokensUsed, elapsedMs }` |
 | `errorMessage` | String | No | Error details if status is failed |
 | `startedAt` | Timestamp | No | When agent execution began |
 | `completedAt` | Timestamp | No | When agent execution finished |
@@ -747,7 +747,21 @@ POST /api/copilotkit
 - `model_generated` - Semantic model generation complete
 - `error` - Agent error occurred
 
-**Note:** This endpoint implements the CopilotKit AG-UI protocol for bidirectional communication between the agent and frontend.
+**SSE Event Types:**
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `run_start` | `{ runId, totalTables, startTime }` | Agent execution started |
+| `progress` | `{ currentTable, totalTables, tableName, phase, percentComplete }` | Per-table progress update |
+| `table_complete` | `{ tableName, tableIndex, totalTables, datasetName }` | Table processing completed |
+| `table_error` | `{ tableName, error }` | Table processing failed |
+| `step_start` | `{ step, description }` | Node execution started |
+| `step_end` | `{ step }` | Node execution completed |
+| `text` | `{ text }` | LLM-generated text for current step |
+| `run_complete` | `{ modelId, failedTables, duration }` | Agent execution completed |
+| `run_error` | `{ error }` | Agent execution failed |
+
+**Note:** No `tool_start` or `tool_result` events (discovery is programmatic, not LLM-driven).
 
 ---
 
@@ -905,89 +919,105 @@ LLM_DEFAULT_PROVIDER=openai  # Options: openai, anthropic, azure
 
 ## Agent Architecture
 
-The semantic model generation uses **LangGraph.js** for agent orchestration and **CopilotKit** for human-in-the-loop interaction.
+The semantic model generation uses **LangGraph.js** for agent orchestration with a table-by-table pipeline architecture.
 
-### Agent Pattern: ReAct (Reasoning + Acting)
+### Agent Pattern: Table-by-Table Pipeline
 
-The agent follows the ReAct pattern:
+The agent follows a linear pipeline with programmatic discovery and focused LLM generation:
 
-1. **Reason**: LLM analyzes current state and decides next action
-2. **Act**: Execute selected tool with parameters
-3. **Observe**: Process tool output and update state
-4. **Repeat**: Continue until goal achieved
+1. **Discover**: Programmatic database introspection (no LLM)
+2. **Generate**: One focused LLM call per table for dataset metadata
+3. **Relate**: One LLM call for relationships across all tables
+4. **Assemble**: Pure programmatic JSON construction
+5. **Validate**: Structural checks + optional LLM quality review
+6. **Persist**: Save to database
+
+**Key Benefits:**
+- ~80% token reduction vs ReAct pattern
+- Better quality (focused prompts per table)
+- Real-time progress tracking (per-table status)
+- Partial recovery (failed tables don't block others)
 
 ### LangGraph State Graph
 
 ```typescript
 const graph = new StateGraph<AgentState>()
-  .addNode('planDiscovery', planDiscoveryNode)
-  .addNode('agentLoop', agentLoopNode)
-  .addNode('toolExecution', toolExecutionNode)
-  .addNode('generateModel', generateModelNode)
+  .addNode('discoverAndGenerate', discoverAndGenerateNode)
+  .addNode('generateRelationships', generateRelationshipsNode)
+  .addNode('assembleModel', assembleModelNode)
+  .addNode('validateModel', validateModelNode)
   .addNode('persistModel', persistModelNode)
-  .addEdge(START, 'planDiscovery')
-  .addEdge('planDiscovery', 'agentLoop')
-  .addEdge('agentLoop', 'toolExecution')
-  .addConditionalEdges('toolExecution', executionRouter)
-  .addEdge('generateModel', 'persistModel')
+  .addEdge(START, 'discoverAndGenerate')
+  .addEdge('discoverAndGenerate', 'generateRelationships')
+  .addEdge('generateRelationships', 'assembleModel')
+  .addEdge('assembleModel', 'validateModel')
+  .addEdge('validateModel', 'persistModel')
   .addEdge('persistModel', END);
 ```
 
 ### Graph Flow Explanation
 
-#### 1. planDiscovery Node
+#### 1. discoverAndGenerate Node
 
-**Purpose:** Generate discovery plan based on selected tables
+**Purpose:** Table-by-table processing with programmatic discovery + focused LLM generation
 
 **Actions:**
-- Analyze selected tables
-- Create step-by-step plan (discover schemas → analyze FKs → infer relationships → generate model)
-- Store plan in run record
+- For each selected table:
+  1. Call DiscoveryService to get columns, FKs, sample data, stats (programmatic)
+  2. Make ONE focused LLM call to generate dataset metadata (name, description, field descriptions)
+  3. Persist progress to `semantic_model_runs.progress` after each table
+  4. Emit SSE progress events (table_complete, table_error)
 
-**Output:** Plan JSON
+**LLM Calls:** 1 per table (total: N tables)
+
+**Output:** Array of datasets with rich metadata, FK data, metrics
 
 ---
 
-#### 2. agentLoop Node
+#### 2. generateRelationships Node
 
-**Purpose:** ReAct reasoning loop
+**Purpose:** Generate relationships + model-level metadata from FK data
 
 **Actions:**
-- LLM analyzes current state
-- Decides next tool to call or if goal is achieved
-- Updates agent state with reasoning
+- Take accumulated FK data from discoverAndGenerate
+- Make ONE LLM call to generate:
+  - Relationship descriptions
+  - Relationship types (one-to-one, one-to-many, many-to-many)
+  - Model-level description and metadata
 
-**Routing:**
-- If tool selected: Go to `toolExecution`
-- If goal achieved: Go to `generateModel`
-- If max iterations reached: Error
+**LLM Calls:** 1 total
+
+**Output:** Relationships array + model metadata
 
 ---
 
-#### 3. toolExecution Node
+#### 3. assembleModel Node
 
-**Purpose:** Execute selected tool and observe results
-
-**Actions:**
-- Call tool function with LLM-provided arguments
-- Capture tool output (success/error)
-- Update agent state with observations
-
-**Routing:**
-- Always return to `agentLoop` for next reasoning step
-
----
-
-#### 4. generateModel Node
-
-**Purpose:** Convert gathered metadata into OSI JSON
+**Purpose:** Pure programmatic JSON assembly
 
 **Actions:**
-- Process all discovered metadata (tables, columns, relationships)
-- Generate OSI-compliant JSON structure
+- Combine datasets + relationships + metrics into OSI JSON structure
 - Calculate statistics (table count, field count, relationship count, metric count)
+- No LLM calls
 
-**Output:** Complete semantic model JSON
+**LLM Calls:** 0
+
+**Output:** Complete OSI-compliant JSON model
+
+---
+
+#### 4. validateModel Node
+
+**Purpose:** Programmatic structural checks + optional LLM quality review
+
+**Actions:**
+- Validate JSON structure against OSI schema (programmatic)
+- Check for required fields, valid types, referential integrity
+- Optional: LLM quality review for business logic errors
+
+**LLM Calls:** 0-1 (optional quality review)
+
+**Output:** Validated model or error list
 
 ---
 
@@ -997,204 +1027,86 @@ const graph = new StateGraph<AgentState>()
 
 **Actions:**
 - Create `SemanticModel` record
-- Set status to "ready"
+- Set status to "ready" or "failed"
 - Link to `SemanticModelRun`
 - Update run status to "completed"
+- Clear progress state
+
+**LLM Calls:** 0
 
 **Output:** Persisted model ID
 
 ---
 
-### Agent Tools
+### Discovery Service Methods
 
-The agent has access to 7 tools for database discovery:
+The agent uses DiscoveryService for programmatic database introspection (no LLM calls):
 
-#### 1. list_schemas
+#### listColumns(database, schema, table)
 
-**Purpose:** List all schemas in database
+**Returns:** Column metadata (name, type, nullable, primaryKey, defaultValue)
 
-**Parameters:** None
-
-**Returns:**
-```typescript
-{
-  schemas: [
-    { name: 'public' },
-    { name: 'sales' },
-    { name: 'analytics' }
-  ]
-}
-```
-
-**Use Case:** Initial exploration to understand database structure
+**Use Case:** Get table structure
 
 ---
 
-#### 2. list_tables
+#### getForeignKeys(database, schema, table)
 
-**Purpose:** List tables in a schema
+**Returns:** Explicit FK constraints with referenced table/column
 
-**Parameters:**
-- `schema` (string, required) - Schema name
-
-**Returns:**
-```typescript
-{
-  tables: [
-    { name: 'customers', type: 'table', rowCount: 15234 },
-    { name: 'orders', type: 'table', rowCount: 45678 },
-    { name: 'customer_summary', type: 'view', rowCount: null }
-  ]
-}
-```
-
-**Use Case:** Discover available tables, filter out views
+**Use Case:** Discover relationships defined in schema
 
 ---
 
-#### 3. list_columns
+#### getSampleData(database, schema, table, limit)
 
-**Purpose:** Get column metadata for a table
+**Returns:** Sample rows (default 5, max 100)
 
-**Parameters:**
-- `schema` (string, required) - Schema name
-- `table` (string, required) - Table name
-
-**Returns:**
-```typescript
-{
-  columns: [
-    {
-      name: 'customer_id',
-      type: 'integer',
-      nullable: false,
-      primaryKey: true,
-      defaultValue: null
-    },
-    {
-      name: 'email',
-      type: 'varchar(255)',
-      nullable: false,
-      primaryKey: false,
-      defaultValue: null
-    }
-  ]
-}
-```
-
-**Use Case:** Understand table structure, identify primary keys
+**Use Case:** Provide context for LLM to infer field meanings
 
 ---
 
-#### 4. get_foreign_keys
+#### getColumnStats(database, schema, table, column)
 
-**Purpose:** Get explicit foreign key constraints
+**Returns:** distinctCount, nullCount, minValue, maxValue
 
-**Parameters:**
-- `schema` (string, required) - Schema name
-- `table` (string, required) - Table name
-
-**Returns:**
-```typescript
-{
-  foreignKeys: [
-    {
-      constraintName: 'fk_order_customer',
-      column: 'customer_id',
-      referencedSchema: 'public',
-      referencedTable: 'customers',
-      referencedColumn: 'customer_id'
-    }
-  ]
-}
-```
-
-**Use Case:** Discover explicit relationships defined in schema
+**Use Case:** Assess data quality, identify candidate keys
 
 ---
 
-#### 5. get_sample_data
+### Per-Table Prompts
 
-**Purpose:** Get 3-5 sample rows from table
+The agent uses focused prompts for each table to generate rich metadata:
 
-**Parameters:**
-- `schema` (string, required) - Schema name
-- `table` (string, required) - Table name
-- `limit` (number, optional, default: 5) - Number of rows (max 100)
+**Dataset Generation Prompt (per table):**
+```
+Given this table structure and sample data, generate:
+1. A clear dataset name (semantic, not technical)
+2. A business-oriented description
+3. For each field:
+   - Semantic name (if technical)
+   - Clear description of what it represents
+   - Any business rules or constraints
 
-**Returns:**
-```typescript
-{
-  rows: [
-    { customer_id: 1, email: 'alice@example.com', created_at: '2024-01-01' },
-    { customer_id: 2, email: 'bob@example.com', created_at: '2024-01-02' }
-  ]
-}
+Table: {schema}.{table}
+Columns: {columns with types}
+Sample Data: {5 rows}
+Statistics: {row count, null counts}
+
+Output JSON with: name, description, fields[{name, description}]
 ```
 
-**Use Case:** Understand data patterns, infer business context
-
----
-
-#### 6. get_column_stats
-
-**Purpose:** Get column statistics
-
-**Parameters:**
-- `schema` (string, required) - Schema name
-- `table` (string, required) - Table name
-- `column` (string, required) - Column name
-
-**Returns:**
-```typescript
-{
-  distinctCount: 15234,
-  nullCount: 0,
-  minValue: '2020-01-01',
-  maxValue: '2024-01-15'
-}
+**Relationships Generation Prompt (once):**
 ```
+Given these datasets and foreign keys, generate:
+1. Relationship descriptions
+2. Relationship types (one-to-one, one-to-many, many-to-many)
+3. Overall model description
 
-**Use Case:** Identify candidate keys, assess data quality
+Datasets: {all datasets}
+Foreign Keys: {all FKs}
 
----
-
-#### 7. run_query
-
-**Purpose:** Execute custom read-only SQL query
-
-**Parameters:**
-- `sql` (string, required) - SQL query
-
-**Safety Features:**
-- Blocks write keywords (INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CREATE)
-- 30-second timeout
-- 100 row limit
-
-**Returns:**
-```typescript
-{
-  rows: [ /* query results */ ],
-  rowCount: 42
-}
-```
-
-**Use Case:** Advanced relationship inference, value overlap analysis
-
-**Example Queries:**
-
-```sql
--- Check for implicit relationship via value overlap
-SELECT COUNT(DISTINCT o.customer_id) as overlap_count
-FROM orders o
-WHERE o.customer_id IN (SELECT customer_id FROM customers)
-LIMIT 100;
-
--- Analyze column name patterns
-SELECT column_name, data_type
-FROM information_schema.columns
-WHERE table_schema = 'public' AND column_name LIKE '%_id'
-LIMIT 100;
+Output JSON with: relationships[], modelDescription
 ```
 
 ---
@@ -1393,49 +1305,47 @@ File: `apps/web/src/pages/NewSemanticModelPage.tsx`
 #### Step 4: Generate Model
 - Summary of selections
 - "Start Generation" button
-- Opens CopilotKit sidebar with agent
+- Opens agent UI with real-time progress
 
-**CopilotKit Integration:**
-
-```tsx
-<CopilotKit runtimeUrl="/api/copilotkit">
-  <AgentSidebar
-    connectionId={connectionId}
-    databaseName={databaseName}
-    selectedTables={selectedTables}
-    onComplete={(modelId) => navigate(`/semantic-models/${modelId}`)}
-  />
-</CopilotKit>
-```
+**Agent UI:**
+- Linear progress bar showing percentage completion
+- Elapsed timer (mm:ss format)
+- Per-table status list (discovering → generating → complete/failed)
+- Failed tables warning on completion
+- Auto-redirect to detail page on success
 
 ---
 
-### 3. AgentSidebar
+### 3. AgentLog Component
 
-File: `apps/web/src/components/semantic-models/AgentSidebar.tsx`
+File: `apps/web/src/components/semantic-models/AgentLog.tsx`
 
-**Purpose:** CopilotKit-powered interactive agent UI
+**Purpose:** Log-style progress view for agent execution
 
 **Key Features:**
-- Chat interface for human-agent communication
-- Real-time progress updates (step X of Y)
-- Progress bar during execution
-- Success/error notifications
-- Auto-redirect to model detail page on completion
+- Linear progress bar (0-100% based on completed tables)
+- Elapsed time display (mm:ss format)
+- Per-table status list with phases:
+  - Discovering (blue)
+  - Generating (blue)
+  - Complete (green)
+  - Failed (red)
+- Log entries with markdown rendering (react-markdown)
+- Syntax-highlighted code blocks (react-syntax-highlighter)
+- Auto-scroll to latest entry
+- Success/error final state
+- Failed tables summary
 
-**CopilotKit Hooks:**
-
+**SSE Connection:**
 ```typescript
-// Chat interface
-useCopilotChat({
-  instructions: 'You are helping generate a semantic model...',
+// Use fetch() + ReadableStream for SSE with POST + auth
+const response = await fetch(`/api/semantic-models/runs/${runId}/stream`, {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${token}` },
 });
 
-// Progress updates
-useCopilotReadable({
-  description: 'Agent progress',
-  value: progressState,
-});
+const reader = response.body.getReader();
+// Parse data: <json>\n\n format manually
 ```
 
 ---
@@ -2110,12 +2020,12 @@ apps/web/
 
 ```
 apps/api/
-├── package.json                                # Added: @copilotkit/runtime, @langchain/langgraph, @langchain/openai, @langchain/anthropic, js-yaml
+├── package.json                                # Added: @langchain/langgraph, @langchain/openai, @langchain/anthropic, js-yaml
 └── src/
     └── app.module.ts                           # Imported SemanticModelsModule, DiscoveryModule, LLMModule
 
 apps/web/
-├── package.json                                # Added: @copilotkit/react-core, @copilotkit/react-ui
+├── package.json                                # Added: react-markdown, react-syntax-highlighter
 └── src/
     ├── App.tsx                                 # Added routes: /semantic-models, /semantic-models/new, /semantic-models/:id
     └── components/
