@@ -214,6 +214,10 @@ import type {
   TableInfo,
   ColumnInfo,
   LLMProviderInfo,
+  OntologiesResponse,
+  Ontology,
+  CreateOntologyPayload,
+  OntologyGraph,
 } from '../types';
 
 // Allowlist API
@@ -455,4 +459,43 @@ export async function getConnectionColumns(connectionId: string, database: strin
 
 export async function getLlmProviders(): Promise<{ providers: LLMProviderInfo[] }> {
   return api.get<{ providers: LLMProviderInfo[] }>('/llm/providers');
+}
+
+// ==========================================
+// Ontologies API
+// ==========================================
+
+export async function getOntologies(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}): Promise<OntologiesResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set('page', String(params.page));
+  if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
+  if (params?.search) searchParams.set('search', params.search);
+  if (params?.status) searchParams.set('status', params.status);
+  if (params?.sortBy) searchParams.set('sortBy', params.sortBy);
+  if (params?.sortOrder) searchParams.set('sortOrder', params.sortOrder);
+  const query = searchParams.toString();
+  return api.get<OntologiesResponse>(`/ontologies${query ? `?${query}` : ''}`);
+}
+
+export async function getOntology(id: string): Promise<Ontology> {
+  return api.get<Ontology>(`/ontologies/${id}`);
+}
+
+export async function createOntology(data: CreateOntologyPayload): Promise<Ontology> {
+  return api.post<Ontology>('/ontologies', data);
+}
+
+export async function deleteOntology(id: string): Promise<void> {
+  await api.delete<void>(`/ontologies/${id}`);
+}
+
+export async function getOntologyGraph(id: string): Promise<OntologyGraph> {
+  return api.get<OntologyGraph>(`/ontologies/${id}/graph`);
 }

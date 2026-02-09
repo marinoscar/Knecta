@@ -287,3 +287,58 @@ export interface LLMProviderInfo {
   model: string;
   isDefault: boolean;
 }
+
+// ==========================================
+// Ontologies
+// ==========================================
+
+export type OntologyStatus = 'creating' | 'ready' | 'failed';
+
+export interface Ontology {
+  id: string;
+  name: string;
+  description: string | null;
+  semanticModelId: string;
+  semanticModel?: { name: string; status: string };
+  status: OntologyStatus;
+  nodeCount: number;
+  relationshipCount: number;
+  errorMessage: string | null;
+  ownerId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OntologiesResponse {
+  items: Ontology[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface CreateOntologyPayload {
+  name: string;
+  description?: string;
+  semanticModelId: string;
+}
+
+export interface GraphNode {
+  id: string;
+  label: 'Dataset' | 'Field';
+  name: string;
+  properties: Record<string, unknown>;
+}
+
+export interface GraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  type: string;
+  properties: Record<string, unknown>;
+}
+
+export interface OntologyGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
