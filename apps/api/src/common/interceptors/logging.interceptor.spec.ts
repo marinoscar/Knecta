@@ -40,7 +40,7 @@ describe('LoggingInterceptor', () => {
   function createMockCallHandler(data?: any): CallHandler {
     return {
       handle: () => of(data),
-    } as CallHandler;
+    } as unknown as CallHandler;
   }
 
   describe('Request logging', () => {
@@ -129,7 +129,7 @@ describe('LoggingInterceptor', () => {
           }
           return of({ data: 'result' });
         },
-      } as CallHandler;
+      } as unknown as CallHandler;
 
       interceptor.intercept(context, callHandler).subscribe(() => {
         const logMessage = mockLogger.mock.calls[0][0];
@@ -155,7 +155,7 @@ describe('LoggingInterceptor', () => {
           }
           return of({ data: 'result' });
         },
-      } as CallHandler;
+      } as unknown as CallHandler;
 
       interceptor.intercept(context1, fastHandler).subscribe(() => {
         const fastLog = mockLogger.mock.calls[0][0];
@@ -295,7 +295,7 @@ describe('LoggingInterceptor', () => {
       const context = createMockContext('GET', '/api/stream');
       const callHandler = {
         handle: () => of(1, 2, 3),
-      } as CallHandler;
+      } as unknown as CallHandler;
 
       const results: any[] = [];
       interceptor.intercept(context, callHandler).subscribe({

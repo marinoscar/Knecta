@@ -109,7 +109,7 @@ export function createAgentTools(
     func: async () => {
       return OSI_SPEC_TEXT;
     },
-  });
+  } as any);
 
   return [listSchemas, listTables, listColumns, getForeignKeys, getSampleData, getColumnStats, runQuery, getOsiSpec];
 }

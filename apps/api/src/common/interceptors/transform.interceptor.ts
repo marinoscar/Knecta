@@ -16,14 +16,9 @@ export interface ApiResponse<T> {
 }
 
 @Injectable()
-export class TransformInterceptor<T>
-  implements NestInterceptor<T, ApiResponse<T>>
-{
-  intercept(
-    context: ExecutionContext,
-    next: CallHandler,
-  ): Observable<ApiResponse<T>> {
-    return next.handle().pipe(
+export class TransformInterceptor<T> implements NestInterceptor {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    return (next.handle() as any).pipe(
       map((data) => {
         // If already wrapped, return as-is
         if (data && typeof data === 'object' && 'data' in data) {

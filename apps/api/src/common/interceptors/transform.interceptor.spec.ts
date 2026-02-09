@@ -24,7 +24,7 @@ describe('TransformInterceptor', () => {
   function createMockCallHandler(data: any): CallHandler {
     return {
       handle: () => of(data),
-    } as CallHandler;
+    } as unknown as CallHandler;
   }
 
   describe('Response wrapping', () => {

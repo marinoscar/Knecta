@@ -13,12 +13,12 @@ import { FastifyRequest } from 'fastify';
 export class LoggingInterceptor implements NestInterceptor {
   private readonly logger = new Logger('HTTP');
 
-  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest<FastifyRequest>();
     const { method, url } = request;
     const now = Date.now();
 
-    return next.handle().pipe(
+    return (next.handle() as any).pipe(
       tap(() => {
         const responseTime = Date.now() - now;
         this.logger.log(`${method} ${url} - ${responseTime}ms`);
