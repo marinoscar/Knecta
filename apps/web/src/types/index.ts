@@ -214,6 +214,8 @@ export interface SemanticModelRun {
   databaseName: string;
   selectedSchemas: string[];
   selectedTables: string[];
+  name: string | null;
+  instructions: string | null;
   status: RunStatus;
   plan: Record<string, unknown> | null;
   progress: RunProgress | null;
@@ -236,6 +238,8 @@ export interface CreateRunPayload {
   databaseName: string;
   selectedSchemas: string[];
   selectedTables: string[];
+  name: string;
+  instructions?: string;
 }
 
 // ==========================================
