@@ -78,8 +78,15 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT}
       - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-enterprise-app-api}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      # Graph Database (Neo4j)
+      - NEO4J_HOST=${NEO4J_HOST:-neo4j}
+      - NEO4J_PORT=${NEO4J_PORT:-7687}
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-neo4j}
     depends_on:
       db:
+        condition: service_healthy
+      neo4j:
         condition: service_healthy
     networks:
       - app-network
