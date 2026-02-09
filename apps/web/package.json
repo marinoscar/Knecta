@@ -25,6 +25,7 @@
     "js-yaml": "^4.1.1",
     "react": "^18.x",
     "react-dom": "^18.x",
+    "react-force-graph-2d": "^1.29.1",
     "react-markdown": "^8.0.7",
     "react-router-dom": "^6.x",
     "react-syntax-highlighter": "^15.6.6"
