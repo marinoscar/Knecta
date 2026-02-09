@@ -386,6 +386,8 @@ model SemanticModelRun {
   databaseName    String     @map("database_name")
   selectedSchemas String[]   @map("selected_schemas")
   selectedTables  String[]   @map("selected_tables")
+  name            String?
+  instructions    String?    @db.Text
   status          RunStatus  @default(pending)
   plan            Json?
   progress        Json?
