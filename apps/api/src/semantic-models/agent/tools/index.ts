@@ -1,6 +1,7 @@
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { DiscoveryService } from '../../../discovery/discovery.service';
+import { OSI_SPEC_TEXT } from '../osi/spec';
 
 export function createAgentTools(
   discoveryService: DiscoveryService,
@@ -101,5 +102,14 @@ export function createAgentTools(
     },
   } as any);
 
-  return [listSchemas, listTables, listColumns, getForeignKeys, getSampleData, getColumnStats, runQuery];
+  const getOsiSpec = new DynamicStructuredTool({
+    name: 'get_osi_spec',
+    description: 'Get the OSI (Open Semantic Interchange) specification. Use this to understand the required structure and validation rules for the semantic model you will generate.',
+    schema: z.object({}),
+    func: async () => {
+      return OSI_SPEC_TEXT;
+    },
+  });
+
+  return [listSchemas, listTables, listColumns, getForeignKeys, getSampleData, getColumnStats, runQuery, getOsiSpec];
 }
