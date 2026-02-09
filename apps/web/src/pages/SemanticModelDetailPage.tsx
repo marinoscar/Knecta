@@ -58,7 +58,7 @@ export default function SemanticModelDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(0);
 
-  const handleYamlSave = useCallback((updatedModel: any, validation?: { fixedIssues: string[]; warnings: string[] }) => {
+  const handleYamlSave = useCallback((updatedModel: any, _validation?: { fixedIssues: string[]; warnings: string[] }) => {
     setModel(updatedModel);
     // Regenerate YAML from the updated model so editor reflects auto-fixes
     if (updatedModel.model) {
