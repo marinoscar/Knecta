@@ -57,6 +57,11 @@ const PERMISSIONS = [
   { name: 'semantic_models:write', description: 'Create and edit semantic models' },
   { name: 'semantic_models:delete', description: 'Delete semantic models' },
   { name: 'semantic_models:generate', description: 'Run AI agent to generate semantic models' },
+
+  // Ontologies management
+  { name: 'ontologies:read', description: 'View ontologies' },
+  { name: 'ontologies:write', description: 'Create ontologies' },
+  { name: 'ontologies:delete', description: 'Delete ontologies' },
 ] as const;
 
 // Role to permissions mapping
@@ -82,6 +87,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'semantic_models:write',
     'semantic_models:delete',
     'semantic_models:generate',
+    'ontologies:read',
+    'ontologies:write',
+    'ontologies:delete',
   ],
   contributor: [
     'user_settings:read',
@@ -96,6 +104,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'semantic_models:write',
     'semantic_models:delete',
     'semantic_models:generate',
+    'ontologies:read',
+    'ontologies:write',
+    'ontologies:delete',
   ],
   viewer: [
     'user_settings:read',
@@ -103,6 +114,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'storage:read',
     'connections:read',
     'semantic_models:read',
+    'ontologies:read',
   ],
 };
 

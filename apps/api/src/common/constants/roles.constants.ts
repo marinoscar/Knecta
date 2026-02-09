@@ -50,6 +50,11 @@ export const PERMISSIONS = {
   SEMANTIC_MODELS_WRITE: 'semantic_models:write',
   SEMANTIC_MODELS_DELETE: 'semantic_models:delete',
   SEMANTIC_MODELS_GENERATE: 'semantic_models:generate',
+
+  // Ontologies
+  ONTOLOGIES_READ: 'ontologies:read',
+  ONTOLOGIES_WRITE: 'ontologies:write',
+  ONTOLOGIES_DELETE: 'ontologies:delete',
 } as const;
 
 export type PermissionName = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

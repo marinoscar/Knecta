@@ -40,6 +40,7 @@ model User {
   dataConnections           DataConnection[] @relation("UserDataConnections")
   semanticModels            SemanticModel[]  @relation("UserSemanticModels")
   semanticModelRuns         SemanticModelRun[] @relation("UserSemanticModelRuns")
+  ontologies                Ontology[]       @relation("UserOntologies")
 
   @@map("users")
 }
@@ -272,6 +273,12 @@ enum RunStatus {
   cancelled
 }
 
+enum OntologyStatus {
+  creating
+  ready
+  failed
+}
+
 model StorageObject {
   id              String              @id @default(uuid()) @db.Uuid
   name            String              // Original filename
@@ -371,6 +378,7 @@ model SemanticModel {
   owner      User             @relation("UserSemanticModels", fields: [ownerId], references: [id], onDelete: Cascade)
   connection DataConnection   @relation("ConnectionSemanticModels", fields: [connectionId], references: [id], onDelete: Cascade)
   runs       SemanticModelRun[]
+  ontologies Ontology[]       @relation("SemanticModelOntologies")
 
   @@index([ownerId])
   @@index([connectionId])
@@ -407,4 +415,31 @@ model SemanticModelRun {
   @@index([connectionId])
   @@index([status])
   @@map("semantic_model_runs")
+}
+
+// =============================================================================
+// Ontologies
+// =============================================================================
+
+model Ontology {
+  id                String         @id @default(uuid()) @db.Uuid
+  name              String
+  description       String?
+  semanticModelId   String         @map("semantic_model_id") @db.Uuid
+  ownerId           String         @map("owner_id") @db.Uuid
+  status            OntologyStatus @default(creating)
+  nodeCount         Int            @default(0) @map("node_count")
+  relationshipCount Int            @default(0) @map("relationship_count")
+  errorMessage      String?        @map("error_message")
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  owner         User          @relation("UserOntologies", fields: [ownerId], references: [id], onDelete: Cascade)
+  semanticModel SemanticModel @relation("SemanticModelOntologies", fields: [semanticModelId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+  @@index([semanticModelId])
+  @@index([status])
+  @@map("ontologies")
 }
