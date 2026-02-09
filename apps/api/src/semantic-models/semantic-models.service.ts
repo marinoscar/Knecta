@@ -337,6 +337,17 @@ export class SemanticModelsService {
   }
 
   /**
+   * Update run progress (current step, step history, token usage).
+   * Called during agent execution to track progress in the database.
+   */
+  async updateRunProgress(runId: string, progress: Record<string, unknown>) {
+    await this.prisma.semanticModelRun.update({
+      where: { id: runId },
+      data: { progress: progress as any },
+    });
+  }
+
+  /**
    * Cancel a semantic model run
    */
   async cancelRun(runId: string, userId: string) {

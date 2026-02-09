@@ -22,17 +22,46 @@ const STEP_LABELS: Record<string, string> = {
 };
 
 /**
+ * Step history entry
+ */
+interface StepHistoryEntry {
+  step: string;
+  label: string;
+  startedAt: string;
+  completedAt?: string;
+  tokens: {
+    prompt: number;
+    completion: number;
+    total: number;
+  };
+}
+
+/**
  * Callback handler that emits SSE events during LLM execution.
  * Used alongside streamMode: 'updates' to provide token-level streaming
  * without the state corruption caused by streamMode: ['messages', 'updates'].
+ *
+ * Also tracks cumulative token usage and step history, updating DB progress
+ * in real-time during agent execution.
  */
 class SSEStreamHandler extends BaseCallbackHandler {
   name = 'SSEStreamHandler';
   currentNode: string | null = null;
 
+  // Token tracking
+  promptTokens = 0;
+  completionTokens = 0;
+  totalTokens = 0;
+
+  // Step history tracking
+  steps: StepHistoryEntry[] = [];
+  private stepTokensSnapshot = 0;
+
   constructor(
     private emit: (event: object) => void,
     private stepLabels: Record<string, string>,
+    private semanticModelsService: SemanticModelsService,
+    private runId: string,
   ) {
     super();
   }
@@ -43,15 +72,28 @@ class SSEStreamHandler extends BaseCallbackHandler {
   ) {
     const nodeName = metadata?.langgraph_node as string | undefined;
     if (nodeName && nodeName !== this.currentNode) {
-      if (this.currentNode) {
-        this.emit({ type: 'step_end', step: this.currentNode });
-      }
+      // Close previous step in history
+      this.closeCurrentStep();
+
+      // Start new step
       this.currentNode = nodeName;
+      const label = this.stepLabels[nodeName] || nodeName;
+
+      this.steps.push({
+        step: nodeName,
+        label,
+        startedAt: new Date().toISOString(),
+        tokens: { prompt: 0, completion: 0, total: 0 },
+      });
+
       this.emit({
         type: 'step_start',
         step: nodeName,
-        label: this.stepLabels[nodeName] || nodeName,
+        label,
       });
+
+      // Update DB progress (fire-and-forget)
+      this.updateProgress();
     }
   }
 
@@ -59,6 +101,100 @@ class SSEStreamHandler extends BaseCallbackHandler {
     if (token && token.length > 0) {
       this.emit({ type: 'text_delta', content: token });
     }
+  }
+
+  async handleLLMEnd(output: any) {
+    const tokenUsage = output?.llmOutput?.tokenUsage;
+    if (tokenUsage) {
+      this.promptTokens += tokenUsage.promptTokens || 0;
+      this.completionTokens += tokenUsage.completionTokens || 0;
+      this.totalTokens += tokenUsage.totalTokens || 0;
+    }
+    this.emit({
+      type: 'token_update',
+      tokensUsed: {
+        prompt: this.promptTokens,
+        completion: this.completionTokens,
+        total: this.totalTokens,
+      },
+    });
+  }
+
+  /**
+   * Start a new step (called from updates loop for non-LLM nodes)
+   */
+  startStep(nodeName: string) {
+    if (nodeName !== this.currentNode) {
+      // Close previous step
+      this.closeCurrentStep();
+
+      // Start new step
+      this.currentNode = nodeName;
+      const label = this.stepLabels[nodeName] || nodeName;
+
+      this.steps.push({
+        step: nodeName,
+        label,
+        startedAt: new Date().toISOString(),
+        tokens: { prompt: 0, completion: 0, total: 0 },
+      });
+
+      // Update DB progress (fire-and-forget)
+      this.updateProgress();
+    }
+  }
+
+  /**
+   * End current step (called from updates loop)
+   */
+  endStep() {
+    this.closeCurrentStep();
+    this.currentNode = null;
+    this.updateProgress();
+  }
+
+  /**
+   * Close the current step in history (calculate token delta and set completedAt)
+   */
+  closeCurrentStep() {
+    if (this.steps.length > 0) {
+      const lastStep = this.steps[this.steps.length - 1];
+      if (!lastStep.completedAt) {
+        lastStep.completedAt = new Date().toISOString();
+        const delta = this.totalTokens - this.stepTokensSnapshot;
+        lastStep.tokens = {
+          prompt: delta,
+          completion: 0,
+          total: delta,
+        };
+        this.stepTokensSnapshot = this.totalTokens;
+      }
+    }
+  }
+
+  /**
+   * Update run progress in database
+   */
+  private updateProgress() {
+    const progress = {
+      currentStep: this.currentNode,
+      currentStepLabel: this.currentNode
+        ? this.stepLabels[this.currentNode] || this.currentNode
+        : null,
+      tokensUsed: {
+        prompt: this.promptTokens,
+        completion: this.completionTokens,
+        total: this.totalTokens,
+      },
+      steps: this.steps,
+    };
+
+    // Fire-and-forget (don't block callback execution)
+    this.semanticModelsService
+      .updateRunProgress(this.runId, progress)
+      .catch(() => {
+        // Silently ignore progress update failures (non-critical)
+      });
   }
 }
 
@@ -162,7 +298,12 @@ export class AgentStreamController {
         emit({ type: 'run_start' });
 
         // 8. Stream graph execution with 'updates' mode + callbacks for step tracking
-        const sseHandler = new SSEStreamHandler(emit, STEP_LABELS);
+        const sseHandler = new SSEStreamHandler(
+          emit,
+          STEP_LABELS,
+          this.semanticModelsService,
+          runId,
+        );
 
         const stream = await graph.stream(initialState, {
           streamMode: 'updates',
@@ -176,12 +317,13 @@ export class AgentStreamController {
           const output = update[nodeName];
 
           // For non-LLM nodes (tools, await_approval, persist_model),
-          // the callback didn't fire — emit step_start from updates mode
+          // the callback didn't fire — start step from updates mode
           if (nodeName !== sseHandler.currentNode) {
             if (sseHandler.currentNode) {
               emit({ type: 'step_end', step: sseHandler.currentNode });
+              sseHandler.endStep();
             }
-            sseHandler.currentNode = nodeName;
+            sseHandler.startStep(nodeName);
             emit({
               type: 'step_start',
               step: nodeName,
@@ -218,24 +360,39 @@ export class AgentStreamController {
 
           // Emit step_end for this node
           emit({ type: 'step_end', step: nodeName });
-          sseHandler.currentNode = null;
+          sseHandler.endStep();
         }
 
         // Close final step if still open from callback
-        if (sseHandler.currentNode) {
-          emit({ type: 'step_end', step: sseHandler.currentNode });
-        }
+        sseHandler.closeCurrentStep();
 
         // 9. Fetch updated run to get semanticModelId
         const updatedRun = await this.semanticModelsService.getRun(runId, userId);
 
-        // 10. Emit run_complete
+        // 10. Final progress update (run complete)
+        await this.semanticModelsService.updateRunProgress(runId, {
+          currentStep: null,
+          currentStepLabel: null,
+          tokensUsed: {
+            prompt: sseHandler.promptTokens,
+            completion: sseHandler.completionTokens,
+            total: sseHandler.totalTokens,
+          },
+          steps: sseHandler.steps,
+        });
+
+        // 11. Emit run_complete
         emit({
           type: 'run_complete',
           semanticModelId: updatedRun.semanticModelId,
+          tokensUsed: {
+            prompt: sseHandler.promptTokens,
+            completion: sseHandler.completionTokens,
+            total: sseHandler.totalTokens,
+          },
         });
 
-        // 11. Stop keep-alive and end SSE stream
+        // 12. Stop keep-alive and end SSE stream
         if (keepAlive) clearInterval(keepAlive);
         raw.end();
       } catch (error: any) {

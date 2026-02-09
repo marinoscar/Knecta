@@ -10,6 +10,7 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Chip,
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
@@ -39,7 +40,8 @@ type StreamEvent =
   | { type: 'tool_start'; tool: string; args: Record<string, unknown> }
   | { type: 'tool_result'; tool: string; content: string }
   | { type: 'step_end'; step: string }
-  | { type: 'run_complete'; semanticModelId: string | null }
+  | { type: 'token_update'; tokensUsed: { prompt: number; completion: number; total: number } }
+  | { type: 'run_complete'; semanticModelId: string | null; tokensUsed?: { prompt: number; completion: number; total: number } }
   | { type: 'run_error'; message: string };
 
 interface TextEntry {
@@ -75,6 +77,7 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
   const [sections, setSections] = useState<StepSection[]>([]);
   const [semanticModelId, setSemanticModelId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [tokensUsed, setTokensUsed] = useState<{ prompt: number; completion: number; total: number }>({ prompt: 0, completion: 0, total: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
@@ -252,9 +255,16 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
           });
           break;
 
+        case 'token_update':
+          setTokensUsed(event.tokensUsed);
+          break;
+
         case 'run_complete':
           setStatus('completed');
           setSemanticModelId(event.semanticModelId);
+          if (event.tokensUsed) {
+            setTokensUsed(event.tokensUsed);
+          }
           break;
 
         case 'run_error':
@@ -300,6 +310,17 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
         bgcolor: 'background.default',
       }}
     >
+      {(status === 'running' || status === 'completed') && tokensUsed.total > 0 && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+          <Chip
+            size="small"
+            variant="outlined"
+            label={`${tokensUsed.total.toLocaleString()} tokens`}
+            sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}
+          />
+        </Box>
+      )}
+
       {status === 'connecting' && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 2 }}>
           <CircularProgress size={16} />
