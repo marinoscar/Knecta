@@ -17,6 +17,7 @@ const STEP_LABELS: Record<string, string> = {
   agent: 'Analyzing Database',
   tools: 'Running Discovery Tools',
   generate_model: 'Generating Semantic Model',
+  validate_model: 'Validating Model',
   persist_model: 'Saving Model',
 };
 
@@ -146,6 +147,8 @@ export class AgentStreamController {
           runId,
           undefined, // llmProvider (use default)
           { skipApproval: true },
+          run.name || undefined,
+          run.instructions || undefined,
         );
 
         // 6. Start keep-alive heartbeat

@@ -23,6 +23,8 @@ export class AgentService {
     runId: string,
     llmProvider?: string,
     options?: { skipApproval?: boolean },
+    modelName?: string,
+    instructions?: string,
   ) {
     const llm = this.llmService.getChatModel(llmProvider);
 
@@ -42,6 +44,8 @@ export class AgentService {
       databaseName,
       selectedSchemas,
       selectedTables,
+      modelName,
+      instructions,
     });
 
     // Initial state
@@ -53,6 +57,9 @@ export class AgentService {
       selectedSchemas,
       selectedTables,
       runId,
+      modelName: modelName || null,
+      instructions: instructions || null,
+      validationAttempts: 0,
       plan: null,
       planApproved: false,
       semanticModel: null,
