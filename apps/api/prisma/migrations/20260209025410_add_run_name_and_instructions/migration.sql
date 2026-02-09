@@ -42,3 +42,9 @@ ALTER TABLE "user_settings" ALTER COLUMN "id" DROP DEFAULT;
 
 -- AlterTable
 ALTER TABLE "users" ALTER COLUMN "id" DROP DEFAULT;
+
+-- AlterTable
+ALTER TABLE "semantic_model_runs" ADD COLUMN "name" TEXT;
+
+-- AlterTable
+ALTER TABLE "semantic_model_runs" ADD COLUMN "instructions" TEXT;
