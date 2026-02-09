@@ -18,6 +18,7 @@ import {
   People as PeopleIcon,
   Storage as StorageIcon,
   AccountTree as AccountTreeIcon,
+  Hub as HubIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -53,6 +54,12 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       icon: <AccountTreeIcon />,
       path: '/semantic-models',
       visible: hasPermission('semantic_models:read'),
+    },
+    {
+      label: 'Ontologies',
+      icon: <HubIcon />,
+      path: '/ontologies',
+      visible: hasPermission('ontologies:read'),
     },
     {
       label: 'User Settings',

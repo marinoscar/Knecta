@@ -20,6 +20,9 @@ const ConnectionsPage = lazy(() => import('./pages/ConnectionsPage'));
 const SemanticModelsPage = lazy(() => import('./pages/SemanticModelsPage'));
 const NewSemanticModelPage = lazy(() => import('./pages/NewSemanticModelPage'));
 const SemanticModelDetailPage = lazy(() => import('./pages/SemanticModelDetailPage'));
+const OntologiesPage = lazy(() => import('./pages/OntologiesPage'));
+// TODO: Create OntologyDetailPage in commit 14
+// const OntologyDetailPage = lazy(() => import('./pages/OntologyDetailPage'));
 const SystemSettingsPage = lazy(() => import('./pages/SystemSettingsPage'));
 const UserManagementPage = lazy(() => import('./pages/UserManagementPage'));
 
@@ -58,6 +61,9 @@ function AppRoutes() {
                 <Route path="/semantic-models" element={<SemanticModelsPage />} />
                 <Route path="/semantic-models/new" element={<NewSemanticModelPage />} />
                 <Route path="/semantic-models/:id" element={<SemanticModelDetailPage />} />
+                <Route path="/ontologies" element={<OntologiesPage />} />
+                {/* TODO: Add route for OntologyDetailPage in commit 14 */}
+                {/* <Route path="/ontologies/:id" element={<OntologyDetailPage />} /> */}
                 <Route path="/admin/users" element={<UserManagementPage />} />
                 <Route path="/admin/settings" element={<SystemSettingsPage />} />
               </Route>
