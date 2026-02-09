@@ -490,6 +490,7 @@ describe('Semantic Models (Integration)', () => {
           connectionId: 'conn-uuid-1',
           databaseName: 'testdb',
           selectedSchemas: ['public'],
+          name: 'Test Model',
         })
         .expect(401);
     });
@@ -504,6 +505,7 @@ describe('Semantic Models (Integration)', () => {
           connectionId: 'conn-uuid-1',
           databaseName: 'testdb',
           selectedSchemas: ['public'],
+          name: 'Test Model',
         })
         .expect(403);
     });
@@ -541,6 +543,7 @@ describe('Semantic Models (Integration)', () => {
           databaseName: 'testdb',
           selectedSchemas: ['public'],
           selectedTables: ['public.users'],
+          name: 'Test Semantic Model',
         })
         .expect(201);
 
@@ -559,6 +562,7 @@ describe('Semantic Models (Integration)', () => {
           // Missing connectionId
           databaseName: 'testdb',
           selectedSchemas: ['public'],
+          name: 'Test Model',
         })
         .expect(400);
     });
@@ -573,6 +577,7 @@ describe('Semantic Models (Integration)', () => {
           connectionId: '123e4567-e89b-12d3-a456-426614174001',
           // Missing databaseName
           selectedSchemas: ['public'],
+          name: 'Test Model',
         })
         .expect(400);
     });
@@ -590,6 +595,7 @@ describe('Semantic Models (Integration)', () => {
           databaseName: 'testdb',
           selectedSchemas: ['public'],
           selectedTables: ['public.users'],
+          name: 'Test Model',
         })
         .expect(404);
     });

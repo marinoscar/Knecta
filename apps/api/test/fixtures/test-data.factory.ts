@@ -567,7 +567,9 @@ export interface CreateMockSemanticModelRunOptions {
   databaseName?: string | null;
   selectedSchemas?: string[];
   selectedTables?: string[];
-  status?: 'pending' | 'discovering' | 'analyzing' | 'generating' | 'completed' | 'failed' | 'cancelled';
+  name?: string;
+  instructions?: string | null;
+  status?: 'pending' | 'discovering' | 'analyzing' | 'generating' | 'validating' | 'completed' | 'failed' | 'cancelled';
   plan?: any;
   progress?: any;
   errorMessage?: string | null;
@@ -588,6 +590,8 @@ export function createMockSemanticModelRun(
     databaseName = 'testdb',
     selectedSchemas = ['public'],
     selectedTables = ['public.users', 'public.orders'],
+    name = 'Test Semantic Model',
+    instructions = null,
     status = 'pending',
     plan = null,
     progress = null,
@@ -606,6 +610,8 @@ export function createMockSemanticModelRun(
     databaseName,
     selectedSchemas,
     selectedTables,
+    name,
+    instructions,
     status,
     plan,
     progress,
