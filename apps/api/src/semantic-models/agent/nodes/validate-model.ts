@@ -1,8 +1,13 @@
 import { AgentStateType } from '../state';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { HumanMessage } from '@langchain/core/messages';
-import { OSI_SPEC_TEXT } from '../osi/spec';
 import { SemanticModelsService } from '../../semantic-models.service';
+import { validateAndFixModel } from '../validation/structural-validator';
+import { buildQualityReviewPrompt } from '../prompts/validate-prompt';
+import { extractTokenUsage } from '../utils';
+import { Logger } from '@nestjs/common';
+
+const logger = new Logger('ValidateModel');
 
 export function createValidateModelNode(
   llm: BaseChatModel,
@@ -12,68 +17,78 @@ export function createValidateModelNode(
 ) {
   return async (state: AgentStateType) => {
     if (!state.semanticModel) {
+      return { error: 'No semantic model to validate' };
+    }
+
+    // Step 1: Programmatic structural validation (no LLM)
+    const result = validateAndFixModel(state.semanticModel);
+
+    if (result.fixedIssues.length > 0) {
+      logger.log(`Auto-fixed ${result.fixedIssues.length} issues: ${result.fixedIssues.join('; ')}`);
+    }
+
+    if (result.warnings.length > 0) {
+      logger.warn(`Validation warnings: ${result.warnings.join('; ')}`);
+    }
+
+    if (!result.isValid) {
+      logger.error(`Fatal validation issues: ${result.fatalIssues.join('; ')}`);
+      // Still persist — the model has fatal issues but we save what we can
       return {
-        error: 'No semantic model to validate',
+        semanticModel: state.semanticModel,
+        error: `Structural validation found ${result.fatalIssues.length} fatal issue(s): ${result.fatalIssues.slice(0, 3).join('; ')}`,
       };
     }
 
-    const modelJson = JSON.stringify(state.semanticModel, null, 2);
+    // Step 2: Optional LLM quality review (1 call max)
+    let tokensUsed = state.tokensUsed;
+    try {
+      const modelJson = JSON.stringify(state.semanticModel, null, 2);
+      // Only do quality review if model is small enough to fit in context
+      if (modelJson.length < 100000) {
+        const prompt = buildQualityReviewPrompt(modelJson);
+        const response = await llm.invoke([new HumanMessage(prompt)]);
 
-    const validatePrompt = `You are validating a generated OSI semantic model against the specification.
+        const callTokens = extractTokenUsage(response);
+        tokensUsed = {
+          prompt: tokensUsed.prompt + callTokens.prompt,
+          completion: tokensUsed.completion + callTokens.completion,
+          total: tokensUsed.total + callTokens.total,
+        };
 
-## OSI Specification
-${OSI_SPEC_TEXT}
+        emitProgress({ type: 'token_update', tokensUsed });
 
-## Model to Validate
-\`\`\`json
-${modelJson}
-\`\`\`
+        const content = typeof response.content === 'string'
+          ? response.content
+          : JSON.stringify(response.content);
 
-## Validation Checklist
-Check ALL of the following:
-
-### Structure
-1. Root has "semantic_model" array with at least one definition?
-2. Model definition has "name" (string) and "datasets" (non-empty array)?
-3. Every dataset has "name", "source", and "fields" (non-empty array)?
-4. Every field has "name" and "expression" with at least one valid dialect entry?
-5. Dialect values are valid (ANSI_SQL, SNOWFLAKE, MDX, TABLEAU, DATABRICKS)?
-
-### Relationships
-6. Every relationship has "name", "from", "to", "from_columns", "to_columns"?
-7. Relationship "from" and "to" reference existing dataset names?
-8. "from_columns" and "to_columns" have equal length?
-
-### Metrics
-9. Every metric has "name" and "expression" with at least one valid dialect entry?
-
-### ai_context & Synonyms (CRITICAL)
-10. Model-level definition has ai_context with non-empty synonyms array?
-11. EVERY dataset has ai_context with non-empty synonyms array?
-12. EVERY field has ai_context with non-empty synonyms array?
-13. Synonyms contain meaningful business terms (not just the field name repeated)?
-
-Respond with EXACTLY one of:
-- "VALID" if ALL checks pass
-- "INVALID: " followed by a numbered list of specific issues found, referencing which datasets, fields, or relationships have problems
-
-Be precise and thorough.`;
-
-    const response = await llm.invoke([new HumanMessage(validatePrompt)]);
-
-    const content = typeof response.content === 'string'
-      ? response.content
-      : JSON.stringify(response.content);
-
-    const isValid = content.trim().toUpperCase().startsWith('VALID');
-
-    if (isValid) {
-      return {};
+        if (content.trim().startsWith('QUALITY_ISSUES')) {
+          logger.warn(`Quality review found issues: ${content}`);
+          // Log but don't block — quality issues are informational
+        } else {
+          logger.log('Quality review passed');
+        }
+      } else {
+        logger.log('Model too large for quality review, skipping');
+      }
+    } catch (err: any) {
+      logger.warn(`Quality review failed (non-blocking): ${err.message}`);
     }
 
-    // Validation failed
+    // Update progress
+    await semanticModelsService.updateRunProgress(runId, {
+      currentStep: 'validate_model',
+      currentStepLabel: 'Validating Model',
+      percentComplete: 95,
+      tokensUsed,
+      steps: [],
+    }).catch(() => {});
+
+    logger.log('Validation complete');
+
     return {
-      error: `Model validation failed: ${content}`,
+      semanticModel: state.semanticModel,
+      tokensUsed,
     };
   };
 }
