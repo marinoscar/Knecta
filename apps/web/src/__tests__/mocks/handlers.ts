@@ -416,4 +416,120 @@ metrics:
 `;
     return HttpResponse.json({ data: mockYaml });
   }),
+
+  // Ontologies endpoints
+  http.get(`${API_BASE}/ontologies`, () => {
+    return HttpResponse.json({
+      data: {
+        items: [
+          {
+            id: 'onto-1',
+            name: 'Test Ontology',
+            description: 'Test description',
+            semanticModelId: 'sm-1',
+            semanticModel: { name: 'Sales Model', status: 'ready' },
+            status: 'ready',
+            nodeCount: 25,
+            relationshipCount: 30,
+            errorMessage: null,
+            ownerId: 'user-1',
+            createdAt: '2026-02-09T00:00:00Z',
+            updatedAt: '2026-02-09T00:00:00Z',
+          },
+        ],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      },
+    });
+  }),
+
+  http.get(`${API_BASE}/ontologies/:id`, ({ params }) => {
+    return HttpResponse.json({
+      data: {
+        id: params.id,
+        name: 'Test Ontology',
+        description: 'Test description',
+        semanticModelId: 'sm-1',
+        semanticModel: { name: 'Sales Model', status: 'ready' },
+        status: 'ready',
+        nodeCount: 25,
+        relationshipCount: 30,
+        errorMessage: null,
+        ownerId: 'user-1',
+        createdAt: '2026-02-09T00:00:00Z',
+        updatedAt: '2026-02-09T00:00:00Z',
+      },
+    });
+  }),
+
+  http.post(`${API_BASE}/ontologies`, async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    return HttpResponse.json(
+      {
+        data: {
+          id: 'onto-new',
+          name: body.name,
+          description: body.description || null,
+          semanticModelId: body.semanticModelId,
+          status: 'creating',
+          nodeCount: 0,
+          relationshipCount: 0,
+          errorMessage: null,
+          ownerId: 'user-1',
+          createdAt: '2026-02-09T00:00:00Z',
+          updatedAt: '2026-02-09T00:00:00Z',
+        },
+      },
+      { status: 201 },
+    );
+  }),
+
+  http.delete(`${API_BASE}/ontologies/:id`, () => {
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.get(`${API_BASE}/ontologies/:id/graph`, () => {
+    return HttpResponse.json({
+      data: {
+        nodes: [
+          {
+            id: '1',
+            label: 'Dataset',
+            name: 'orders',
+            properties: { source: 'db.public.orders', description: 'Orders table' },
+          },
+          {
+            id: '2',
+            label: 'Dataset',
+            name: 'customers',
+            properties: { source: 'db.public.customers', description: 'Customers table' },
+          },
+          {
+            id: '3',
+            label: 'Field',
+            name: 'id',
+            properties: { datasetName: 'orders', expression: 'id', dataType: 'integer' },
+          },
+        ],
+        edges: [
+          {
+            id: 'e1',
+            source: '1',
+            target: '3',
+            type: 'HAS_FIELD',
+            properties: {},
+          },
+          {
+            id: 'e2',
+            source: '1',
+            target: '2',
+            type: 'RELATES_TO',
+            properties: { name: 'orders_to_customers' },
+          },
+        ],
+      },
+    });
+  }),
 ];
