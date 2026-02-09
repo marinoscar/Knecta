@@ -5,19 +5,20 @@ import { buildGenerateRelationshipsPrompt } from '../prompts/generate-relationsh
 import { createAssembleModelNode } from '../nodes/assemble-model';
 import { SemanticModelsService } from '../../semantic-models.service';
 import { ColumnInfo, ForeignKeyInfo } from '../../../connections/drivers/driver.interface';
+import { OSIDialect, OSIField, OSIDataset, OSIMetric } from '../osi/types';
 
 // Test Data Helpers
-function createValidField() {
+function createValidField(): OSIField {
   return {
     name: 'id',
-    expression: { dialects: [{ dialect: 'ANSI_SQL', expression: 'id' }] },
+    expression: { dialects: [{ dialect: 'ANSI_SQL' as OSIDialect, expression: 'id' }] },
     label: 'ID',
     description: 'Primary key',
     ai_context: { synonyms: ['identifier', 'primary_key', 'record_id'] },
   };
 }
 
-function createValidDataset() {
+function createValidDataset(): OSIDataset {
   return {
     name: 'orders',
     source: 'mydb.public.orders',
@@ -39,10 +40,10 @@ function createValidModel() {
   };
 }
 
-function createValidMetric() {
+function createValidMetric(): OSIMetric {
   return {
     name: 'total_orders',
-    expression: { dialects: [{ dialect: 'ANSI_SQL', expression: 'COUNT(*)' }] },
+    expression: { dialects: [{ dialect: 'ANSI_SQL' as OSIDialect, expression: 'COUNT(*)' }] },
     description: 'Total number of orders',
     ai_context: { synonyms: ['order_count', 'num_orders'] },
   };
@@ -85,46 +86,37 @@ describe('validateAndFixModel', () => {
 
   it('should auto-fix missing ai_context on model', () => {
     const model = createValidModel();
-    // @ts-expect-error - testing runtime behavior
-    delete model.semantic_model[0].ai_context;
+    delete (model.semantic_model[0] as any).ai_context;
     const result = validateAndFixModel(model);
     expect(result.isValid).toBe(true);
     expect(result.fixedIssues.length).toBeGreaterThan(0);
     expect(result.fixedIssues.some(i => i.includes('model-level ai_context'))).toBe(true);
-    // @ts-expect-error - checking runtime fix
-    expect(model.semantic_model[0].ai_context).toBeDefined();
+    expect((model.semantic_model[0] as any).ai_context).toBeDefined();
   });
 
   it('should auto-fix missing ai_context on datasets', () => {
     const model = createValidModel();
-    // @ts-expect-error - testing runtime behavior
-    delete model.semantic_model[0].datasets[0].ai_context;
+    delete (model.semantic_model[0].datasets[0] as any).ai_context;
     const result = validateAndFixModel(model);
     expect(result.fixedIssues.some(i => i.includes('ai_context'))).toBe(true);
-    // @ts-expect-error - checking runtime fix
-    expect(model.semantic_model[0].datasets[0].ai_context).toBeDefined();
+    expect((model.semantic_model[0].datasets[0] as any).ai_context).toBeDefined();
   });
 
   it('should auto-fix missing ai_context on fields', () => {
     const model = createValidModel();
-    // @ts-expect-error - testing runtime behavior
-    delete model.semantic_model[0].datasets[0].fields[0].ai_context;
+    delete (model.semantic_model[0].datasets[0].fields![0] as any).ai_context;
     const result = validateAndFixModel(model);
     expect(result.fixedIssues.some(i => i.includes('ai_context'))).toBe(true);
-    // @ts-expect-error - checking runtime fix
-    expect(model.semantic_model[0].datasets[0].fields[0].ai_context).toBeDefined();
+    expect((model.semantic_model[0].datasets[0].fields![0] as any).ai_context).toBeDefined();
   });
 
   it('should auto-fix missing expression on fields', () => {
     const model = createValidModel();
-    // @ts-expect-error - testing runtime behavior
-    delete model.semantic_model[0].datasets[0].fields[0].expression;
+    delete (model.semantic_model[0].datasets[0].fields![0] as any).expression;
     const result = validateAndFixModel(model);
     expect(result.fixedIssues.some(i => i.includes('expression'))).toBe(true);
-    // @ts-expect-error - checking runtime fix
-    expect(model.semantic_model[0].datasets[0].fields[0].expression).toBeDefined();
-    // @ts-expect-error - checking runtime fix
-    expect(model.semantic_model[0].datasets[0].fields[0].expression.dialects[0].expression).toBe('id');
+    expect((model.semantic_model[0].datasets[0].fields![0] as any).expression).toBeDefined();
+    expect((model.semantic_model[0].datasets[0].fields![0] as any).expression.dialects[0].expression).toBe('id');
   });
 
   it('should fail for relationship with mismatched column lengths', () => {
@@ -361,8 +353,8 @@ describe('buildGenerateRelationshipsPrompt', () => {
 
 // Assemble Model Node Tests
 describe('createAssembleModelNode', () => {
-  let mockService;
-  let mockEmit;
+  let mockService: any;
+  let mockEmit: any;
 
   beforeEach(() => {
     mockService = {
@@ -375,21 +367,30 @@ describe('createAssembleModelNode', () => {
     const node = createAssembleModelNode(mockService, 'run-1', mockEmit);
 
     const state = {
-      modelName: 'My Model',
+      connectionId: 'test-conn-id',
+      userId: 'test-user-id',
       databaseName: 'mydb',
-      datasets: [createValidDataset()],
-      tableMetrics: [[createValidMetric()]],
-      modelMetrics: [],
-      relationships: [],
-      modelAiContext: { synonyms: ['test'], instructions: 'test model' },
+      selectedSchemas: ['public'],
       selectedTables: ['public.orders'],
+      runId: 'run-1',
+      modelName: 'My Model',
+      instructions: null,
+      datasets: [createValidDataset()],
+      foreignKeys: [],
+      tableMetrics: [[createValidMetric()]],
       failedTables: [],
+      relationships: [],
+      modelMetrics: [],
+      modelAiContext: { synonyms: ['test'], instructions: 'test model' },
+      semanticModel: null,
       tokensUsed: { prompt: 0, completion: 0, total: 0 },
+      semanticModelId: null,
+      error: null,
     };
 
     const result = await node(state);
     expect(result.semanticModel).toBeDefined();
-    const model = result.semanticModel;
+    const model = result.semanticModel as any;
     expect(model.semantic_model).toBeDefined();
     expect(model.semantic_model[0].name).toBe('My Model');
     expect(model.semantic_model[0].datasets).toHaveLength(1);
@@ -400,20 +401,29 @@ describe('createAssembleModelNode', () => {
     const node = createAssembleModelNode(mockService, 'run-1', mockEmit);
 
     const state = {
-      modelName: null,
+      connectionId: 'test-conn-id',
+      userId: 'test-user-id',
       databaseName: 'mydb',
-      datasets: [createValidDataset()],
-      tableMetrics: [],
-      modelMetrics: [],
-      relationships: [],
-      modelAiContext: { synonyms: [], instructions: '' },
+      selectedSchemas: ['public'],
       selectedTables: ['public.orders'],
+      runId: 'run-1',
+      modelName: null,
+      instructions: null,
+      datasets: [createValidDataset()],
+      foreignKeys: [],
+      tableMetrics: [],
       failedTables: [],
+      relationships: [],
+      modelMetrics: [],
+      modelAiContext: { synonyms: [], instructions: '' },
+      semanticModel: null,
       tokensUsed: { prompt: 0, completion: 0, total: 0 },
+      semanticModelId: null,
+      error: null,
     };
 
     const result = await node(state);
-    const model = result.semanticModel;
+    const model = result.semanticModel as any;
     expect(model.semantic_model[0].name).toBe('Model for mydb');
   });
 
@@ -425,22 +435,31 @@ describe('createAssembleModelNode', () => {
     const modelMetric = { ...createValidMetric(), name: 'model_metric' };
 
     const state = {
-      modelName: 'My Model',
+      connectionId: 'test-conn-id',
+      userId: 'test-user-id',
       databaseName: 'mydb',
-      datasets: [createValidDataset()],
-      tableMetrics: [[tableMetric1], [tableMetric2]],
-      modelMetrics: [modelMetric],
-      relationships: [],
-      modelAiContext: { synonyms: [], instructions: '' },
+      selectedSchemas: ['public'],
       selectedTables: ['public.orders'],
+      runId: 'run-1',
+      modelName: 'My Model',
+      instructions: null,
+      datasets: [createValidDataset()],
+      foreignKeys: [],
+      tableMetrics: [[tableMetric1], [tableMetric2]],
       failedTables: [],
+      relationships: [],
+      modelMetrics: [modelMetric],
+      modelAiContext: { synonyms: [], instructions: '' },
+      semanticModel: null,
       tokensUsed: { prompt: 0, completion: 0, total: 0 },
+      semanticModelId: null,
+      error: null,
     };
 
     const result = await node(state);
-    const model = result.semanticModel;
+    const model = result.semanticModel as any;
     expect(model.semantic_model[0].metrics).toHaveLength(3);
-    expect(model.semantic_model[0].metrics.map((m) => m.name)).toEqual([
+    expect(model.semantic_model[0].metrics.map((m: any) => m.name)).toEqual([
       'total_orders',
       'table_metric_2',
       'model_metric',
@@ -451,16 +470,25 @@ describe('createAssembleModelNode', () => {
     const node = createAssembleModelNode(mockService, 'run-123', mockEmit);
 
     const state = {
-      modelName: 'My Model',
+      connectionId: 'test-conn-id',
+      userId: 'test-user-id',
       databaseName: 'mydb',
-      datasets: [createValidDataset(), createValidDataset()],
-      tableMetrics: [],
-      modelMetrics: [],
-      relationships: [],
-      modelAiContext: { synonyms: [], instructions: '' },
+      selectedSchemas: ['public'],
       selectedTables: ['public.orders', 'public.customers', 'public.products'],
+      runId: 'run-123',
+      modelName: 'My Model',
+      instructions: null,
+      datasets: [createValidDataset(), createValidDataset()],
+      foreignKeys: [],
+      tableMetrics: [],
       failedTables: ['public.failed_table'],
+      relationships: [],
+      modelMetrics: [],
+      modelAiContext: { synonyms: [], instructions: '' },
+      semanticModel: null,
       tokensUsed: { prompt: 100, completion: 50, total: 150 },
+      semanticModelId: null,
+      error: null,
     };
 
     await node(state);
@@ -482,16 +510,25 @@ describe('createAssembleModelNode', () => {
     const node = createAssembleModelNode(mockService, 'run-1', mockEmit);
 
     const state = {
-      modelName: 'My Model',
+      connectionId: 'test-conn-id',
+      userId: 'test-user-id',
       databaseName: 'mydb',
-      datasets: [createValidDataset()],
-      tableMetrics: [],
-      modelMetrics: [],
-      relationships: [],
-      modelAiContext: { synonyms: [], instructions: '' },
+      selectedSchemas: ['public'],
       selectedTables: ['public.orders'],
+      runId: 'run-1',
+      modelName: 'My Model',
+      instructions: null,
+      datasets: [createValidDataset()],
+      foreignKeys: [],
+      tableMetrics: [],
       failedTables: [],
+      relationships: [],
+      modelMetrics: [],
+      modelAiContext: { synonyms: [], instructions: '' },
+      semanticModel: null,
       tokensUsed: { prompt: 0, completion: 0, total: 0 },
+      semanticModelId: null,
+      error: null,
     };
 
     // Should not throw
