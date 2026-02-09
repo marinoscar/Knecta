@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -25,7 +25,8 @@ import { ArrowBack as ArrowBackIcon } from '@mui/icons-material';
 import { getSemanticModel, exportSemanticModelYaml } from '../services/api';
 import type { SemanticModel } from '../types';
 import { ModelViewer } from '../components/semantic-models/ModelViewer';
-import { YamlPreview } from '../components/semantic-models/YamlPreview';
+import { YamlEditor } from '../components/semantic-models/YamlEditor';
+import * as jsYaml from 'js-yaml';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -56,6 +57,19 @@ export default function SemanticModelDetailPage() {
   const [isLoadingYaml, setIsLoadingYaml] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(0);
+
+  const handleYamlSave = useCallback((updatedModel: any, validation?: { fixedIssues: string[]; warnings: string[] }) => {
+    setModel(updatedModel);
+    // Regenerate YAML from the updated model so editor reflects auto-fixes
+    if (updatedModel.model) {
+      try {
+        setYaml(jsYaml.dump(updatedModel.model, { indent: 2, lineWidth: 120, noRefs: true }));
+      } catch {
+        // If YAML generation fails, clear it so it re-fetches on next tab switch
+        setYaml('');
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -326,7 +340,12 @@ export default function SemanticModelDetailPage() {
                   <CircularProgress />
                 </Box>
               ) : (
-                <YamlPreview yaml={yaml} fileName={`${model.name.replace(/\s+/g, '-')}.yaml`} />
+                <YamlEditor
+                  initialYaml={yaml}
+                  fileName={`${model.name.replace(/\s+/g, '-')}.yaml`}
+                  modelId={model.id}
+                  onSaveSuccess={handleYamlSave}
+                />
               )}
             </Box>
           </TabPanel>

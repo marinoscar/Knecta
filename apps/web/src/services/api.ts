@@ -375,12 +375,21 @@ export async function getSemanticModel(id: string): Promise<SemanticModel> {
   return api.get<SemanticModel>(`/semantic-models/${id}`);
 }
 
-export async function updateSemanticModel(id: string, data: { name?: string; description?: string }): Promise<SemanticModel> {
-  return api.patch<SemanticModel>(`/semantic-models/${id}`, data);
+export async function updateSemanticModel(
+  id: string,
+  data: { name?: string; description?: string; model?: Record<string, unknown> },
+): Promise<SemanticModel & { validation?: { fixedIssues: string[]; warnings: string[] } }> {
+  return api.patch<SemanticModel & { validation?: { fixedIssues: string[]; warnings: string[] } }>(`/semantic-models/${id}`, data);
 }
 
 export async function deleteSemanticModel(id: string): Promise<void> {
   await api.delete<void>(`/semantic-models/${id}`);
+}
+
+export async function validateSemanticModel(
+  model: Record<string, unknown>,
+): Promise<{ isValid: boolean; fatalIssues: string[]; fixedIssues: string[]; warnings: string[] }> {
+  return api.post<{ isValid: boolean; fatalIssues: string[]; fixedIssues: string[]; warnings: string[] }>('/semantic-models/validate', { model });
 }
 
 export async function exportSemanticModelYaml(id: string): Promise<{ yaml: string; name: string }> {
