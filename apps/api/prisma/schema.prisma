@@ -266,7 +266,6 @@ enum SemanticModelStatus {
 enum RunStatus {
   pending
   planning
-  awaiting_approval
   executing
   completed
   failed
