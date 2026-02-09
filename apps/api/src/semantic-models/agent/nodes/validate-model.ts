@@ -1,17 +1,19 @@
 import { AgentStateType } from '../state';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { HumanMessage, AIMessage } from '@langchain/core/messages';
+import { HumanMessage } from '@langchain/core/messages';
 import { OSI_SPEC_TEXT } from '../osi/spec';
+import { SemanticModelsService } from '../../semantic-models.service';
 
-export function createValidateModelNode(llm: BaseChatModel) {
+export function createValidateModelNode(
+  llm: BaseChatModel,
+  semanticModelsService: SemanticModelsService,
+  runId: string,
+  emitProgress: (event: object) => void,
+) {
   return async (state: AgentStateType) => {
-    const currentAttempts = state.validationAttempts;
-
     if (!state.semanticModel) {
       return {
         error: 'No semantic model to validate',
-        messages: [new AIMessage('Validation skipped: No semantic model was generated.')],
-        validationAttempts: currentAttempts + 1,
       };
     }
 
@@ -66,19 +68,12 @@ Be precise and thorough.`;
     const isValid = content.trim().toUpperCase().startsWith('VALID');
 
     if (isValid) {
-      return {
-        messages: [new AIMessage('Model validation passed against OSI specification. Proceeding to save.')],
-        validationAttempts: currentAttempts + 1,
-      };
+      return {};
     }
 
-    // Validation failed — clear model so generate_model can retry with feedback
+    // Validation failed
     return {
-      messages: [
-        new AIMessage(`Model validation found issues (attempt ${currentAttempts + 1}). Please fix these issues and regenerate:\n${content}`),
-      ],
-      validationAttempts: currentAttempts + 1,
-      semanticModel: null,
+      error: `Model validation failed: ${content}`,
     };
   };
 }

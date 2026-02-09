@@ -2,9 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { DiscoveryService } from '../../discovery/discovery.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LlmService } from '../../llm/llm.service';
+import { SemanticModelsService } from '../semantic-models.service';
 import { buildAgentGraph } from './graph';
-import { buildSystemPrompt } from './prompts/system-prompt';
-import { SystemMessage } from '@langchain/core/messages';
 
 @Injectable()
 export class AgentService {
@@ -21,6 +20,8 @@ export class AgentService {
     selectedSchemas: string[],
     selectedTables: string[],
     runId: string,
+    semanticModelsService: SemanticModelsService,
+    emitProgress: (event: object) => void,
     llmProvider?: string,
     modelName?: string,
     instructions?: string,
@@ -31,24 +32,17 @@ export class AgentService {
       llm,
       this.discoveryService,
       this.prisma,
+      semanticModelsService,
       connectionId,
       userId,
       databaseName,
       selectedSchemas,
       selectedTables,
+      runId,
+      emitProgress,
     );
 
-    const systemPrompt = buildSystemPrompt({
-      databaseName,
-      selectedSchemas,
-      selectedTables,
-      modelName,
-      instructions,
-    });
-
-    // Initial state
     const initialState = {
-      messages: [new SystemMessage(systemPrompt)],
       connectionId,
       userId,
       databaseName,
@@ -57,10 +51,15 @@ export class AgentService {
       runId,
       modelName: modelName || null,
       instructions: instructions || null,
-      validationAttempts: 0,
-      toolIterations: 0,
-      plan: null,
+      datasets: [],
+      foreignKeys: [],
+      tableMetrics: [],
+      failedTables: [],
+      relationships: [],
+      modelMetrics: [],
+      modelAiContext: null,
       semanticModel: null,
+      tokensUsed: { prompt: 0, completion: 0, total: 0 },
       semanticModelId: null,
       error: null,
     };

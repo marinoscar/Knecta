@@ -1,13 +1,11 @@
 import { AgentStateType } from '../state';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { AIMessage } from '@langchain/core/messages';
 
 export function createPersistNode(prisma: PrismaService) {
   return async (state: AgentStateType) => {
     if (!state.semanticModel) {
       return {
         error: 'No semantic model was generated',
-        messages: [new AIMessage('Error: Failed to generate semantic model. The model JSON was empty or invalid.')],
       };
     }
 
@@ -55,7 +53,6 @@ export function createPersistNode(prisma: PrismaService) {
 
     return {
       semanticModelId: semanticModel.id,
-      messages: [new AIMessage(`Semantic model "${name}" has been generated and saved successfully! It contains ${datasets.length} datasets, ${fieldCount} fields, ${relationships.length} relationships, and ${metrics.length} metrics.`)],
     };
   };
 }

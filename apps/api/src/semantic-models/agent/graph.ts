@@ -1,47 +1,47 @@
 import { StateGraph, END, START } from '@langchain/langgraph';
 import { AgentState } from './state';
-import { createPlanNode } from './nodes/plan-discovery';
-import { createAgentNode, createToolNode, shouldContinueTools } from './nodes/agent-loop';
-import { createGenerateModelNode } from './nodes/generate-model';
+import { createDiscoverAndGenerateNode } from './nodes/discover-and-generate';
+import { createGenerateRelationshipsNode } from './nodes/generate-relationships';
+import { createAssembleModelNode } from './nodes/assemble-model';
 import { createValidateModelNode } from './nodes/validate-model';
 import { createPersistNode } from './nodes/persist-model';
-import { createAgentTools } from './tools';
-import { buildSystemPrompt } from './prompts/system-prompt';
 import { DiscoveryService } from '../../discovery/discovery.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SemanticModelsService } from '../semantic-models.service';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { SystemMessage } from '@langchain/core/messages';
 
 export function buildAgentGraph(
   llm: BaseChatModel,
   discoveryService: DiscoveryService,
   prisma: PrismaService,
+  semanticModelsService: SemanticModelsService,
   connectionId: string,
   userId: string,
   databaseName: string,
   selectedSchemas: string[],
   selectedTables: string[],
+  runId: string,
+  emitProgress: (event: object) => void,
 ) {
-  const tools = createAgentTools(discoveryService, connectionId, userId);
-
   const workflow = new StateGraph(AgentState)
-    .addNode('plan_discovery', createPlanNode(llm))
-    .addNode('agent', createAgentNode(llm, tools))
-    .addNode('tools', createToolNode(tools))
-    .addNode('generate_model', createGenerateModelNode(llm))
-    .addNode('validate_model', createValidateModelNode(llm))
+    .addNode('discover_and_generate', createDiscoverAndGenerateNode(
+      llm, discoveryService, semanticModelsService, connectionId, userId, databaseName, runId, emitProgress,
+    ))
+    .addNode('generate_relationships', createGenerateRelationshipsNode(
+      llm, semanticModelsService, runId, emitProgress,
+    ))
+    .addNode('assemble_model', createAssembleModelNode(
+      semanticModelsService, runId, emitProgress,
+    ))
+    .addNode('validate_model', createValidateModelNode(
+      llm, semanticModelsService, runId, emitProgress,
+    ))
     .addNode('persist_model', createPersistNode(prisma))
-    .addEdge(START, 'plan_discovery')
-    .addEdge('plan_discovery', 'agent')
-    .addConditionalEdges('agent', shouldContinueTools)
-    .addEdge('tools', 'agent')
-    .addEdge('generate_model', 'validate_model')
-    .addConditionalEdges('validate_model', (state) => {
-      if (!state.semanticModel && state.validationAttempts < 5) {
-        return 'generate_model';
-      }
-      return 'persist_model';
-    })
+    .addEdge(START, 'discover_and_generate')
+    .addEdge('discover_and_generate', 'generate_relationships')
+    .addEdge('generate_relationships', 'assemble_model')
+    .addEdge('assemble_model', 'validate_model')
+    .addEdge('validate_model', 'persist_model')
     .addEdge('persist_model', END);
 
   return workflow.compile();
