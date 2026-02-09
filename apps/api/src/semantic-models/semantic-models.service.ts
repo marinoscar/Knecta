@@ -3,12 +3,15 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ModelQueryDto } from './dto/model-query.dto';
 import { UpdateModelDto } from './dto/update-model.dto';
 import { CreateRunDto } from './dto/create-run.dto';
-import * as yaml from 'js-yaml';
+import { validateAndFixModel } from './agent/validation/structural-validator';
+import { computeModelStats } from './utils/compute-model-stats';
+import { toYaml } from './agent/osi/yaml-serializer';
 
 @Injectable()
 export class SemanticModelsService {
@@ -113,13 +116,42 @@ export class SemanticModelsService {
       throw new NotFoundException(`Semantic model with ID ${id} not found`);
     }
 
+    // Build update data
+    const data: any = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.description !== undefined) data.description = dto.description;
+
+    let validationResult: { isValid: boolean; fatalIssues: string[]; fixedIssues: string[]; warnings: string[] } | undefined;
+
+    if (dto.model !== undefined) {
+      // Deep clone for mutation (validator mutates in-place)
+      const modelCopy = JSON.parse(JSON.stringify(dto.model));
+      validationResult = validateAndFixModel(modelCopy);
+
+      if (!validationResult.isValid) {
+        throw new UnprocessableEntityException({
+          message: 'Semantic model validation failed',
+          fatalIssues: validationResult.fatalIssues,
+          warnings: validationResult.warnings,
+        });
+      }
+
+      // Use the auto-fixed model
+      data.model = modelCopy;
+      data.modelVersion = (existing.modelVersion || 1) + 1;
+
+      // Recompute stats
+      const stats = computeModelStats(modelCopy);
+      data.tableCount = stats.tableCount;
+      data.fieldCount = stats.fieldCount;
+      data.relationshipCount = stats.relationshipCount;
+      data.metricCount = stats.metricCount;
+    }
+
     // Update model
     const model = await this.prisma.semanticModel.update({
       where: { id },
-      data: {
-        name: dto.name,
-        description: dto.description,
-      },
+      data,
       include: {
         connection: {
           select: {
@@ -136,12 +168,39 @@ export class SemanticModelsService {
       'semantic_models:update',
       'semantic_model',
       model.id,
-      { name: model.name },
+      { name: model.name, modelUpdated: dto.model !== undefined },
     );
 
     this.logger.log(`Semantic model ${model.name} updated by user ${userId}`);
 
-    return this.mapModel(model);
+    const result = this.mapModel(model);
+
+    // Include validation feedback if model was updated
+    if (validationResult) {
+      return {
+        ...result,
+        validation: {
+          fixedIssues: validationResult.fixedIssues,
+          warnings: validationResult.warnings,
+        },
+      };
+    }
+
+    return result;
+  }
+
+  /**
+   * Validate a semantic model structure
+   */
+  async validateModel(model: Record<string, unknown>) {
+    const modelCopy = JSON.parse(JSON.stringify(model));
+    const result = validateAndFixModel(modelCopy);
+    return {
+      isValid: result.isValid,
+      fatalIssues: result.fatalIssues,
+      fixedIssues: result.fixedIssues,
+      warnings: result.warnings,
+    };
   }
 
   /**
@@ -189,7 +248,7 @@ export class SemanticModelsService {
     }
 
     // Convert JSON to YAML
-    const yamlString = yaml.dump(model.model);
+    const yamlString = toYaml(model.model as any);
 
     return {
       yaml: yamlString,
