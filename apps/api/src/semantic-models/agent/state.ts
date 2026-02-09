@@ -11,6 +11,22 @@ export const AgentState = Annotation.Root({
   selectedTables: Annotation<string[]>,   // format: "schema.table"
   runId: Annotation<string>,
 
+  // User-provided context
+  modelName: Annotation<string | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+  instructions: Annotation<string | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+
+  // Validation tracking
+  validationAttempts: Annotation<number>({
+    reducer: (_, next) => next,
+    default: () => 0,
+  }),
+
   // Discovery plan
   plan: Annotation<string | null>({
     reducer: (_, next) => next,
