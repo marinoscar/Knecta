@@ -26,7 +26,7 @@ The Semantic Models feature enables users to automatically generate semantic mod
 
 - **AI-Powered Discovery**: LangGraph-based agent explores database schemas, tables, columns, and relationships
 - **Intelligent Relationship Inference**: Discovers both explicit foreign keys and implicit relationships using column name matching, value overlap analysis, and validation queries
-- **Human-in-the-Loop**: CopilotKit provides interactive UI with plan approval and chat interface
+- **Human-in-the-Loop**: CopilotKit provides interactive UI with chat interface
 - **Multi-Provider LLM Support**: Pluggable architecture supports OpenAI, Anthropic, and Azure OpenAI
 - **OSI Compliance**: Generated models follow the Open Semantic Interface specification
 - **YAML Export**: Models can be exported in standard YAML format
@@ -72,7 +72,6 @@ The feature follows a sophisticated agent-based architecture with human-in-the-l
 │         ↓                                                    │
 │  LangGraph Agent (ReAct pattern)                            │
 │    ├─ 7 Agent Tools (list_schemas, run_query, etc.)        │
-│    ├─ Human-in-the-Loop (plan approval)                    │
 │    └─ OSI Model Generation                                  │
 │         ↓                                                    │
 │  Discovery Service (schema introspection)                   │
@@ -111,15 +110,14 @@ The feature follows a sophisticated agent-based architecture with human-in-the-l
 #### Agent Graph Flow
 
 ```
-START → planDiscovery → awaitApproval → agentLoop ↔ toolExecution → generateModel → persistModel → END
+START → planDiscovery → agentLoop ↔ toolExecution → generateModel → persistModel → END
 ```
 
 1. **planDiscovery**: Agent analyzes selected tables and creates discovery plan
-2. **awaitApproval**: Human reviews plan and approves/rejects via CopilotKit
-3. **agentLoop**: ReAct loop with reasoning and tool calling
-4. **toolExecution**: Execute selected tool (list_schemas, run_query, etc.)
-5. **generateModel**: Convert gathered metadata into OSI-compliant JSON
-6. **persistModel**: Save model to database with statistics
+2. **agentLoop**: ReAct loop with reasoning and tool calling
+3. **toolExecution**: Execute selected tool (list_schemas, run_query, etc.)
+4. **generateModel**: Convert gathered metadata into OSI-compliant JSON
+5. **persistModel**: Save model to database with statistics
 
 ---
 
@@ -194,7 +192,6 @@ model SemanticModel {
 enum SemanticModelRunStatus {
   pending
   planning
-  awaiting_approval
   executing
   completed
   failed
@@ -240,8 +237,8 @@ model SemanticModelRun {
 | `databaseName` | String | Yes | Target database name |
 | `selectedSchemas` | String[] | Yes | User-selected schemas for discovery |
 | `selectedTables` | String[] | Yes | User-selected tables for model generation |
-| `status` | Enum | Yes | Run status (pending, planning, awaiting_approval, executing, completed, failed, cancelled) |
-| `plan` | JSONB | No | Agent's discovery plan (for user approval) |
+| `status` | Enum | Yes | Run status (pending, planning, executing, completed, failed, cancelled) |
+| `plan` | JSONB | No | Agent's discovery plan |
 | `progress` | JSONB | No | Real-time progress updates (steps, current step, percentage) |
 | `errorMessage` | String | No | Error details if status is failed |
 | `startedAt` | Timestamp | No | When agent execution began |
@@ -747,7 +744,6 @@ POST /api/copilotkit
 **Event Types:**
 - `agent_state_update` - Agent progress updates
 - `tool_call` - Tool execution notifications
-- `plan_approval_required` - Human-in-the-loop checkpoint
 - `model_generated` - Semantic model generation complete
 - `error` - Agent error occurred
 
@@ -787,14 +783,13 @@ Keys are **never** exposed to frontend or logged.
 
 ### Human-in-the-Loop Protection
 
-The agent requires user approval before executing discovery plan:
+The agent executes with read-only access and safety guardrails:
 
 1. Agent generates discovery plan
-2. Plan presented to user via CopilotKit UI
-3. User reviews and explicitly approves/rejects
-4. Execution only proceeds after approval
+2. Execution proceeds automatically with read-only queries
+3. All queries subject to timeouts, row limits, and keyword blocking
 
-This prevents unexpected database queries and gives users control.
+This prevents unexpected database modifications while allowing autonomous discovery.
 
 ---
 
@@ -926,14 +921,12 @@ The agent follows the ReAct pattern:
 ```typescript
 const graph = new StateGraph<AgentState>()
   .addNode('planDiscovery', planDiscoveryNode)
-  .addNode('awaitApproval', awaitApprovalNode)
   .addNode('agentLoop', agentLoopNode)
   .addNode('toolExecution', toolExecutionNode)
   .addNode('generateModel', generateModelNode)
   .addNode('persistModel', persistModelNode)
   .addEdge(START, 'planDiscovery')
-  .addEdge('planDiscovery', 'awaitApproval')
-  .addConditionalEdges('awaitApproval', approvalRouter)
+  .addEdge('planDiscovery', 'agentLoop')
   .addEdge('agentLoop', 'toolExecution')
   .addConditionalEdges('toolExecution', executionRouter)
   .addEdge('generateModel', 'persistModel')
@@ -951,26 +944,11 @@ const graph = new StateGraph<AgentState>()
 - Create step-by-step plan (discover schemas → analyze FKs → infer relationships → generate model)
 - Store plan in run record
 
-**Output:** Plan JSON for user approval
+**Output:** Plan JSON
 
 ---
 
-#### 2. awaitApproval Node
-
-**Purpose:** Human-in-the-loop checkpoint
-
-**Actions:**
-- Use LangGraph `interrupt()` to pause execution
-- CopilotKit displays plan to user
-- Wait for user approval/rejection
-
-**Routing:**
-- If approved: Proceed to `agentLoop`
-- If rejected: End with status "cancelled"
-
----
-
-#### 3. agentLoop Node
+#### 2. agentLoop Node
 
 **Purpose:** ReAct reasoning loop
 
@@ -986,7 +964,7 @@ const graph = new StateGraph<AgentState>()
 
 ---
 
-#### 4. toolExecution Node
+#### 3. toolExecution Node
 
 **Purpose:** Execute selected tool and observe results
 
@@ -1000,7 +978,7 @@ const graph = new StateGraph<AgentState>()
 
 ---
 
-#### 5. generateModel Node
+#### 4. generateModel Node
 
 **Purpose:** Convert gathered metadata into OSI JSON
 
@@ -1013,7 +991,7 @@ const graph = new StateGraph<AgentState>()
 
 ---
 
-#### 6. persistModel Node
+#### 5. persistModel Node
 
 **Purpose:** Save model to database
 
@@ -1221,38 +1199,6 @@ LIMIT 100;
 
 ---
 
-### Human-in-the-Loop Implementation
-
-CopilotKit provides the UI layer for agent interaction:
-
-```typescript
-// Backend: Pause execution for approval
-await interrupt({
-  type: 'plan_approval',
-  plan: state.plan,
-  message: 'Please review the discovery plan before proceeding.'
-});
-
-// Frontend: CopilotKit hook
-useCopilotAction({
-  name: 'approvePlan',
-  handler: async () => {
-    // User clicked "Approve" button
-    await resumeAgent({ approved: true });
-  }
-});
-```
-
-**Approval Flow:**
-1. Agent generates plan and calls `interrupt()`
-2. LangGraph pauses execution
-3. CopilotKit sends plan to frontend via SSE
-4. User reviews plan in UI
-5. User clicks "Approve" or "Reject"
-6. Frontend sends approval response
-7. LangGraph resumes execution or cancels
-
----
 
 ### OSI Specification Structure
 
@@ -1473,9 +1419,6 @@ File: `apps/web/src/components/semantic-models/AgentSidebar.tsx`
 **Key Features:**
 - Chat interface for human-agent communication
 - Real-time progress updates (step X of Y)
-- Plan approval dialog:
-  - Shows discovery plan steps
-  - "Approve" / "Reject" buttons
 - Progress bar during execution
 - Success/error notifications
 - Auto-redirect to model detail page on completion
@@ -1486,19 +1429,6 @@ File: `apps/web/src/components/semantic-models/AgentSidebar.tsx`
 // Chat interface
 useCopilotChat({
   instructions: 'You are helping generate a semantic model...',
-});
-
-// Plan approval action
-useCopilotAction({
-  name: 'approvePlan',
-  parameters: [{ name: 'approved', type: 'boolean' }],
-  handler: async ({ approved }) => {
-    if (approved) {
-      await resumeAgent();
-    } else {
-      await cancelRun();
-    }
-  },
 });
 
 // Progress updates
@@ -2108,7 +2038,6 @@ apps/api/
 │   │       ├── state.ts                        # Agent state interface
 │   │       ├── nodes/                          # Graph nodes
 │   │       │   ├── plan-discovery.node.ts
-│   │       │   ├── await-approval.node.ts
 │   │       │   ├── agent-loop.node.ts
 │   │       │   ├── tool-execution.node.ts
 │   │       │   ├── generate-model.node.ts
