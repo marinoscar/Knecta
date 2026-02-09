@@ -12,10 +12,9 @@ import { SemanticModelsService } from './semantic-models.service';
  * Step labels for UI display
  */
 const STEP_LABELS: Record<string, string> = {
-  plan_discovery: 'Planning Discovery',
-  agent: 'Analyzing Database',
-  tools: 'Running Discovery Tools',
-  generate_model: 'Generating Semantic Model',
+  discover_and_generate: 'Discovering & Generating Datasets',
+  generate_relationships: 'Generating Relationships',
+  assemble_model: 'Assembling Model',
   validate_model: 'Validating Model',
   persist_model: 'Saving Model',
 };
@@ -36,12 +35,10 @@ interface StepHistoryEntry {
 }
 
 /**
- * Callback handler that emits SSE events during LLM execution.
- * Used alongside streamMode: 'updates' to provide token-level streaming
- * without the state corruption caused by streamMode: ['messages', 'updates'].
- *
- * Also tracks cumulative token usage and step history, updating DB progress
- * in real-time during agent execution.
+ * Callback handler that tracks LLM invocations during agent execution.
+ * Tracks node transitions, cumulative token usage, and step history.
+ * Progress events (per-table progress, table_complete, table_error) are
+ * emitted directly by the agent nodes via the emitProgress callback.
  */
 class SSEStreamHandler extends BaseCallbackHandler {
   name = 'SSEStreamHandler';
@@ -71,10 +68,8 @@ class SSEStreamHandler extends BaseCallbackHandler {
   ) {
     const nodeName = metadata?.langgraph_node as string | undefined;
     if (nodeName && nodeName !== this.currentNode) {
-      // Close previous step in history
       this.closeCurrentStep();
 
-      // Start new step
       this.currentNode = nodeName;
       const label = this.stepLabels[nodeName] || nodeName;
 
@@ -91,14 +86,7 @@ class SSEStreamHandler extends BaseCallbackHandler {
         label,
       });
 
-      // Update DB progress (fire-and-forget)
       this.updateProgress();
-    }
-  }
-
-  handleLLMNewToken(token: string) {
-    if (token && token.length > 0) {
-      this.emit({ type: 'text_delta', content: token });
     }
   }
 
@@ -119,15 +107,10 @@ class SSEStreamHandler extends BaseCallbackHandler {
     });
   }
 
-  /**
-   * Start a new step (called from updates loop for non-LLM nodes)
-   */
   startStep(nodeName: string) {
     if (nodeName !== this.currentNode) {
-      // Close previous step
       this.closeCurrentStep();
 
-      // Start new step
       this.currentNode = nodeName;
       const label = this.stepLabels[nodeName] || nodeName;
 
@@ -138,23 +121,16 @@ class SSEStreamHandler extends BaseCallbackHandler {
         tokens: { prompt: 0, completion: 0, total: 0 },
       });
 
-      // Update DB progress (fire-and-forget)
       this.updateProgress();
     }
   }
 
-  /**
-   * End current step (called from updates loop)
-   */
   endStep() {
     this.closeCurrentStep();
     this.currentNode = null;
     this.updateProgress();
   }
 
-  /**
-   * Close the current step in history (calculate token delta and set completedAt)
-   */
   closeCurrentStep() {
     if (this.steps.length > 0) {
       const lastStep = this.steps[this.steps.length - 1];
@@ -171,9 +147,6 @@ class SSEStreamHandler extends BaseCallbackHandler {
     }
   }
 
-  /**
-   * Update run progress in database
-   */
   private updateProgress() {
     const progress = {
       currentStep: this.currentNode,
@@ -188,20 +161,27 @@ class SSEStreamHandler extends BaseCallbackHandler {
       steps: this.steps,
     };
 
-    // Fire-and-forget (don't block callback execution)
     this.semanticModelsService
       .updateRunProgress(this.runId, progress)
-      .catch(() => {
-        // Silently ignore progress update failures (non-critical)
-      });
+      .catch(() => {});
   }
 }
 
 /**
  * Agent Stream Controller
  *
- * Provides direct SSE streaming of LangGraph agent execution for semantic model generation.
- * This replaces the previous CopilotKit integration with a simpler, direct streaming approach.
+ * Provides direct SSE streaming of the table-by-table semantic model agent.
+ *
+ * Event types:
+ * - run_start: Agent execution started
+ * - step_start: Node execution started (with step name and label)
+ * - step_end: Node execution completed
+ * - progress: Per-table progress (currentTable, totalTables, tableName, phase, percentComplete)
+ * - table_complete: A table was processed successfully
+ * - table_error: A table failed to process
+ * - token_update: Cumulative token usage update
+ * - run_complete: Agent execution completed (with semanticModelId, tokensUsed, failedTables, duration)
+ * - run_error: Agent execution failed (with error message)
  */
 @ApiTags('Semantic Models')
 @Controller('semantic-models')
@@ -213,23 +193,6 @@ export class AgentStreamController {
     private readonly semanticModelsService: SemanticModelsService,
   ) {}
 
-  /**
-   * Stream agent execution via SSE
-   *
-   * @param runId - Semantic model run ID
-   * @param userId - Current user ID (from JWT)
-   * @returns SSE stream of agent execution events
-   *
-   * Event types:
-   * - run_start: Agent execution started
-   * - step_start: Node execution started (with step name and label)
-   * - text: AI assistant text message
-   * - tool_start: Tool invocation started (with tool name and args)
-   * - tool_result: Tool execution completed (with result)
-   * - step_end: Node execution completed
-   * - run_complete: Agent execution completed successfully (with semanticModelId)
-   * - run_error: Agent execution failed (with error message)
-   */
   @Post('runs/:runId/stream')
   @Auth({ permissions: [PERMISSIONS.SEMANTIC_MODELS_GENERATE] })
   @ApiExcludeEndpoint()
@@ -239,17 +202,19 @@ export class AgentStreamController {
     @Req() req: FastifyRequest,
     @Res() res: FastifyReply,
   ) {
+    const startTime = Date.now();
+
     try {
       // 1. Validate run exists and user has access
       const run = await this.semanticModelsService.getRun(runId, userId);
 
-      // Atomically claim the run (prevents race condition with duplicate requests)
+      // Atomically claim the run
       const claimed = await this.semanticModelsService.claimRun(runId, userId);
       if (!claimed) {
         throw { status: 409, code: 'RUN_ALREADY_EXECUTING', message: 'This run is already being executed' };
       }
 
-      // 2. Hijack response for SSE streaming (CRITICAL: prevents Fastify from closing the response)
+      // 2. Hijack response for SSE streaming
       res.hijack();
       const raw = res.raw;
 
@@ -261,18 +226,17 @@ export class AgentStreamController {
         'X-Accel-Buffering': 'no',
       });
 
-      // 4. Create emit helper for SSE events
+      // 4. Create emit helper
       const emit = (event: object) => {
         if (!raw.writableEnded) {
           raw.write(`data: ${JSON.stringify(event)}\n\n`);
         }
       };
 
-      // Keep-alive heartbeat (prevents Nginx proxy_read_timeout during long LLM calls)
       let keepAlive: ReturnType<typeof setInterval> | null = null;
 
       try {
-        // 5. Create agent graph
+        // 5. Create agent graph — pass semanticModelsService and emit for per-table progress
         const { graph, initialState } = await this.agentService.createAgentGraph(
           run.connectionId,
           userId,
@@ -280,7 +244,9 @@ export class AgentStreamController {
           run.selectedSchemas as string[],
           run.selectedTables as string[],
           runId,
-          undefined, // llmProvider (use default)
+          this.semanticModelsService,
+          emit,
+          undefined, // llmProvider
           run.name || undefined,
           run.instructions || undefined,
         );
@@ -292,10 +258,10 @@ export class AgentStreamController {
           }
         }, 30_000);
 
-        // 7. Emit run_start event
+        // 7. Emit run_start
         emit({ type: 'run_start' });
 
-        // 8. Stream graph execution with 'updates' mode + callbacks for step tracking
+        // 8. Stream graph execution
         const sseHandler = new SSEStreamHandler(
           emit,
           STEP_LABELS,
@@ -308,14 +274,17 @@ export class AgentStreamController {
           callbacks: [sseHandler],
         });
 
-        // 8. Process updates for node-level events (tool_start, tool_result, step tracking)
+        // Track the last node output for failedTables
+        let lastOutput: Record<string, any> = {};
+
+        // 9. Process updates for step tracking
         for await (const data of stream) {
           const update = data as Record<string, any>;
           const nodeName = Object.keys(update)[0];
           const output = update[nodeName];
+          lastOutput = output || {};
 
-          // For non-LLM nodes (tools, persist_model),
-          // the callback didn't fire — start step from updates mode
+          // Track step transitions for non-LLM nodes
           if (nodeName !== sseHandler.currentNode) {
             if (sseHandler.currentNode) {
               emit({ type: 'step_end', step: sseHandler.currentNode });
@@ -329,57 +298,33 @@ export class AgentStreamController {
             });
           }
 
-          // Extract tool_start and tool_result from node output messages
-          if (output?.messages && Array.isArray(output.messages)) {
-            for (const msg of output.messages) {
-              const msgType = msg._getType?.();
-              // AI message with tool_calls → emit tool_start for each
-              if (msgType === 'ai' && msg.tool_calls?.length > 0) {
-                for (const tc of msg.tool_calls) {
-                  emit({ type: 'tool_start', tool: tc.name, args: tc.args });
-                }
-              }
-              // ToolMessage → emit tool_result
-              if (msgType === 'tool') {
-                emit({
-                  type: 'tool_result',
-                  tool: msg.name,
-                  content: typeof msg.content === 'string'
-                    ? msg.content
-                    : JSON.stringify(msg.content),
-                });
-              }
-              // AI message with text content (non-tool-call) → emit text
-              if (msgType === 'ai' && typeof msg.content === 'string' && msg.content.length > 0 && !msg.tool_calls?.length) {
-                emit({ type: 'text', content: msg.content });
-              }
-            }
-          }
-
           // Emit step_end for this node
           emit({ type: 'step_end', step: nodeName });
           sseHandler.endStep();
         }
 
-        // Close final step if still open from callback
+        // Close final step
         sseHandler.closeCurrentStep();
 
-        // 9. Fetch updated run to get semanticModelId
+        // 10. Fetch updated run
         const updatedRun = await this.semanticModelsService.getRun(runId, userId);
+        const duration = Date.now() - startTime;
 
-        // 10. Final progress update (run complete)
+        // 11. Final progress update
         await this.semanticModelsService.updateRunProgress(runId, {
           currentStep: null,
           currentStepLabel: null,
+          percentComplete: 100,
           tokensUsed: {
             prompt: sseHandler.promptTokens,
             completion: sseHandler.completionTokens,
             total: sseHandler.totalTokens,
           },
           steps: sseHandler.steps,
+          duration,
         });
 
-        // 11. Emit run_complete
+        // 12. Emit run_complete with failedTables and duration
         emit({
           type: 'run_complete',
           semanticModelId: updatedRun.semanticModelId,
@@ -388,19 +333,17 @@ export class AgentStreamController {
             completion: sseHandler.completionTokens,
             total: sseHandler.totalTokens,
           },
+          failedTables: lastOutput.failedTables || [],
+          duration,
         });
 
-        // 12. Stop keep-alive and end SSE stream
         if (keepAlive) clearInterval(keepAlive);
         raw.end();
       } catch (error: any) {
-        // Stop keep-alive
         if (keepAlive) clearInterval(keepAlive);
 
-        // Error during agent execution
         this.logger.error(`Agent execution failed for run ${runId}`, error.stack);
 
-        // Update run status to 'failed'
         try {
           await this.semanticModelsService.updateRunStatus(
             runId,
@@ -412,20 +355,16 @@ export class AgentStreamController {
           this.logger.error(`Failed to update run status to 'failed'`, updateError.stack);
         }
 
-        // Emit error event
         emit({
           type: 'run_error',
           message: error.message || 'Agent execution failed',
         });
 
-        // End SSE stream
         raw.end();
       }
     } catch (error: any) {
-      // Error during setup (e.g., run not found, permission denied)
       this.logger.error(`Agent stream setup failed for run ${runId}`, error.stack);
 
-      // Send error response (stream not started yet, so we can use normal response)
       if (!res.raw.writableEnded) {
         res.raw.statusCode = error.status || 500;
         res.raw.setHeader('Content-Type', 'application/json');
