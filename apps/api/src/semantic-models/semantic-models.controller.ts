@@ -26,6 +26,7 @@ import { PERMISSIONS } from '../common/constants/roles.constants';
 import { ModelQueryDto } from './dto/model-query.dto';
 import { UpdateModelDto } from './dto/update-model.dto';
 import { CreateRunDto } from './dto/create-run.dto';
+import { ValidateModelDto } from './dto/validate-model.dto';
 
 @ApiTags('Semantic Models')
 @Controller('semantic-models')
@@ -124,6 +125,16 @@ export class SemanticModelsController {
     await this.service.deleteRun(runId, userId);
   }
 
+  @Post('validate')
+  @Auth({ permissions: [PERMISSIONS.SEMANTIC_MODELS_WRITE] })
+  @ApiOperation({ summary: 'Validate a semantic model structure' })
+  @ApiResponse({ status: 200, description: 'Validation result' })
+  async validate(
+    @Body() dto: ValidateModelDto,
+  ) {
+    return this.service.validateModel(dto.model);
+  }
+
   @Get(':id')
   @Auth({ permissions: [PERMISSIONS.SEMANTIC_MODELS_READ] })
   @ApiOperation({ summary: 'Get semantic model by ID' })
@@ -144,6 +155,7 @@ export class SemanticModelsController {
   @ApiResponse({ status: 200, description: 'Model updated' })
   @ApiResponse({ status: 404, description: 'Model not found' })
   @ApiResponse({ status: 400, description: 'Invalid request data' })
+  @ApiResponse({ status: 422, description: 'Model validation failed' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateModelDto,
