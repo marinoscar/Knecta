@@ -371,6 +371,266 @@ describe('Semantic Models (Integration)', () => {
         .send({ name: 'Updated' })
         .expect(404);
     });
+
+    it('should update model JSON and recompute stats', async () => {
+      const contributor = await createMockContributorUser(context);
+
+      const existingModel = createMockSemanticModel({
+        id: '123e4567-e89b-12d3-a456-426614174011',
+        name: 'Test Model',
+        description: 'Test',
+        connectionId: '123e4567-e89b-12d3-a456-426614174001',
+        ownerId: contributor.id,
+        modelVersion: 1,
+        tableCount: 0,
+        fieldCount: 0,
+        relationshipCount: 0,
+        metricCount: 0,
+      });
+
+      // Valid OSI model with 2 datasets, 3 fields, 1 relationship, 1 metric
+      const validModel = {
+        semantic_model: [
+          {
+            name: 'Test Model',
+            description: 'Test',
+            datasets: [
+              {
+                name: 'orders',
+                source: 'public.orders',
+                fields: [
+                  {
+                    name: 'id',
+                    expression: {
+                      dialects: [
+                        { dialect: 'ANSI_SQL', expression: 'orders.id' },
+                      ],
+                    },
+                  },
+                  {
+                    name: 'total',
+                    expression: {
+                      dialects: [
+                        { dialect: 'ANSI_SQL', expression: 'orders.total' },
+                      ],
+                    },
+                  },
+                ],
+              },
+              {
+                name: 'customers',
+                source: 'public.customers',
+                fields: [
+                  {
+                    name: 'id',
+                    expression: {
+                      dialects: [
+                        { dialect: 'ANSI_SQL', expression: 'customers.id' },
+                      ],
+                    },
+                  },
+                ],
+              },
+            ],
+            relationships: [
+              {
+                name: 'orders_customers',
+                from: 'orders',
+                to: 'customers',
+                from_columns: ['customer_id'],
+                to_columns: ['id'],
+              },
+            ],
+            metrics: [
+              {
+                name: 'total_revenue',
+                expression: {
+                  dialects: [
+                    {
+                      dialect: 'ANSI_SQL',
+                      expression: 'SUM(orders.total)',
+                    },
+                  ],
+                },
+                description: 'Total revenue',
+              },
+            ],
+          },
+        ],
+      };
+
+      const updatedModel = {
+        ...existingModel,
+        model: validModel,
+        modelVersion: 2,
+        tableCount: 2,
+        fieldCount: 3,
+        relationshipCount: 1,
+        metricCount: 1,
+      };
+
+      context.prismaMock.semanticModel.findFirst.mockResolvedValue(
+        existingModel,
+      );
+      context.prismaMock.semanticModel.update.mockResolvedValue(updatedModel);
+      context.prismaMock.auditEvent.create.mockResolvedValue({} as any);
+
+      const response = await request(context.app.getHttpServer())
+        .patch('/api/semantic-models/123e4567-e89b-12d3-a456-426614174011')
+        .set(authHeader(contributor.accessToken))
+        .send({ model: validModel })
+        .expect(200);
+
+      expect(response.body.data).toHaveProperty('modelVersion', 2);
+      expect(response.body.data).toHaveProperty('tableCount', 2);
+      expect(response.body.data).toHaveProperty('fieldCount', 3);
+      expect(response.body.data).toHaveProperty('relationshipCount', 1);
+      expect(response.body.data).toHaveProperty('metricCount', 1);
+      expect(response.body.data.model).toBeDefined();
+    });
+
+    it('should return 422 when model has fatal validation issues', async () => {
+      const contributor = await createMockContributorUser(context);
+
+      const existingModel = createMockSemanticModel({
+        id: '123e4567-e89b-12d3-a456-426614174011',
+        name: 'Test Model',
+        connectionId: '123e4567-e89b-12d3-a456-426614174001',
+        ownerId: contributor.id,
+      });
+
+      context.prismaMock.semanticModel.findFirst.mockResolvedValue(
+        existingModel,
+      );
+      context.prismaMock.auditEvent.create.mockResolvedValue({} as any);
+
+      // Invalid model: missing semantic_model array
+      const invalidModel = {
+        bad: 'data',
+      };
+
+      const response = await request(context.app.getHttpServer())
+        .patch('/api/semantic-models/123e4567-e89b-12d3-a456-426614174011')
+        .set(authHeader(contributor.accessToken))
+        .send({ model: invalidModel })
+        .expect(422);
+
+      expect(response.body.message).toBe('Semantic model validation failed');
+      expect(response.body.fatalIssues).toBeDefined();
+      expect(Array.isArray(response.body.fatalIssues)).toBe(true);
+      expect(response.body.fatalIssues.length).toBeGreaterThan(0);
+    });
+
+    it('should auto-fix minor issues and return fixedIssues', async () => {
+      const contributor = await createMockContributorUser(context);
+
+      const existingModel = createMockSemanticModel({
+        id: '123e4567-e89b-12d3-a456-426614174011',
+        name: 'Test Model',
+        connectionId: '123e4567-e89b-12d3-a456-426614174001',
+        ownerId: contributor.id,
+        modelVersion: 1,
+      });
+
+      // Valid model but missing ai_context (will be auto-fixed)
+      const modelWithoutContext = {
+        semantic_model: [
+          {
+            name: 'Test Model',
+            datasets: [
+              {
+                name: 'orders',
+                source: 'public.orders',
+                fields: [
+                  {
+                    name: 'id',
+                    expression: {
+                      dialects: [
+                        { dialect: 'ANSI_SQL', expression: 'orders.id' },
+                      ],
+                    },
+                  },
+                ],
+              },
+            ],
+            relationships: [],
+            metrics: [],
+          },
+        ],
+      };
+
+      const updatedModel = {
+        ...existingModel,
+        model: modelWithoutContext,
+        modelVersion: 2,
+        tableCount: 1,
+        fieldCount: 1,
+        relationshipCount: 0,
+        metricCount: 0,
+      };
+
+      context.prismaMock.semanticModel.findFirst.mockResolvedValue(
+        existingModel,
+      );
+      context.prismaMock.semanticModel.update.mockResolvedValue(updatedModel);
+      context.prismaMock.auditEvent.create.mockResolvedValue({} as any);
+
+      const response = await request(context.app.getHttpServer())
+        .patch('/api/semantic-models/123e4567-e89b-12d3-a456-426614174011')
+        .set(authHeader(contributor.accessToken))
+        .send({ model: modelWithoutContext })
+        .expect(200);
+
+      expect(response.body.data).toHaveProperty('modelVersion', 2);
+      expect(response.body.data.validation).toBeDefined();
+      expect(response.body.data.validation.fixedIssues).toBeDefined();
+      expect(Array.isArray(response.body.data.validation.fixedIssues)).toBe(
+        true,
+      );
+    });
+
+    it('should still update name/description without model', async () => {
+      const contributor = await createMockContributorUser(context);
+
+      const existingModel = createMockSemanticModel({
+        id: '123e4567-e89b-12d3-a456-426614174011',
+        name: 'Old Name',
+        description: 'Old description',
+        connectionId: '123e4567-e89b-12d3-a456-426614174001',
+        ownerId: contributor.id,
+        tableCount: 5,
+        fieldCount: 20,
+        modelVersion: 1,
+      });
+
+      const updatedModel = {
+        ...existingModel,
+        name: 'New Name',
+        // description stays the same
+        // stats should NOT be reset
+      };
+
+      context.prismaMock.semanticModel.findFirst.mockResolvedValue(
+        existingModel,
+      );
+      context.prismaMock.semanticModel.update.mockResolvedValue(updatedModel);
+      context.prismaMock.auditEvent.create.mockResolvedValue({} as any);
+
+      const response = await request(context.app.getHttpServer())
+        .patch('/api/semantic-models/123e4567-e89b-12d3-a456-426614174011')
+        .set(authHeader(contributor.accessToken))
+        .send({ name: 'New Name' })
+        .expect(200);
+
+      expect(response.body.data).toHaveProperty('name', 'New Name');
+      // Verify stats are preserved
+      expect(response.body.data).toHaveProperty('tableCount', 5);
+      expect(response.body.data).toHaveProperty('fieldCount', 20);
+      // Verify version did NOT increment
+      expect(response.body.data).toHaveProperty('modelVersion', 1);
+      // Verify no validation feedback
+      expect(response.body.data.validation).toBeUndefined();
+    });
   });
 
   // ==========================================================================
@@ -426,6 +686,92 @@ describe('Semantic Models (Integration)', () => {
         .delete('/api/semantic-models/123e4567-e89b-12d3-a456-426614174999')
         .set(authHeader(contributor.accessToken))
         .expect(404);
+    });
+  });
+
+  // ==========================================================================
+  // POST /api/semantic-models/validate
+  // ==========================================================================
+
+  describe('POST /api/semantic-models/validate', () => {
+    it('should return 401 if not authenticated', async () => {
+      await request(context.app.getHttpServer())
+        .post('/api/semantic-models/validate')
+        .send({ model: {} })
+        .expect(401);
+    });
+
+    it('should return 403 without write permission', async () => {
+      const viewer = await createMockViewerUser(context);
+
+      await request(context.app.getHttpServer())
+        .post('/api/semantic-models/validate')
+        .set(authHeader(viewer.accessToken))
+        .send({ model: {} })
+        .expect(403);
+    });
+
+    it('should return validation result for a valid model', async () => {
+      const contributor = await createMockContributorUser(context);
+
+      const validModel = {
+        semantic_model: [
+          {
+            name: 'Test Model',
+            description: 'Test',
+            datasets: [
+              {
+                name: 'orders',
+                source: 'public.orders',
+                fields: [
+                  {
+                    name: 'id',
+                    expression: {
+                      dialects: [
+                        { dialect: 'ANSI_SQL', expression: 'orders.id' },
+                      ],
+                    },
+                  },
+                ],
+              },
+            ],
+            relationships: [],
+            metrics: [],
+          },
+        ],
+      };
+
+      const response = await request(context.app.getHttpServer())
+        .post('/api/semantic-models/validate')
+        .set(authHeader(contributor.accessToken))
+        .send({ model: validModel })
+        .expect(200);
+
+      expect(response.body.data).toHaveProperty('isValid', true);
+      expect(response.body.data).toHaveProperty('fatalIssues');
+      expect(Array.isArray(response.body.data.fatalIssues)).toBe(true);
+      expect(response.body.data.fatalIssues).toHaveLength(0);
+      expect(response.body.data).toHaveProperty('fixedIssues');
+      expect(response.body.data).toHaveProperty('warnings');
+    });
+
+    it('should return validation errors for invalid model', async () => {
+      const contributor = await createMockContributorUser(context);
+
+      const invalidModel = {
+        bad: 'data',
+      };
+
+      const response = await request(context.app.getHttpServer())
+        .post('/api/semantic-models/validate')
+        .set(authHeader(contributor.accessToken))
+        .send({ model: invalidModel })
+        .expect(200);
+
+      expect(response.body.data).toHaveProperty('isValid', false);
+      expect(response.body.data).toHaveProperty('fatalIssues');
+      expect(Array.isArray(response.body.data.fatalIssues)).toBe(true);
+      expect(response.body.data.fatalIssues.length).toBeGreaterThan(0);
     });
   });
 
