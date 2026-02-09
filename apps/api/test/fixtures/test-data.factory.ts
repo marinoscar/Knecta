@@ -99,6 +99,21 @@ export const mockPermissions = {
     name: 'semantic_models:generate',
     description: 'Generate semantic models',
   },
+  ontologiesRead: {
+    id: randomUUID(),
+    name: 'ontologies:read',
+    description: 'Read ontologies',
+  },
+  ontologiesWrite: {
+    id: randomUUID(),
+    name: 'ontologies:write',
+    description: 'Write ontologies',
+  },
+  ontologiesDelete: {
+    id: randomUUID(),
+    name: 'ontologies:delete',
+    description: 'Delete ontologies',
+  },
 };
 
 export const mockRoles = {
@@ -398,6 +413,9 @@ export const rolePermissionsMap = {
     mockPermissions.semanticModelsWrite,
     mockPermissions.semanticModelsDelete,
     mockPermissions.semanticModelsGenerate,
+    mockPermissions.ontologiesRead,
+    mockPermissions.ontologiesWrite,
+    mockPermissions.ontologiesDelete,
   ],
   contributor: [
     mockPermissions.userSettingsRead,
@@ -410,10 +428,14 @@ export const rolePermissionsMap = {
     mockPermissions.semanticModelsWrite,
     mockPermissions.semanticModelsDelete,
     mockPermissions.semanticModelsGenerate,
+    mockPermissions.ontologiesRead,
+    mockPermissions.ontologiesWrite,
+    mockPermissions.ontologiesDelete,
   ],
   viewer: [
     mockPermissions.userSettingsRead,
     mockPermissions.userSettingsWrite,
+    mockPermissions.ontologiesRead,
   ],
 };
 
@@ -618,6 +640,56 @@ export function createMockSemanticModelRun(
     errorMessage,
     startedAt,
     completedAt,
+    ownerId,
+    createdAt,
+    updatedAt,
+  };
+}
+
+// ============================================================================
+// Ontology Factory
+// ============================================================================
+
+export interface CreateMockOntologyOptions {
+  id?: string;
+  name?: string;
+  description?: string | null;
+  semanticModelId: string;
+  status?: 'creating' | 'ready' | 'failed';
+  nodeCount?: number | null;
+  relationshipCount?: number | null;
+  errorMessage?: string | null;
+  ownerId: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export function createMockOntology(
+  options: CreateMockOntologyOptions,
+): any {
+  const {
+    id = randomUUID(),
+    name = 'Test Ontology',
+    description = null,
+    semanticModelId,
+    status = 'ready',
+    nodeCount = 25,
+    relationshipCount = 30,
+    errorMessage = null,
+    ownerId,
+    createdAt = new Date(),
+    updatedAt = new Date(),
+  } = options;
+
+  return {
+    id,
+    name,
+    description,
+    semanticModelId,
+    status,
+    nodeCount,
+    relationshipCount,
+    errorMessage,
     ownerId,
     createdAt,
     updatedAt,
