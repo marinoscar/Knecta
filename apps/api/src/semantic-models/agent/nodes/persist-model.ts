@@ -1,6 +1,6 @@
 import { AgentStateType } from '../state';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { computeModelStats } from '../utils/compute-model-stats';
+import { computeModelStats } from '../../utils/compute-model-stats';
 
 export function createPersistNode(prisma: PrismaService) {
   return async (state: AgentStateType) => {
