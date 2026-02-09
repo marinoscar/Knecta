@@ -214,6 +214,7 @@ cd apps/api && npm run prisma:migrate
 
 - **Application**: http://localhost:8319 (via Nginx)
 - **Swagger UI**: http://localhost:8319/api/docs
+- **Neo4j Browser**: http://localhost:7474 (direct, dev only)
 - **Uptrace**: http://localhost:14318 (when otel stack running)
 
 ## API Endpoints (MVP)
@@ -397,6 +398,10 @@ Key variables (see `infra/compose/.env.example` for full list):
 - `POSTGRES_SSL` - Enable SSL connection (default: false)
 
 Note: `DATABASE_URL` is constructed automatically from these variables at runtime.
+
+**Graph Database (Neo4j):**
+- `NEO4J_USER` - Neo4j username (default: neo4j)
+- `NEO4J_PASSWORD` - Neo4j password (default: neo4j)
 
 **Authentication:**
 - `JWT_SECRET` - JWT signing secret (min 32 chars)

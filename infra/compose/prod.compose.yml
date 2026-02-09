@@ -50,3 +50,14 @@ services:
   # ---------------------------------------------------------------------------
   nginx:
     restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Neo4j - Production settings
+  # ---------------------------------------------------------------------------
+  neo4j:
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    # Note: Ports not exposed in production for security
