@@ -1,3 +1,10 @@
+/**
+ * DEPRECATED: These tools are no longer used by the semantic model agent.
+ * The agent now calls DiscoveryService methods directly instead of using
+ * LangChain DynamicStructuredTool wrappers. This file is kept for potential
+ * future use or reference.
+ */
+
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { DiscoveryService } from '../../../discovery/discovery.service';
