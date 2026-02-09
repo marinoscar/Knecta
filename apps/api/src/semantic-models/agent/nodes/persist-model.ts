@@ -1,5 +1,6 @@
 import { AgentStateType } from '../state';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { computeModelStats } from '../utils/compute-model-stats';
 
 export function createPersistNode(prisma: PrismaService) {
   return async (state: AgentStateType) => {
@@ -12,15 +13,7 @@ export function createPersistNode(prisma: PrismaService) {
     const modelDef = (state.semanticModel as any)?.semantic_model?.[0];
     const name = state.modelName || modelDef?.name || `Model for ${state.databaseName}`;
     const description = modelDef?.description || '';
-    const datasets = modelDef?.datasets || [];
-    const relationships = modelDef?.relationships || [];
-    const metrics = modelDef?.metrics || [];
-
-    // Count fields across all datasets
-    let fieldCount = 0;
-    for (const ds of datasets) {
-      fieldCount += (ds.fields || []).length;
-    }
+    const stats = computeModelStats(state.semanticModel as Record<string, unknown>);
 
     // Create or update the semantic model
     const semanticModel = await prisma.semanticModel.create({
@@ -31,10 +24,10 @@ export function createPersistNode(prisma: PrismaService) {
         databaseName: state.databaseName,
         status: 'ready',
         model: state.semanticModel as any,
-        tableCount: datasets.length,
-        fieldCount,
-        relationshipCount: relationships.length,
-        metricCount: metrics.length,
+        tableCount: stats.tableCount,
+        fieldCount: stats.fieldCount,
+        relationshipCount: stats.relationshipCount,
+        metricCount: stats.metricCount,
         ownerId: state.userId,
       },
     });
