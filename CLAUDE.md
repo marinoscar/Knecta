@@ -287,6 +287,13 @@ cd apps/api && npm run prisma:migrate
 - `GET /api/semantic-models/runs/:runId` - Get run status
 - `POST /api/semantic-models/runs/:runId/cancel` - Cancel run
 
+### Ontologies
+- `GET /api/ontologies` - List ontologies (paginated)
+- `GET /api/ontologies/:id` - Get ontology by ID
+- `POST /api/ontologies` - Create ontology from semantic model
+- `DELETE /api/ontologies/:id` - Delete ontology (both PG and Neo4j)
+- `GET /api/ontologies/:id/graph` - Get graph data for visualization
+
 ### Schema Discovery
 - `GET /api/connections/:id/databases` - List databases
 - `GET /api/connections/:id/databases/:db/schemas` - List schemas
@@ -320,6 +327,7 @@ cd apps/api && npm run prisma:migrate
 - `storage:read_any/write_any/delete_any` - Storage object access (all objects, Admin only)
 - `connections:read/write/delete/test` - Database connection management
 - `semantic_models:read/write/delete/generate` - Semantic model management
+- `ontologies:read/write/delete` - Ontology management
 
 ## Database Tables
 
@@ -338,6 +346,7 @@ cd apps/api && npm run prisma:migrate
 - `data_connections` - Database connection configurations (per-user, encrypted credentials)
 - `semantic_models` - AI-generated semantic models (OSI spec, JSON model, per-user)
 - `semantic_model_runs` - Agent execution tracking (status, plan, progress)
+- `ontologies` - Graph ontology metadata (status, counts, link to semantic model)
 
 ## Access Control: Email Allowlist
 
