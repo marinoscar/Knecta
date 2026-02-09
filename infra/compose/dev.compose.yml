@@ -19,6 +19,7 @@ services:
       - ../../apps/api/prisma:/app/prisma:ro
     environment:
       - NODE_ENV=development
+      - NODE_OPTIONS=--max-old-space-size=4096
     command: npm run start:dev
 
   # ---------------------------------------------------------------------------
