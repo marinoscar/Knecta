@@ -24,6 +24,7 @@ import {
   Divider,
   Card,
   CardContent,
+  TextField,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -53,6 +54,8 @@ export default function NewSemanticModelPage() {
   const [isStarting, setIsStarting] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [modelName, setModelName] = useState('');
+  const [modelInstructions, setModelInstructions] = useState('');
 
   const { connections, fetchConnections, isLoading: connectionsLoading } = useConnections();
   const {
@@ -184,6 +187,8 @@ export default function NewSemanticModelPage() {
         databaseName: selectedDatabase,
         selectedSchemas: selectedSchemaNames,
         selectedTables,
+        name: modelName,
+        instructions: modelInstructions || undefined,
       });
       setRunId(run.id);
     } catch (err) {
@@ -211,7 +216,7 @@ export default function NewSemanticModelPage() {
       case 2:
         return selectedTables.length > 0;
       case 3:
-        return true;
+        return modelName.trim().length > 0;
       default:
         return false;
     }
@@ -490,12 +495,37 @@ export default function NewSemanticModelPage() {
                         </CardContent>
                       </Card>
 
+                      <TextField
+                        fullWidth
+                        required
+                        label="Model Name"
+                        value={modelName}
+                        onChange={(e) => setModelName(e.target.value)}
+                        placeholder="e.g., Sales Analytics, HR Database Model"
+                        helperText="Give your semantic model a descriptive name"
+                        sx={{ mb: 2 }}
+                      />
+
+                      <TextField
+                        fullWidth
+                        multiline
+                        minRows={3}
+                        maxRows={6}
+                        label="Instructions for the Agent (optional)"
+                        value={modelInstructions}
+                        onChange={(e) => setModelInstructions(e.target.value)}
+                        placeholder="Describe the database, industry, or business context to help the agent generate better results"
+                        helperText="Provide context about your business domain, common terms, or specific requirements"
+                        sx={{ mb: 3 }}
+                        inputProps={{ maxLength: 2000 }}
+                      />
+
                       <Button
                         variant="contained"
                         size="large"
                         startIcon={isStarting ? <CircularProgress size={20} /> : <PlayArrowIcon />}
                         onClick={handleStartAgent}
-                        disabled={isStarting}
+                        disabled={isStarting || modelName.trim().length === 0}
                         fullWidth
                       >
                         {isStarting ? 'Starting Agent...' : 'Start Agent'}
