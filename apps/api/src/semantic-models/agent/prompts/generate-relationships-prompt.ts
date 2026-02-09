@@ -54,6 +54,7 @@ Generate a JSON object with:
 - Only create metrics that span multiple datasets
 - Examples: total count of records, average values, ratios
 - Each metric needs: name, expression (ANSI_SQL dialect), description, ai_context with synonyms
+- **CRITICAL**: Metric expressions MUST use fully qualified column names in the format \`schema.table.column\`. Reference the \`source\` field of each dataset (minus the database prefix) for the correct qualification. Example: \`SUM(public.orders.total_amount)\` NOT \`SUM(total_amount)\`
 - If no cross-table metrics make sense, return an empty array
 
 ### 3. model_ai_context (Object)

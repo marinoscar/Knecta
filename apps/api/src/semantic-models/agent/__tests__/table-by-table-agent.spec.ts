@@ -5,10 +5,10 @@ import { buildGenerateRelationshipsPrompt } from '../prompts/generate-relationsh
 import { createAssembleModelNode } from '../nodes/assemble-model';
 import { SemanticModelsService } from '../../semantic-models.service';
 import { ColumnInfo, ForeignKeyInfo } from '../../../connections/drivers/driver.interface';
-import { OSIDialect, OSIField, OSIDataset, OSIMetric } from '../osi/types';
+import { OSIDialect } from '../osi/types';
 
 // Test Data Helpers
-function createValidField(): OSIField {
+function createValidField() {
   return {
     name: 'id',
     expression: { dialects: [{ dialect: 'ANSI_SQL' as OSIDialect, expression: 'id' }] },
@@ -18,7 +18,7 @@ function createValidField(): OSIField {
   };
 }
 
-function createValidDataset(): OSIDataset {
+function createValidDataset() {
   return {
     name: 'orders',
     source: 'mydb.public.orders',
@@ -40,7 +40,7 @@ function createValidModel() {
   };
 }
 
-function createValidMetric(): OSIMetric {
+function createValidMetric() {
   return {
     name: 'total_orders',
     expression: { dialects: [{ dialect: 'ANSI_SQL' as OSIDialect, expression: 'COUNT(*)' }] },
@@ -268,6 +268,13 @@ describe('buildGenerateDatasetPrompt', () => {
     expect(prompt).toContain('"dataset"');
     expect(prompt).toContain('"metrics"');
   });
+
+  it('should require fully qualified column names in metric expressions', () => {
+    const prompt = buildGenerateDatasetPrompt(baseParams);
+    expect(prompt).toContain('schema.table.column');
+    expect(prompt).toContain('public.orders.amount');
+    expect(prompt).toContain('NOT `SUM(amount)`');
+  });
 });
 
 describe('buildGenerateRelationshipsPrompt', () => {
@@ -348,6 +355,12 @@ describe('buildGenerateRelationshipsPrompt', () => {
     expect(prompt).toContain('"relationships"');
     expect(prompt).toContain('"model_metrics"');
     expect(prompt).toContain('"model_ai_context"');
+  });
+
+  it('should require fully qualified column names in metric expressions', () => {
+    const prompt = buildGenerateRelationshipsPrompt(baseParams);
+    expect(prompt).toContain('schema.table.column');
+    expect(prompt).toContain('NOT `SUM(total_amount)`');
   });
 });
 

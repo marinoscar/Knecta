@@ -72,6 +72,7 @@ Generate useful metrics for this table:
 - **COUNT DISTINCT** for categorical/identifier columns
 - **COUNT** with filters for status/boolean columns
 - Each metric needs: name, expression (ANSI_SQL dialect), description, ai_context with synonyms
+- **CRITICAL**: Metric expressions MUST use fully qualified column names in the format \`schema.table.column\`. For this table, that means \`${params.tableName}.column_name\`. Example: \`SUM(${params.tableName}.amount)\` NOT \`SUM(amount)\`
 - Only generate metrics that make business sense for this table
 
 Output ONLY a valid JSON object with this exact structure:
