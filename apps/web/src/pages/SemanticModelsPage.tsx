@@ -62,7 +62,6 @@ const RUN_STATUS_CONFIG: Record<
 > = {
   pending: { label: 'Pending', color: 'default' },
   planning: { label: 'Planning', color: 'info' },
-  awaiting_approval: { label: 'Awaiting Approval', color: 'info' },
   executing: { label: 'Executing', color: 'warning' },
   completed: { label: 'Completed', color: 'success' },
   failed: { label: 'Failed', color: 'error' },

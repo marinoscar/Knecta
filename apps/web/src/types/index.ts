@@ -175,7 +175,7 @@ export interface ConnectionTestResult {
 
 export type SemanticModelStatus = 'draft' | 'generating' | 'ready' | 'failed';
 
-export type RunStatus = 'pending' | 'planning' | 'awaiting_approval' | 'executing' | 'completed' | 'failed' | 'cancelled';
+export type RunStatus = 'pending' | 'planning' | 'executing' | 'completed' | 'failed' | 'cancelled';
 
 export interface SemanticModel {
   id: string;
