@@ -253,6 +253,7 @@ export default function SemanticModelDetailPage() {
                     <TableHead>
                       <TableRow>
                         <TableCell>Name</TableCell>
+                        <TableCell>Type</TableCell>
                         <TableCell>From Dataset</TableCell>
                         <TableCell>From Columns</TableCell>
                         <TableCell>To Dataset</TableCell>
@@ -260,15 +261,22 @@ export default function SemanticModelDetailPage() {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {relationships.map((rel: any, index: number) => (
-                        <TableRow key={index}>
-                          <TableCell>{rel.name || rel.constraintName || '-'}</TableCell>
-                          <TableCell>{rel.from || rel.fromTable || '-'}</TableCell>
-                          <TableCell>{(rel.from_columns || rel.fromColumns)?.join(', ') || '-'}</TableCell>
-                          <TableCell>{rel.to || rel.toTable || '-'}</TableCell>
-                          <TableCell>{(rel.to_columns || rel.toColumns)?.join(', ') || '-'}</TableCell>
-                        </TableRow>
-                      ))}
+                      {relationships.map((rel: any, index: number) => {
+                        const fromCols = rel.from_columns || rel.fromColumns
+                          || rel.join?.map((j: any) => j.from_field || j.fromField) || [];
+                        const toCols = rel.to_columns || rel.toColumns
+                          || rel.join?.map((j: any) => j.to_field || j.toField) || [];
+                        return (
+                          <TableRow key={index}>
+                            <TableCell>{rel.name || rel.constraintName || '-'}</TableCell>
+                            <TableCell>{rel.type ? <Chip label={rel.type} size="small" /> : '-'}</TableCell>
+                            <TableCell>{rel.from || rel.from_dataset || rel.fromTable || '-'}</TableCell>
+                            <TableCell>{fromCols.join(', ') || '-'}</TableCell>
+                            <TableCell>{rel.to || rel.to_dataset || rel.toTable || '-'}</TableCell>
+                            <TableCell>{toCols.join(', ') || '-'}</TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </TableContainer>
