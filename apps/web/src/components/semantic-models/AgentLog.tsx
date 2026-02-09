@@ -331,6 +331,12 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
             </Typography>
           )}
 
+          {section.step === 'validate_model' && section.isActive && (
+            <Typography variant="body2" color="text.secondary" sx={{ pl: 3.5, fontStyle: 'italic', mt: 0.5 }}>
+              Checking the model against the OSI specification...
+            </Typography>
+          )}
+
           <Box sx={{ pl: 3.5 }}>
             {section.entries.map((entry, entryIdx) => {
               if (entry.type === 'text') {
