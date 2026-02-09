@@ -38,11 +38,6 @@ export const AgentState = Annotation.Root({
     reducer: (_, next) => next,
     default: () => null,
   }),
-  planApproved: Annotation<boolean>({
-    reducer: (_, next) => next,
-    default: () => false,
-  }),
-
   // Generated model
   semanticModel: Annotation<Record<string, unknown> | null>({
     reducer: (_, next) => next,

@@ -22,7 +22,6 @@ export class AgentService {
     selectedTables: string[],
     runId: string,
     llmProvider?: string,
-    options?: { skipApproval?: boolean },
     modelName?: string,
     instructions?: string,
   ) {
@@ -37,7 +36,6 @@ export class AgentService {
       databaseName,
       selectedSchemas,
       selectedTables,
-      options,
     );
 
     const systemPrompt = buildSystemPrompt({
@@ -62,7 +60,6 @@ export class AgentService {
       validationAttempts: 0,
       toolIterations: 0,
       plan: null,
-      planApproved: false,
       semanticModel: null,
       semanticModelId: null,
       error: null,

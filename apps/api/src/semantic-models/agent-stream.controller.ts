@@ -13,7 +13,6 @@ import { SemanticModelsService } from './semantic-models.service';
  */
 const STEP_LABELS: Record<string, string> = {
   plan_discovery: 'Planning Discovery',
-  await_approval: 'Awaiting Approval',
   agent: 'Analyzing Database',
   tools: 'Running Discovery Tools',
   generate_model: 'Generating Semantic Model',
@@ -282,7 +281,6 @@ export class AgentStreamController {
           run.selectedTables as string[],
           runId,
           undefined, // llmProvider (use default)
-          { skipApproval: true },
           run.name || undefined,
           run.instructions || undefined,
         );
@@ -316,7 +314,7 @@ export class AgentStreamController {
           const nodeName = Object.keys(update)[0];
           const output = update[nodeName];
 
-          // For non-LLM nodes (tools, await_approval, persist_model),
+          // For non-LLM nodes (tools, persist_model),
           // the callback didn't fire — start step from updates mode
           if (nodeName !== sseHandler.currentNode) {
             if (sseHandler.currentNode) {

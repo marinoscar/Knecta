@@ -364,10 +364,10 @@ export class SemanticModelsService {
     }
 
     // Check if cancellable
-    const cancellableStatuses = ['pending', 'planning', 'awaiting_approval', 'executing'];
+    const cancellableStatuses = ['pending', 'planning', 'executing'];
     if (!cancellableStatuses.includes(run.status)) {
       throw new BadRequestException(
-        `Cannot cancel run with status '${run.status}'. Only pending, planning, awaiting_approval, and executing runs can be cancelled.`,
+        `Cannot cancel run with status '${run.status}'. Only pending, planning, and executing runs can be cancelled.`,
       );
     }
 
