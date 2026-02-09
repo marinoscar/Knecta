@@ -27,6 +27,12 @@ export const AgentState = Annotation.Root({
     default: () => 0,
   }),
 
+  // Tool loop tracking
+  toolIterations: Annotation<number>({
+    reducer: (_, next) => next,
+    default: () => 0,
+  }),
+
   // Discovery plan
   plan: Annotation<string | null>({
     reducer: (_, next) => next,

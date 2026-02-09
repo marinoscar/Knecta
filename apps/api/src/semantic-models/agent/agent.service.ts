@@ -60,6 +60,7 @@ export class AgentService {
       modelName: modelName || null,
       instructions: instructions || null,
       validationAttempts: 0,
+      toolIterations: 0,
       plan: null,
       planApproved: false,
       semanticModel: null,
