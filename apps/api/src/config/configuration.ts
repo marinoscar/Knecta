@@ -30,6 +30,14 @@ export default () => {
       url: databaseUrl,
     },
 
+    // Neo4j Graph Database
+    neo4j: {
+      host: process.env.NEO4J_HOST || 'localhost',
+      port: parseInt(process.env.NEO4J_PORT || '7687', 10),
+      user: process.env.NEO4J_USER || 'neo4j',
+      password: process.env.NEO4J_PASSWORD || 'neo4j',
+    },
+
   // JWT
   jwt: {
     secret: process.env.JWT_SECRET,

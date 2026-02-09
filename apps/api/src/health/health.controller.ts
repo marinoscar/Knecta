@@ -7,6 +7,7 @@ import {
 } from '@nestjs/terminus';
 import { Public } from '../auth/decorators/public.decorator';
 import { DatabaseHealthIndicator } from './indicators/database.indicator';
+import { Neo4jHealthIndicator } from './indicators/neo4j.indicator';
 
 @ApiTags('Health')
 @Controller('health')
@@ -14,6 +15,7 @@ export class HealthController {
   constructor(
     private readonly health: HealthCheckService,
     private readonly db: DatabaseHealthIndicator,
+    private readonly neo4j: Neo4jHealthIndicator,
   ) {}
 
   @Get('live')
@@ -95,6 +97,7 @@ export class HealthController {
   async readiness(): Promise<HealthCheckResult & { timestamp: string }> {
     const result = await this.health.check([
       () => this.db.isHealthy('database'),
+      () => this.neo4j.isHealthy('neo4j'),
     ]);
 
     return {
@@ -115,6 +118,7 @@ export class HealthController {
   async fullHealth(): Promise<HealthCheckResult & { timestamp: string }> {
     const result = await this.health.check([
       () => this.db.isHealthy('database'),
+      () => this.neo4j.isHealthy('neo4j'),
       // Add more indicators here as needed:
       // () => this.redis.isHealthy('redis'),
       // () => this.external.isHealthy('external-api'),

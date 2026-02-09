@@ -6,6 +6,7 @@ import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { ZodValidationPipe } from 'nestjs-zod';
 
 import { PrismaModule } from './prisma/prisma.module';
+import { NeoGraphModule } from './neo-graph/neo-graph.module';
 import { CommonModule } from './common/common.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -44,6 +45,7 @@ import configuration from './config/configuration';
 
     // Database
     PrismaModule,
+    NeoGraphModule,
 
     // Logger
     LoggerModule,
