@@ -16,10 +16,13 @@
     "test:ci": "vitest run --coverage --reporter=junit --outputFile=junit.xml"
   },
   "dependencies": {
+    "@codemirror/lang-yaml": "^6.1.2",
     "@emotion/react": "^11.x",
     "@emotion/styled": "^11.x",
     "@mui/icons-material": "^5.x",
     "@mui/material": "^5.x",
+    "@uiw/react-codemirror": "^4.25.4",
+    "js-yaml": "^4.1.1",
     "react": "^18.x",
     "react-dom": "^18.x",
     "react-markdown": "^8.0.7",
@@ -30,6 +33,7 @@
     "@testing-library/jest-dom": "^6.x",
     "@testing-library/react": "^14.x",
     "@testing-library/user-event": "^14.x",
+    "@types/js-yaml": "^4.0.9",
     "@types/react": "^18.x",
     "@types/react-dom": "^18.x",
     "@types/react-syntax-highlighter": "^15.5.13",
