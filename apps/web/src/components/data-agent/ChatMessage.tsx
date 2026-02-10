@@ -5,6 +5,7 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { DataChatMessage } from '../../types';
+import { getDataTableComponents } from './DataTable';
 
 interface ChatMessageProps {
   message: DataChatMessage;
@@ -151,6 +152,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
+              ...getDataTableComponents(),
               code({ node, inline, className, children, ...props }) {
                 const match = /language-(\w+)/.exec(className || '');
                 const code = String(children).replace(/\n$/, '');
@@ -171,31 +173,6 @@ export function ChatMessage({ message }: ChatMessageProps) {
                       fontSize: '0.875em',
                     }}
                     {...props}
-                  >
-                    {children}
-                  </Box>
-                );
-              },
-              table({ children }) {
-                return (
-                  <Box
-                    component="table"
-                    sx={{
-                      borderCollapse: 'collapse',
-                      width: '100%',
-                      my: 2,
-                      '& th': {
-                        bgcolor: theme.palette.action.hover,
-                        fontWeight: 'bold',
-                        p: 1,
-                        border: `1px solid ${theme.palette.divider}`,
-                        textAlign: 'left',
-                      },
-                      '& td': {
-                        p: 1,
-                        border: `1px solid ${theme.palette.divider}`,
-                      },
-                    }}
                   >
                     {children}
                   </Box>
