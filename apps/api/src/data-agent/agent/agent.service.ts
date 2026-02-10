@@ -238,18 +238,20 @@ export class DataAgentAgentService {
       });
 
     } catch (error) {
-      this.logger.error(`Agent execution failed: ${error.message}`, error.stack);
+      const errorMessage = error instanceof Error ? error.message : 'Agent execution failed';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Agent execution failed: ${errorMessage}`, errorStack);
 
       await this.dataAgentService.updateAssistantMessage(
         messageId,
         '',
-        { error: error.message },
+        { error: errorMessage },
         'failed',
       );
 
       onEvent({
         type: 'message_error',
-        message: error.message || 'Agent execution failed',
+        message: errorMessage,
       });
     }
   }

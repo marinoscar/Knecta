@@ -64,5 +64,5 @@ export function createGetSampleDataTool(
         return `Error getting sample data: ${error.message}`;
       }
     },
-  });
+  }) as any;
 }

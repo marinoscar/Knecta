@@ -45,7 +45,7 @@ export class SandboxService {
       this.logger.debug(`Code executed in ${result.executionTimeMs}ms (returnCode: ${result.returnCode})`);
       return result;
     } catch (error) {
-      if (error.name === 'AbortError') {
+      if (error instanceof Error && error.name === 'AbortError') {
         throw new Error(`Sandbox execution timed out after ${timeout + 5} seconds`);
       }
       throw error;

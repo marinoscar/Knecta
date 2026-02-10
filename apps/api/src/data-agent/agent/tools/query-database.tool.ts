@@ -46,5 +46,5 @@ export function createQueryDatabaseTool(
         return `SQL Error: ${error.message}`;
       }
     },
-  });
+  }) as any;
 }

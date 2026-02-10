@@ -45,5 +45,5 @@ export function createRunPythonTool(
         return `Python execution error: ${error.message}`;
       }
     },
-  });
+  }) as any;
 }

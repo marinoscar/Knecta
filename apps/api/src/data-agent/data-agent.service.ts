@@ -283,9 +283,11 @@ export class DataAgentService {
         where: {
           id: messageId,
           status: 'generating',
-          metadata: {
-            path: ['claimed'],
-            equals: null,
+          NOT: {
+            metadata: {
+              path: ['claimed'],
+              equals: true,
+            },
           },
         },
         data: {

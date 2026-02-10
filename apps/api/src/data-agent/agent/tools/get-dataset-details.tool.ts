@@ -37,5 +37,5 @@ export function createGetDatasetDetailsTool(
         return `Error retrieving dataset details: ${error.message}`;
       }
     },
-  });
+  }) as any;
 }

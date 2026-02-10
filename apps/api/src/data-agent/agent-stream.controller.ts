@@ -124,8 +124,10 @@ export class AgentStreamController {
       );
 
     } catch (error) {
-      this.logger.error(`Stream error: ${error.message}`, error.stack);
-      emit({ type: 'message_error', message: error.message || 'An error occurred' });
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Stream error: ${errorMessage}`, errorStack);
+      emit({ type: 'message_error', message: errorMessage });
     } finally {
       clearInterval(keepAlive);
       if (!raw.writableEnded) {
