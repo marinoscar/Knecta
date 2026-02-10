@@ -28,7 +28,8 @@
     "react-force-graph-2d": "^1.29.1",
     "react-markdown": "^8.0.7",
     "react-router-dom": "^6.x",
-    "react-syntax-highlighter": "^15.6.6"
+    "react-syntax-highlighter": "^15.6.6",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.x",

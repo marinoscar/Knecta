@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Box, Alert } from '@mui/material';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { ChatSidebar } from '../components/data-agent/ChatSidebar';
 import { ChatView } from '../components/data-agent/ChatView';
 import { ChatInput } from '../components/data-agent/ChatInput';
@@ -12,7 +12,6 @@ import { useDataChat } from '../hooks/useDataChat';
 export default function DataAgentPage() {
   const { chatId } = useParams<{ chatId: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
   const [newChatDialogOpen, setNewChatDialogOpen] = useState(false);
   const [pendingSuggestion, setPendingSuggestion] = useState<string | null>(null);
 
@@ -61,7 +60,7 @@ export default function DataAgentPage() {
   }, []);
 
   const handleChatCreated = useCallback(
-    async (tempId: string, ontologyId: string, name: string) => {
+    async (_tempId: string, ontologyId: string, name: string) => {
       try {
         const newChat = await createChat({ name, ontologyId });
         navigate(`/agent/${newChat.id}`);

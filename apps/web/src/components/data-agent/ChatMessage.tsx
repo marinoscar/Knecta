@@ -4,11 +4,10 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import type { DataChatMessage, DataAgentStreamEvent } from '../../types';
+import type { DataChatMessage } from '../../types';
 
 interface ChatMessageProps {
   message: DataChatMessage;
-  streamEvents?: DataAgentStreamEvent[];
 }
 
 function TypingIndicator() {
@@ -95,7 +94,7 @@ function CodeBlock({ language, code }: { language?: string; code: string }) {
   );
 }
 
-export function ChatMessage({ message, streamEvents }: ChatMessageProps) {
+export function ChatMessage({ message }: ChatMessageProps) {
   const theme = useTheme();
   const isUser = message.role === 'user';
 

@@ -124,7 +124,7 @@ export function NewChatDialog({ open, onClose, onCreated }: NewChatDialogProps) 
                     <Box>
                       <Typography variant="body2">{option.name}</Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {option.datasetCount} datasets
+                        {option.nodeCount} nodes • {option.relationshipCount} relationships
                       </Typography>
                     </Box>
                   </li>
