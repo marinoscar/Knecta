@@ -15,7 +15,7 @@ import neo4j, {
 @Injectable()
 export class NeoGraphService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(NeoGraphService.name);
-  private driver: Driver;
+  private driver!: Driver;
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -29,7 +29,7 @@ export class NeoGraphService implements OnModuleInit, OnModuleDestroy {
 
     this.logger.log(`Connecting to Neo4j at ${uri}`);
 
-    this.driver = neo4j.driver(uri, auth.basic(user, password));
+    this.driver = neo4j.driver(uri, auth.basic(user!, password!));
 
     // Verify connectivity on startup
     try {
