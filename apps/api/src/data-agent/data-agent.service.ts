@@ -308,4 +308,14 @@ export class DataAgentService {
       return false;
     }
   }
+
+  /**
+   * Get all messages for a chat (no ownership check, caller must verify)
+   */
+  async getChatMessages(chatId: string): Promise<DataChatMessage[]> {
+    return this.prisma.dataChatMessage.findMany({
+      where: { chatId },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
 }
