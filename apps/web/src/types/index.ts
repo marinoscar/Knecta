@@ -342,3 +342,59 @@ export interface OntologyGraph {
   nodes: GraphNode[];
   edges: GraphEdge[];
 }
+
+// ==========================================
+// Data Agent
+// ==========================================
+
+export interface DataChat {
+  id: string;
+  name: string;
+  ontologyId: string;
+  ontology?: {
+    id: string;
+    name: string;
+    status: string;
+    datasetCount: number;
+    semanticModelId: string;
+  };
+  ownerId: string;
+  createdAt: string;
+  updatedAt: string;
+  messages?: DataChatMessage[];
+}
+
+export interface DataChatMessage {
+  id: string;
+  chatId: string;
+  role: 'user' | 'assistant';
+  content: string;
+  metadata?: {
+    toolCalls?: Array<{ name: string; args: Record<string, unknown> }>;
+    tokensUsed?: { prompt: number; completion: number; total: number };
+    datasetsUsed?: string[];
+    error?: string;
+    claimed?: boolean;
+  };
+  status: 'generating' | 'complete' | 'failed';
+  createdAt: string;
+}
+
+export interface DataChatsResponse {
+  items: DataChat[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface DataAgentStreamEvent {
+  type: 'message_start' | 'tool_call' | 'tool_result' | 'text' | 'token_update' | 'message_complete' | 'message_error';
+  name?: string;
+  args?: Record<string, unknown>;
+  result?: string;
+  content?: string;
+  metadata?: Record<string, unknown>;
+  message?: string;
+  tokensUsed?: { prompt: number; completion: number; total: number };
+}

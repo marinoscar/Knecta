@@ -218,6 +218,8 @@ import type {
   Ontology,
   CreateOntologyPayload,
   OntologyGraph,
+  DataChatsResponse,
+  DataChat,
 } from '../types';
 
 // Allowlist API
@@ -498,4 +500,56 @@ export async function deleteOntology(id: string): Promise<void> {
 
 export async function getOntologyGraph(id: string): Promise<OntologyGraph> {
   return api.get<OntologyGraph>(`/ontologies/${id}/graph`);
+}
+
+// ============================================================================
+// Data Agent API
+// ============================================================================
+
+export async function getDataChats(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  ontologyId?: string;
+  sortBy?: string;
+  sortOrder?: string;
+}): Promise<DataChatsResponse> {
+  const queryParams = new URLSearchParams();
+  if (params?.page) queryParams.set('page', String(params.page));
+  if (params?.pageSize) queryParams.set('pageSize', String(params.pageSize));
+  if (params?.search) queryParams.set('search', params.search);
+  if (params?.ontologyId) queryParams.set('ontologyId', params.ontologyId);
+  if (params?.sortBy) queryParams.set('sortBy', params.sortBy);
+  if (params?.sortOrder) queryParams.set('sortOrder', params.sortOrder);
+  const qs = queryParams.toString();
+  return api.get<DataChatsResponse>(`/data-agent/chats${qs ? `?${qs}` : ''}`);
+}
+
+export async function createDataChat(data: {
+  name: string;
+  ontologyId: string;
+}): Promise<DataChat> {
+  return api.post<DataChat>('/data-agent/chats', data);
+}
+
+export async function getDataChat(id: string): Promise<DataChat> {
+  return api.get<DataChat>(`/data-agent/chats/${id}`);
+}
+
+export async function updateDataChat(
+  id: string,
+  data: { name: string },
+): Promise<DataChat> {
+  return api.patch<DataChat>(`/data-agent/chats/${id}`, data);
+}
+
+export async function deleteDataChat(id: string): Promise<void> {
+  return api.delete<void>(`/data-agent/chats/${id}`);
+}
+
+export async function sendDataAgentMessage(
+  chatId: string,
+  content: string,
+): Promise<{ userMessage: { id: string }; assistantMessage: { id: string } }> {
+  return api.post(`/data-agent/chats/${chatId}/messages`, { content });
 }
