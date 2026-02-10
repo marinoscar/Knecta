@@ -115,6 +115,42 @@ describe('ChatMessage', () => {
       expect(screen.getByText('Alice')).toBeInTheDocument();
     });
 
+    it('should render markdown tables with MUI TableContainer', () => {
+      const message: DataChatMessage = {
+        ...baseMessage,
+        role: 'assistant',
+        content: `
+| Name | Age |
+|------|-----|
+| Alice | 30 |
+| Bob | 25 |
+        `,
+      };
+
+      const { container } = render(<ChatMessage message={message} />);
+
+      // DataTable wraps in MUI TableContainer
+      const tableContainer = container.querySelector('.MuiTableContainer-root');
+      expect(tableContainer).toBeInTheDocument();
+    });
+
+    it('should show row count footer for tables', () => {
+      const message: DataChatMessage = {
+        ...baseMessage,
+        role: 'assistant',
+        content: `
+| Name | Age |
+|------|-----|
+| Alice | 30 |
+| Bob | 25 |
+        `,
+      };
+
+      render(<ChatMessage message={message} />);
+
+      expect(screen.getByText('2 rows')).toBeInTheDocument();
+    });
+
     it('should show typing indicator when status is generating and content is empty', () => {
       const message: DataChatMessage = {
         ...baseMessage,
