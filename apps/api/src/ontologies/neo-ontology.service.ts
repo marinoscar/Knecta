@@ -125,15 +125,31 @@ export class NeoOntologyService {
       toDataset: string;
       fromColumns: string;
       toColumns: string;
+      yaml: string;
+      from: string;
+      to: string;
     }> = [];
 
     for (const rel of relationships) {
+      // Serialize relationship to YAML
+      const relYaml = yaml.dump(rel, {
+        indent: 2,
+        lineWidth: 120,
+        noRefs: true,
+        sortKeys: false,
+        quotingType: '"',
+        forceQuotes: false,
+      });
+
       relationshipEdges.push({
         name: rel.name || '',
         fromDataset: rel.from || '',
         toDataset: rel.to || '',
         fromColumns: JSON.stringify(rel.from_columns || []),
         toColumns: JSON.stringify(rel.to_columns || []),
+        yaml: relYaml,
+        from: rel.from || '',
+        to: rel.to || '',
       });
     }
 
@@ -186,8 +202,11 @@ export class NeoOntologyService {
           MATCH (toDs:Dataset {ontologyId: $ontologyId, name: r.toDataset})
           CREATE (fromDs)-[:RELATES_TO {
             name: r.name,
+            from: r.from,
+            to: r.to,
             fromColumns: r.fromColumns,
-            toColumns: r.toColumns
+            toColumns: r.toColumns,
+            yaml: r.yaml
           }]->(toDs)
           `,
           { relationships: relationshipEdges, ontologyId },
