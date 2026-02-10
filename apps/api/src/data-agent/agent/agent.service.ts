@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { createReactAgent } = require('@langchain/langgraph/prebuilt');
 import { HumanMessage, AIMessage } from '@langchain/core/messages';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LlmService } from '../../llm/llm.service';

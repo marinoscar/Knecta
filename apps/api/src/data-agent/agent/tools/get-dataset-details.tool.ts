@@ -6,16 +6,18 @@ export function createGetDatasetDetailsTool(
   neoOntologyService: NeoOntologyService,
   ontologyId: string,
 ): DynamicStructuredTool {
+  const schema = z.object({
+    datasetNames: z
+      .array(z.string())
+      .describe('Array of dataset/table names to retrieve definitions for'),
+  });
+
   // @ts-expect-error — DynamicStructuredTool has excessively deep Zod type inference
   return new DynamicStructuredTool({
     name: 'get_dataset_details',
     description:
       'Get detailed YAML schema definitions for specific datasets/tables. Use this to understand table structure, column types, and relationships before writing SQL queries.',
-    schema: z.object({
-      datasetNames: z
-        .array(z.string())
-        .describe('Array of dataset/table names to retrieve definitions for'),
-    }),
+    schema,
     func: async ({ datasetNames }) => {
       try {
         const graph = await neoOntologyService.getGraph(ontologyId);

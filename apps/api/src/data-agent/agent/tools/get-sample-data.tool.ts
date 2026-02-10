@@ -10,19 +10,21 @@ export function createGetSampleDataTool(
   userId: string,
   ontologyId: string,
 ): DynamicStructuredTool {
+  const schema = z.object({
+    datasetName: z.string().describe('The dataset/table name to preview'),
+    limit: z
+      .number()
+      .optional()
+      .default(5)
+      .describe('Number of sample rows to return (default: 5, max: 20)'),
+  });
+
   // @ts-expect-error — DynamicStructuredTool has excessively deep Zod type inference
   return new DynamicStructuredTool({
     name: 'get_sample_data',
     description:
       'Preview sample rows from a dataset/table. Use this to understand data format and content before writing complex queries.',
-    schema: z.object({
-      datasetName: z.string().describe('The dataset/table name to preview'),
-      limit: z
-        .number()
-        .optional()
-        .default(5)
-        .describe('Number of sample rows to return (default: 5, max: 20)'),
-    }),
+    schema,
     func: async ({ datasetName, limit }) => {
       try {
         // Get the source table name from Neo4j (the 'source' property has the schema-qualified name)

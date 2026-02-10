@@ -10,14 +10,14 @@ import type {
   OSIRelationship,
 } from '../semantic-models/agent/osi/types';
 
-interface GraphNode {
+export interface GraphNode {
   id: string;
   label: 'Dataset' | 'Field';
   name: string;
   properties: Record<string, unknown>;
 }
 
-interface GraphEdge {
+export interface GraphEdge {
   id: string;
   source: string;
   target: string;
