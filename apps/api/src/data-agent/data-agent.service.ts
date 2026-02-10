@@ -278,16 +278,15 @@ export class DataAgentService {
    */
   async claimMessage(messageId: string): Promise<boolean> {
     try {
-      // Atomic update: only claim if not already claimed
+      // Atomic update: only claim if not already claimed.
+      // The message is created with metadata={}, so we check for that exact value.
+      // After claiming, metadata becomes {claimed:true}, so a second attempt won't match.
       const result = await this.prisma.dataChatMessage.updateMany({
         where: {
           id: messageId,
           status: 'generating',
-          NOT: {
-            metadata: {
-              path: ['claimed'],
-              equals: true,
-            },
+          metadata: {
+            equals: {},
           },
         },
         data: {
