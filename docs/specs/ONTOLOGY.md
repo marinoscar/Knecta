@@ -53,7 +53,7 @@ The feature uses a dual-database architecture with PostgreSQL for metadata and N
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                       Frontend Layer                        │
-│  React + Material UI + React Flow / Cytoscape               │
+│  React + Material UI + react-force-graph-2d                 │
 │                                                               │
 │  OntologiesPage (list view)                                 │
 │         ↓                                                    │
@@ -103,7 +103,7 @@ The feature uses a dual-database architecture with PostgreSQL for metadata and N
 - **OntologiesPage**: List page with table view
 - **CreateOntologyDialog**: Modal for selecting semantic model and creating ontology
 - **OntologyDetailPage**: Main visualization page with graph and inspector
-- **OntologyGraph**: Interactive graph component (React Flow or Cytoscape)
+- **OntologyGraph**: Interactive graph component (react-force-graph-2d)
 - **NodeInspector**: Side panel showing YAML details for selected node
 
 #### Database Layer
@@ -155,7 +155,7 @@ The feature uses a dual-database architecture with PostgreSQL for metadata and N
 | Type | Direction | Properties | Description |
 |------|-----------|-----------|-------------|
 | **HAS_FIELD** | Dataset → Field | (none) | Dataset contains this field |
-| **RELATES_TO** | Dataset → Dataset | `name`, `fromColumns`, `toColumns`, `type`, `implicit` | Foreign key or inferred relationship |
+| **RELATES_TO** | Dataset → Dataset | `name`, `from`, `to`, `fromColumns`, `toColumns`, `yaml` | Foreign key or inferred relationship |
 
 ### Relationship Properties
 
@@ -167,11 +167,12 @@ The feature uses a dual-database architecture with PostgreSQL for metadata and N
 #### RELATES_TO
 ```typescript
 {
-  name: string;              // Relationship name (e.g., "order_customer")
-  fromColumns: string[];     // Source column names
-  toColumns: string[];       // Target column names
-  type: string;              // "one-to-one" | "one-to-many" | "many-to-many"
-  implicit: boolean;         // True if inferred (not explicit FK)
+  name: string;              // Relationship name (e.g., "fk_orders_customer_id")
+  from: string;              // Source dataset name
+  to: string;                // Target dataset name
+  fromColumns: string;       // JSON-stringified source column names
+  toColumns: string;         // JSON-stringified target column names
+  yaml: string;              // Full OSI YAML for this relationship
 }
 ```
 
@@ -208,14 +209,16 @@ RETURN f
 
 #### Create Relationship Between Datasets
 ```cypher
-MATCH (from:Dataset {ontologyId: $ontologyId, name: $fromDataset})
-MATCH (to:Dataset {ontologyId: $ontologyId, name: $toDataset})
+UNWIND $relationships AS r
+MATCH (from:Dataset {ontologyId: $ontologyId, name: r.fromDataset})
+MATCH (to:Dataset {ontologyId: $ontologyId, name: r.toDataset})
 CREATE (from)-[:RELATES_TO {
-  name: $name,
-  fromColumns: $fromColumns,
-  toColumns: $toColumns,
-  type: $type,
-  implicit: $implicit
+  name: r.name,
+  from: r.from,
+  to: r.to,
+  fromColumns: r.fromColumns,
+  toColumns: r.toColumns,
+  yaml: r.yaml
 }]->(to)
 ```
 
@@ -482,11 +485,12 @@ GET /api/ontologies/:id/graph
         "target": "customers",
         "label": "RELATES_TO",
         "properties": {
-          "name": "order_customer",
-          "type": "many-to-one",
-          "fromColumns": ["customer_id"],
-          "toColumns": ["customer_id"],
-          "implicit": false
+          "name": "fk_orders_customer_id",
+          "from": "orders",
+          "to": "customers",
+          "fromColumns": "[\"customer_id\"]",
+          "toColumns": "[\"customer_id\"]",
+          "yaml": "name: fk_orders_customer_id\nfrom:\n  dataset: orders\n  field: customer_id\nto:\n  dataset: customers\n  field: customer_id\n"
         }
       }
     ]
@@ -496,7 +500,7 @@ GET /api/ontologies/:id/graph
 
 **Response (404):** Ontology not found or not owned by user
 
-**Note:** Returns graph data formatted for React Flow or Cytoscape visualization libraries.
+**Note:** Returns graph data formatted for react-force-graph-2d visualization.
 
 ---
 
@@ -624,7 +628,7 @@ async list(
    ↓
 5. Transform Cypher results to graph format (nodes + edges)
    ↓
-6. Frontend renders graph with React Flow
+6. Frontend renders graph with react-force-graph-2d
    ↓
 7. User clicks node → NodeInspector displays YAML from node.yaml property
 ```
@@ -734,7 +738,7 @@ File: `apps/web/src/pages/OntologyDetailPage.tsx`
 ├────────────────────────────┬───────────────────────────┤
 │                            │                           │
 │  OntologyGraph             │  NodeInspector            │
-│  (React Flow visualization)│  (YAML detail panel)      │
+│  (react-force-graph-2d viz)│  (YAML detail panel)      │
 │                            │                           │
 │  - Datasets as big nodes   │  - Selected node name     │
 │  - Fields as small nodes   │  - Node type (Dataset/Field)
@@ -758,18 +762,19 @@ const [selectedNode, setSelectedNode] = useState<Node | null>(null);
 
 File: `apps/web/src/components/ontologies/OntologyGraph.tsx`
 
-**Purpose:** Interactive graph component using React Flow
+**Purpose:** Interactive graph component using react-force-graph-2d
 
 **Key Features:**
-- Dataset nodes styled as large rectangles with field count badge
-- Field nodes styled as small circles (hidden by default, expand on dataset click)
-- HAS_FIELD relationships styled as dotted lines
-- RELATES_TO relationships styled as solid arrows with labels
+- Dataset nodes styled as blue circles
+- Field nodes styled as smaller gray circles (toggleable visibility)
+- HAS_FIELD relationships as lines
+- RELATES_TO relationships as directed arrows with labels
 - Interactive controls:
-  - Zoom in/out
-  - Pan
-  - Fit view
-  - Layout algorithm (dagre or force-directed)
+  - Zoom in/out with mouse wheel
+  - Pan with drag
+  - Click node to select
+  - Toggle Field nodes visibility
+- Force-directed layout
 - Click node → emit `onNodeClick(node)` event
 - Responsive sizing
 
@@ -777,24 +782,30 @@ File: `apps/web/src/components/ontologies/OntologyGraph.tsx`
 ```typescript
 const datasetNode = {
   id: dataset.name,
-  type: 'dataset',
-  data: {
-    label: dataset.name,
+  name: dataset.name,
+  label: 'Dataset',
+  color: '#2196f3', // Blue for datasets
+  val: 10, // Size multiplier
+  properties: {
+    name: dataset.name,
     source: dataset.source,
-    fieldCount: dataset.fieldCount,
+    description: dataset.description,
+    yaml: dataset.yaml,
   },
-  position: { x: 0, y: 0 }, // Auto-layout
 };
 
 const fieldNode = {
   id: `${dataset.name}.${field.name}`,
-  type: 'field',
-  data: {
-    label: field.name,
+  name: field.name,
+  label: 'Field',
+  color: '#9e9e9e', // Gray for fields
+  val: 3, // Smaller size
+  properties: {
+    name: field.name,
     type: field.type,
     primaryKey: field.primaryKey,
+    yaml: field.yaml,
   },
-  position: { x: 0, y: 0 },
 };
 ```
 
@@ -956,27 +967,34 @@ export class NeoOntologyService {
         }
       }
 
-      // Create relationships
-      for (const rel of osiModel.relationships) {
+      // Create relationships (batch operation)
+      if (osiModel.relationships.length > 0) {
+        const relationshipData = osiModel.relationships.map(rel => ({
+          fromDataset: rel.from.dataset,
+          toDataset: rel.to.dataset,
+          name: rel.name,
+          from: rel.from.dataset,
+          to: rel.to.dataset,
+          fromColumns: JSON.stringify([rel.from.field]),
+          toColumns: JSON.stringify([rel.to.field]),
+          yaml: this.generateRelationshipYaml(rel),
+        }));
+
         await session.run(
-          `MATCH (from:Dataset {ontologyId: $ontologyId, name: $fromDataset})
-           MATCH (to:Dataset {ontologyId: $ontologyId, name: $toDataset})
+          `UNWIND $relationships AS r
+           MATCH (from:Dataset {ontologyId: $ontologyId, name: r.fromDataset})
+           MATCH (to:Dataset {ontologyId: $ontologyId, name: r.toDataset})
            CREATE (from)-[:RELATES_TO {
-             name: $name,
-             fromColumns: $fromColumns,
-             toColumns: $toColumns,
-             type: $type,
-             implicit: $implicit
+             name: r.name,
+             from: r.from,
+             to: r.to,
+             fromColumns: r.fromColumns,
+             toColumns: r.toColumns,
+             yaml: r.yaml
            }]->(to)`,
           {
             ontologyId,
-            fromDataset: rel.from.dataset,
-            toDataset: rel.to.dataset,
-            name: rel.name,
-            fromColumns: [rel.from.field],
-            toColumns: [rel.to.field],
-            type: rel.type,
-            implicit: rel.implicit || false,
+            relationships: relationshipData,
           },
         );
       }
@@ -1024,7 +1042,7 @@ export class NeoOntologyService {
 
 ### 2. YAML Generation from OSI Model
 
-**Pattern:** Generate YAML snippets for individual nodes
+**Pattern:** Generate YAML snippets for individual nodes and relationships
 
 ```typescript
 private generateDatasetYaml(dataset: Dataset): string {
@@ -1051,6 +1069,21 @@ private generateFieldYaml(field: Field): string {
     primary_key: field.primary_key,
     nullable: field.nullable,
     default_value: field.default_value,
+  };
+  return jsYaml.dump(yaml, { indent: 2 });
+}
+
+private generateRelationshipYaml(relationship: Relationship): string {
+  const yaml = {
+    name: relationship.name,
+    from: {
+      dataset: relationship.from.dataset,
+      field: relationship.from.field,
+    },
+    to: {
+      dataset: relationship.to.dataset,
+      field: relationship.to.field,
+    },
   };
   return jsYaml.dump(yaml, { indent: 2 });
 }
@@ -1089,27 +1122,29 @@ export class NeoGraphModule implements OnModuleDestroy {
 
 ---
 
-### 4. React Flow Graph Visualization
+### 4. Force Graph Visualization
 
-**Pattern:** Transform Neo4j graph to React Flow format
+**Pattern:** Transform Neo4j graph to react-force-graph-2d format
 
 ```typescript
-function transformToReactFlow(graphData: GraphData): ReactFlowGraph {
+function transformToForceGraph(graphData: GraphData): ForceGraphData {
   const nodes = [];
-  const edges = [];
+  const links = [];
 
   // Create dataset nodes
   for (const dataset of graphData.datasets) {
     nodes.push({
       id: dataset.name,
-      type: 'dataset',
-      data: {
-        label: dataset.name,
+      name: dataset.name,
+      label: 'Dataset',
+      color: '#2196f3',
+      val: 10,
+      properties: {
+        name: dataset.name,
         source: dataset.source,
         description: dataset.description,
         yaml: dataset.yaml,
       },
-      position: { x: 0, y: 0 }, // Auto-layout
     });
   }
 
@@ -1117,42 +1152,45 @@ function transformToReactFlow(graphData: GraphData): ReactFlowGraph {
   for (const field of graphData.fields) {
     nodes.push({
       id: `${field.datasetName}.${field.name}`,
-      type: 'field',
-      data: {
-        label: field.name,
+      name: field.name,
+      label: 'Field',
+      color: '#9e9e9e',
+      val: 3,
+      properties: {
+        name: field.name,
         type: field.type,
         primaryKey: field.primaryKey,
         yaml: field.yaml,
       },
-      position: { x: 0, y: 0 },
     });
 
-    // HAS_FIELD edge
-    edges.push({
-      id: `${field.datasetName}-HAS_FIELD-${field.name}`,
+    // HAS_FIELD link
+    links.push({
       source: field.datasetName,
       target: `${field.datasetName}.${field.name}`,
-      type: 'smoothstep',
-      animated: false,
-      style: { stroke: '#ccc', strokeDasharray: '5,5' },
+      label: 'HAS_FIELD',
     });
   }
 
-  // Create relationship edges
+  // Create relationship links
   for (const rel of graphData.relationships) {
-    edges.push({
-      id: `${rel.fromDataset}-RELATES_TO-${rel.toDataset}`,
-      source: rel.fromDataset,
-      target: rel.toDataset,
-      type: 'smoothstep',
-      animated: false,
-      label: rel.name,
-      data: { type: rel.type, implicit: rel.implicit },
-      style: { stroke: rel.implicit ? '#ff9800' : '#2196f3' },
+    links.push({
+      source: rel.from,
+      target: rel.to,
+      label: 'RELATES_TO',
+      name: rel.name,
+      properties: {
+        name: rel.name,
+        from: rel.from,
+        to: rel.to,
+        fromColumns: rel.fromColumns,
+        toColumns: rel.toColumns,
+        yaml: rel.yaml,
+      },
     });
   }
 
-  return { nodes, edges };
+  return { nodes, links };
 }
 ```
 
@@ -1405,7 +1443,7 @@ Added to `apps/web/package.json`:
 ```json
 {
   "dependencies": {
-    "@xyflow/react": "^12.0.0",
+    "react-force-graph-2d": "^1.25.4",
     "react-syntax-highlighter": "^15.5.0"
   },
   "devDependencies": {
@@ -1459,10 +1497,10 @@ The Ontology feature provides a graph-based visualization layer on top of semant
 
 - **Dual-database architecture** with PostgreSQL for metadata and Neo4j for graph storage
 - **Namespace isolation** for multi-tenancy in graph database
-- **Interactive graph visualization** using React Flow
+- **Interactive graph visualization** using react-force-graph-2d
 - **YAML integration** for node-level detail inspection
 - **Consistent RBAC** enforcement across PostgreSQL and Neo4j
-- **Background job processing** for graph creation
+- **Synchronous graph creation** with status tracking
 - **Safe deletion** with coordinated cleanup across databases
 - **Type safety** with TypeScript and Zod validation
 - **Comprehensive testing** with integration tests for both databases
