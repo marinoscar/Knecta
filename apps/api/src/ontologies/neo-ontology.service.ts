@@ -1,5 +1,7 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { NeoGraphService } from '../neo-graph/neo-graph.service';
+import { NeoVectorService } from '../neo-graph/neo-vector.service';
+import { EmbeddingService } from '../embedding/embedding.service';
 import * as yaml from 'js-yaml';
 import type {
   OSISemanticModel,
@@ -27,7 +29,11 @@ interface GraphEdge {
 export class NeoOntologyService {
   private readonly logger = new Logger(NeoOntologyService.name);
 
-  constructor(private readonly neoGraphService: NeoGraphService) {}
+  constructor(
+    private readonly neoGraphService: NeoGraphService,
+    private readonly embeddingService: EmbeddingService,
+    private readonly neoVectorService: NeoVectorService,
+  ) {}
 
   /**
    * Create graph representation in Neo4j from semantic model
@@ -221,7 +227,92 @@ export class NeoOntologyService {
       `Created graph for ontology ${ontologyId}: ${nodeCount} nodes, ${relationshipCount} relationships`,
     );
 
+    // Step 4: Generate and store embeddings for Dataset nodes
+    await this.generateAndStoreEmbeddings(ontologyId, datasetNodes, fieldNodes);
+
     return { nodeCount, relationshipCount };
+  }
+
+  /**
+   * Generate embeddings for Dataset nodes and store them in Neo4j.
+   * Creates a vector index if it doesn't exist.
+   */
+  private async generateAndStoreEmbeddings(
+    ontologyId: string,
+    datasetNodes: Array<{ name: string; description: string; source: string }>,
+    fieldNodes: Array<{ datasetName: string; name: string; description: string }>,
+  ): Promise<void> {
+    try {
+      const provider = this.embeddingService.getProvider();
+
+      // Build embedding text for each dataset
+      // Format: "{name}: {description}. Fields: {field1}, {field2}, ..."
+      const embeddingTexts = datasetNodes.map((ds) => {
+        const fields = fieldNodes
+          .filter((f) => f.datasetName === ds.name)
+          .map((f) => f.name)
+          .join(', ');
+        const desc = ds.description || 'No description';
+        return `${ds.name}: ${desc}. Fields: ${fields}`;
+      });
+
+      // Batch generate embeddings
+      this.logger.log(`Generating embeddings for ${embeddingTexts.length} datasets`);
+      const embeddings = await provider.generateEmbeddings(embeddingTexts);
+
+      // Build update payload
+      const embeddingUpdates = datasetNodes.map((ds, i) => ({
+        name: ds.name,
+        embedding: embeddings[i],
+      }));
+
+      // Store embeddings on Dataset nodes
+      await this.neoVectorService.updateNodeEmbeddings(ontologyId, 'Dataset', embeddingUpdates);
+
+      // Ensure vector index exists
+      await this.neoVectorService.ensureVectorIndex(
+        'dataset_embedding',
+        'Dataset',
+        'embedding',
+        provider.getDimensions(),
+        'cosine',
+      );
+
+      this.logger.log(`Embeddings stored for ${embeddingTexts.length} datasets`);
+    } catch (error) {
+      // Log but don't fail graph creation if embedding generation fails
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.warn(
+        `Failed to generate embeddings for ontology ${ontologyId}: ${errorMessage}`,
+      );
+    }
+  }
+
+  /**
+   * Backfill embeddings for an existing ontology.
+   * Reads dataset/field info from Neo4j and generates embeddings.
+   */
+  async backfillEmbeddings(ontologyId: string): Promise<void> {
+    // Read existing datasets and fields from Neo4j
+    const graph = await this.getGraph(ontologyId);
+
+    const datasetNodes = graph.nodes
+      .filter((n) => n.label === 'Dataset')
+      .map((n) => ({
+        name: n.properties.name as string,
+        description: (n.properties.description as string) || '',
+        source: (n.properties.source as string) || '',
+      }));
+
+    const fieldNodes = graph.nodes
+      .filter((n) => n.label === 'Field')
+      .map((n) => ({
+        datasetName: (n.properties.datasetName as string) || '',
+        name: n.properties.name as string,
+        description: (n.properties.description as string) || '',
+      }));
+
+    await this.generateAndStoreEmbeddings(ontologyId, datasetNodes, fieldNodes);
   }
 
   /**
