@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import neo4j from 'neo4j-driver';
 import { NeoGraphService } from './neo-graph.service';
 
 /**
@@ -166,10 +167,10 @@ export class NeoVectorService {
     const results = await this.neoGraphService.readTransaction(async (tx) => {
       const result = await tx.run(cypher, {
         indexName,
-        internalTopK,
+        internalTopK: neo4j.int(internalTopK),
         queryEmbedding,
         ontologyId,
-        topK,
+        topK: neo4j.int(topK),
       });
 
       return result.records.map((record) => ({
