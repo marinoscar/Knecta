@@ -228,7 +228,7 @@ export class NeoOntologyService {
     );
 
     // Step 4: Generate and store embeddings for Dataset nodes
-    await this.generateAndStoreEmbeddings(ontologyId, datasetNodes, fieldNodes);
+    await this.generateAndStoreEmbeddings(ontologyId, datasetNodes);
 
     return { nodeCount, relationshipCount };
   }
@@ -239,22 +239,15 @@ export class NeoOntologyService {
    */
   private async generateAndStoreEmbeddings(
     ontologyId: string,
-    datasetNodes: Array<{ name: string; description: string; source: string }>,
-    fieldNodes: Array<{ datasetName: string; name: string; description: string }>,
+    datasetNodes: Array<{ name: string; yaml: string }>,
   ): Promise<void> {
     try {
       const provider = this.embeddingService.getProvider();
 
-      // Build embedding text for each dataset
-      // Format: "{name}: {description}. Fields: {field1}, {field2}, ..."
-      const embeddingTexts = datasetNodes.map((ds) => {
-        const fields = fieldNodes
-          .filter((f) => f.datasetName === ds.name)
-          .map((f) => f.name)
-          .join(', ');
-        const desc = ds.description || 'No description';
-        return `${ds.name}: ${desc}. Fields: ${fields}`;
-      });
+      // Use the full YAML definition as embedding text for each dataset.
+      // YAML contains rich schema info: column names, types, descriptions,
+      // relationships — producing much better semantic search matches.
+      const embeddingTexts = datasetNodes.map((ds) => ds.yaml);
 
       // Batch generate embeddings
       this.logger.log(`Generating embeddings for ${embeddingTexts.length} datasets`);
@@ -300,19 +293,10 @@ export class NeoOntologyService {
       .filter((n) => n.label === 'Dataset')
       .map((n) => ({
         name: n.properties.name as string,
-        description: (n.properties.description as string) || '',
-        source: (n.properties.source as string) || '',
+        yaml: (n.properties.yaml as string) || '',
       }));
 
-    const fieldNodes = graph.nodes
-      .filter((n) => n.label === 'Field')
-      .map((n) => ({
-        datasetName: (n.properties.datasetName as string) || '',
-        name: n.properties.name as string,
-        description: (n.properties.description as string) || '',
-      }));
-
-    await this.generateAndStoreEmbeddings(ontologyId, datasetNodes, fieldNodes);
+    await this.generateAndStoreEmbeddings(ontologyId, datasetNodes);
   }
 
   /**
