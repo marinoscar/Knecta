@@ -12,6 +12,9 @@ import {
 import { ExpandMore as ExpandMoreIcon, Build as BuildIcon } from '@mui/icons-material';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { getDataTableComponents } from './DataTable';
 import type { DataAgentStreamEvent } from '../../types';
 
 interface ToolCallAccordionProps {
@@ -49,13 +52,6 @@ function extractToolCalls(events: DataAgentStreamEvent[]): ToolCall[] {
   return Array.from(toolCalls.values());
 }
 
-function truncateString(str: string, maxLength: number): { text: string; isTruncated: boolean } {
-  if (str.length <= maxLength) {
-    return { text: str, isTruncated: false };
-  }
-  return { text: str.slice(0, maxLength) + '...', isTruncated: true };
-}
-
 export function ToolCallAccordion({ events, isStreaming }: ToolCallAccordionProps) {
   const toolCalls = extractToolCalls(events);
   const [expandedResults, setExpandedResults] = useState<Set<string>>(new Set());
@@ -78,9 +74,6 @@ export function ToolCallAccordion({ events, isStreaming }: ToolCallAccordionProp
     <Box sx={{ mb: 2 }}>
       {toolCalls.map((toolCall, index) => {
         const isExpanded = expandedResults.has(toolCall.name);
-        const resultTruncated = toolCall.result
-          ? truncateString(toolCall.result, 500)
-          : { text: '', isTruncated: false };
 
         if (!toolCall.isComplete && isStreaming) {
           // Show collapsed chip with spinner during streaming
@@ -161,20 +154,49 @@ export function ToolCallAccordion({ events, isStreaming }: ToolCallAccordionProp
                     </Typography>
                     <Box
                       sx={{
-                        bgcolor: 'action.hover',
-                        p: 1.5,
-                        borderRadius: 1,
-                        fontFamily: 'monospace',
-                        fontSize: '0.75rem',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
                         maxHeight: isExpanded ? 'none' : 200,
                         overflow: 'hidden',
+                        position: 'relative',
                       }}
                     >
-                      {isExpanded ? toolCall.result : resultTruncated.text}
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          ...getDataTableComponents(),
+                          p: ({ children }) => (
+                            <Typography
+                              variant="body2"
+                              component="p"
+                              sx={{
+                                fontFamily: '"Roboto Mono", "Consolas", "Courier New", monospace',
+                                fontSize: '0.75rem',
+                                mb: 0.5,
+                              }}
+                            >
+                              {children}
+                            </Typography>
+                          ),
+                          code: ({ children }) => (
+                            <Box
+                              component="code"
+                              sx={{
+                                fontFamily: '"Roboto Mono", "Consolas", "Courier New", monospace',
+                                fontSize: '0.75rem',
+                                bgcolor: 'action.hover',
+                                px: 0.5,
+                                py: 0.25,
+                                borderRadius: 0.5,
+                              }}
+                            >
+                              {children}
+                            </Box>
+                          ),
+                        }}
+                      >
+                        {toolCall.result}
+                      </ReactMarkdown>
                     </Box>
-                    {resultTruncated.isTruncated && (
+                    {toolCall.result.length > 300 && (
                       <Button
                         size="small"
                         onClick={() => toggleExpanded(toolCall.name)}
