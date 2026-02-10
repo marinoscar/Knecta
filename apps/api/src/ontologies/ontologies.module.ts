@@ -8,6 +8,6 @@ import { NeoOntologyService } from './neo-ontology.service';
   imports: [PrismaModule],
   controllers: [OntologiesController],
   providers: [OntologiesService, NeoOntologyService],
-  exports: [OntologiesService],
+  exports: [OntologiesService, NeoOntologyService],
 })
 export class OntologiesModule {}
