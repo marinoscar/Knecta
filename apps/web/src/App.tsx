@@ -22,6 +22,7 @@ const NewSemanticModelPage = lazy(() => import('./pages/NewSemanticModelPage'));
 const SemanticModelDetailPage = lazy(() => import('./pages/SemanticModelDetailPage'));
 const OntologiesPage = lazy(() => import('./pages/OntologiesPage'));
 const OntologyDetailPage = lazy(() => import('./pages/OntologyDetailPage'));
+const DataAgentPage = lazy(() => import('./pages/DataAgentPage'));
 const SystemSettingsPage = lazy(() => import('./pages/SystemSettingsPage'));
 const UserManagementPage = lazy(() => import('./pages/UserManagementPage'));
 
@@ -62,6 +63,8 @@ function AppRoutes() {
                 <Route path="/semantic-models/:id" element={<SemanticModelDetailPage />} />
                 <Route path="/ontologies" element={<OntologiesPage />} />
                 <Route path="/ontologies/:id" element={<OntologyDetailPage />} />
+                <Route path="/agent" element={<DataAgentPage />} />
+                <Route path="/agent/:chatId" element={<DataAgentPage />} />
                 <Route path="/admin/users" element={<UserManagementPage />} />
                 <Route path="/admin/settings" element={<SystemSettingsPage />} />
               </Route>

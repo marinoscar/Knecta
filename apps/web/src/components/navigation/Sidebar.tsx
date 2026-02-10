@@ -19,6 +19,7 @@ import {
   Storage as StorageIcon,
   AccountTree as AccountTreeIcon,
   Hub as HubIcon,
+  SmartToy as SmartToyIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -60,6 +61,12 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       icon: <HubIcon />,
       path: '/ontologies',
       visible: hasPermission('ontologies:read'),
+    },
+    {
+      label: 'Data Agent',
+      icon: <SmartToyIcon />,
+      path: '/agent',
+      visible: hasPermission('data_agent:read'),
     },
     {
       label: 'User Settings',
