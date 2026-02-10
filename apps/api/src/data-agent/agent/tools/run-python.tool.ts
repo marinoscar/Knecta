@@ -5,6 +5,7 @@ import { SandboxService } from '../../../sandbox/sandbox.service';
 export function createRunPythonTool(
   sandboxService: SandboxService,
 ): DynamicStructuredTool {
+  // @ts-expect-error — DynamicStructuredTool has excessively deep Zod type inference
   return new DynamicStructuredTool({
     name: 'run_python',
     description:
@@ -41,8 +42,9 @@ export function createRunPythonTool(
         }
 
         return output;
-      } catch (error) {
-        return `Python execution error: ${error.message}`;
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        return `Python execution error: ${msg}`;
       }
     },
   }) as any;

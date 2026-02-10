@@ -10,6 +10,7 @@ export function createGetSampleDataTool(
   userId: string,
   ontologyId: string,
 ): DynamicStructuredTool {
+  // @ts-expect-error — DynamicStructuredTool has excessively deep Zod type inference
   return new DynamicStructuredTool({
     name: 'get_sample_data',
     description:
@@ -60,8 +61,9 @@ export function createGetSampleDataTool(
           .join('\n');
 
         return `Sample data from ${source} (${actualLimit} rows):\n\n${header}\n${separator}\n${rows}`;
-      } catch (error) {
-        return `Error getting sample data: ${error.message}`;
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        return `Error getting sample data: ${msg}`;
       }
     },
   }) as any;

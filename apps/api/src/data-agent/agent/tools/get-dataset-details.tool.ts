@@ -6,6 +6,7 @@ export function createGetDatasetDetailsTool(
   neoOntologyService: NeoOntologyService,
   ontologyId: string,
 ): DynamicStructuredTool {
+  // @ts-expect-error — DynamicStructuredTool has excessively deep Zod type inference
   return new DynamicStructuredTool({
     name: 'get_dataset_details',
     description:
@@ -33,8 +34,9 @@ export function createGetDatasetDetailsTool(
         }
 
         return results.join('\n\n');
-      } catch (error) {
-        return `Error retrieving dataset details: ${error.message}`;
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        return `Error retrieving dataset details: ${msg}`;
       }
     },
   }) as any;

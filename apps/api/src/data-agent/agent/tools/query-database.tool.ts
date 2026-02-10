@@ -7,17 +7,20 @@ export function createQueryDatabaseTool(
   connectionId: string,
   userId: string,
 ): DynamicStructuredTool {
+  const schema = z.object({
+    sql: z
+      .string()
+      .describe(
+        'The SQL SELECT query to execute. Must be read-only (no INSERT, UPDATE, DELETE, DROP, etc.)',
+      ),
+  });
+
+  // @ts-expect-error — DynamicStructuredTool has excessively deep Zod type inference
   return new DynamicStructuredTool({
     name: 'query_database',
     description:
       'Execute a read-only SQL query against the database. Returns column names and rows. Only SELECT queries are allowed. Use this to retrieve data, aggregate results, join tables, etc.',
-    schema: z.object({
-      sql: z
-        .string()
-        .describe(
-          'The SQL SELECT query to execute. Must be read-only (no INSERT, UPDATE, DELETE, DROP, etc.)',
-        ),
-    }),
+    schema,
     func: async ({ sql }) => {
       try {
         const result = await discoveryService.executeQuery(
@@ -42,8 +45,9 @@ export function createQueryDatabaseTool(
           .join('\n');
 
         return `${data.rowCount} rows returned:\n\n${header}\n${separator}\n${rows}`;
-      } catch (error) {
-        return `SQL Error: ${error.message}`;
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        return `SQL Error: ${msg}`;
       }
     },
   }) as any;
