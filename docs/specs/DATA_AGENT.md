@@ -660,13 +660,15 @@ Prevents duplicate agent execution:
 
 ```typescript
 async claimMessage(messageId: string): Promise<boolean> {
+  // Atomic update: only claim if not already claimed.
+  // The message is created with metadata={}, so we check for that exact value.
+  // After claiming, metadata becomes {claimed:true}, so a second attempt won't match.
   const result = await this.prisma.dataChatMessage.updateMany({
     where: {
       id: messageId,
       status: 'generating',
       metadata: {
-        path: ['claimed'],
-        equals: undefined,  // Not yet claimed
+        equals: {},  // Only match messages with empty metadata (initial state)
       },
     },
     data: {
@@ -679,6 +681,12 @@ async claimMessage(messageId: string): Promise<boolean> {
   return result.count === 1;  // True if we claimed it, false if already claimed
 }
 ```
+
+**Implementation Note:**
+
+The implementation uses `metadata: { equals: {} }` instead of JSON path filtering because of PostgreSQL's three-valued NULL logic. When metadata is `{}`, the JSON path expression `['claimed']` returns NULL, and `NOT (NULL = true)` evaluates to NULL (not TRUE), so the row never matches the WHERE clause.
+
+The fix checks that metadata equals the empty object `{}` (initial state). After claiming, metadata becomes `{claimed: true}`, so duplicate attempts fail the WHERE condition.
 
 **Flow:**
 1. Frontend opens SSE stream
@@ -988,68 +996,119 @@ async searchSimilarDatasets(
 Embeddings generated during ontology creation in `NeoOntologyService.createGraph()`:
 
 **Dataset Embedding Source:**
+
+The full YAML definition of each dataset is used as the embedding text. This provides rich semantic information including dataset name, description, all field names, types, descriptions, and relationships.
+
+Example YAML used for embedding:
 ```yaml
-# Combined text from dataset YAML (name, description, field names)
 name: customers
 description: Customer master data with contact information
+source: public.customers
 fields:
-  - customer_id (integer, primary key)
-  - name (varchar)
-  - email (varchar)
-  - created_at (timestamp)
+  - name: customer_id
+    expression: customer_id
+    label: Customer ID
+    description: Unique identifier for customer
+    data_type: integer
+    is_primary_key: true
+  - name: name
+    expression: name
+    label: Customer Name
+    description: Full name of the customer
+    data_type: varchar
+  - name: email
+    expression: email
+    label: Email Address
+    description: Customer email address
+    data_type: varchar
+  - name: created_at
+    expression: created_at
+    label: Created At
+    description: Timestamp when customer was created
+    data_type: timestamp
 ```
 
 **Process:**
 ```typescript
-async createGraph(ontologyId: string, osiModel: OSIModel): Promise<void> {
-  // 1. Create Dataset nodes without embeddings
-  for (const dataset of osiModel.datasets) {
-    await session.run(
-      `CREATE (d:Dataset {
-        ontologyId: $ontologyId,
-        name: $name,
-        source: $source,
-        description: $description,
-        yaml: $yaml
-      })`,
-      { ontologyId, name: dataset.name, ... },
-    );
+async createGraph(ontologyId: string, osiModel: OSISemanticModel): Promise<void> {
+  const datasetNodes: Array<{
+    name: string;
+    source: string;
+    description: string;
+    yaml: string;
+  }> = [];
+
+  // 1. Serialize each dataset to YAML and store on node
+  for (const dataset of osiModel.semantic_model[0].datasets) {
+    const datasetYaml = yaml.dump(dataset, {
+      indent: 2,
+      lineWidth: 120,
+      noRefs: true,
+      sortKeys: false,
+    });
+
+    datasetNodes.push({
+      name: dataset.name || '',
+      source: dataset.source || '',
+      description: dataset.description || '',
+      yaml: datasetYaml,
+    });
   }
 
-  // 2. Create Field nodes and relationships
+  // 2. Create Dataset nodes with YAML property (batch operation)
   // ...
 
-  // 3. Generate embeddings (non-blocking)
+  // 3. Create Field nodes and relationships
+  // ...
+
+  // 4. Generate and store embeddings using full YAML definitions
+  await this.generateAndStoreEmbeddings(ontologyId, datasetNodes);
+}
+
+private async generateAndStoreEmbeddings(
+  ontologyId: string,
+  datasetNodes: Array<{ name: string; yaml: string }>,
+): Promise<void> {
   try {
-    await this.generateEmbeddings(ontologyId);
+    const provider = this.embeddingService.getProvider();
+
+    // Use the full YAML definition as embedding text for each dataset.
+    // YAML contains rich schema info: column names, types, descriptions,
+    // relationships — producing much better semantic search matches.
+    const embeddingTexts = datasetNodes.map((ds) => ds.yaml);
+
+    // Batch generate embeddings
+    const embeddings = await provider.generateEmbeddings(embeddingTexts);
+
+    // Build update payload
+    const embeddingUpdates = datasetNodes.map((ds, i) => ({
+      name: ds.name,
+      embedding: embeddings[i],
+    }));
+
+    // Store embeddings on Dataset nodes
+    await this.neoVectorService.updateNodeEmbeddings(ontologyId, 'Dataset', embeddingUpdates);
+
+    // Ensure vector index exists
+    await this.neoVectorService.ensureVectorIndex(
+      'dataset_embedding',
+      'Dataset',
+      'embedding',
+      provider.getDimensions(),
+    );
   } catch (error) {
     // Log error but don't fail graph creation
     this.logger.error('Failed to generate embeddings', error);
   }
 }
-
-private async generateEmbeddings(ontologyId: string): Promise<void> {
-  // Fetch all datasets for ontology
-  const datasets = await this.getDatasets(ontologyId);
-
-  // Generate embedding text (name + description + field list)
-  const embeddingTexts = datasets.map(d =>
-    `${d.name}\n${d.description}\n${d.fields.map(f => f.name).join(', ')}`
-  );
-
-  // Batch generate embeddings
-  const embeddings = await this.embeddingService.embedTexts(embeddingTexts);
-
-  // Update Dataset nodes with embeddings
-  for (let i = 0; i < datasets.length; i++) {
-    await session.run(
-      `MATCH (d:Dataset {ontologyId: $ontologyId, name: $name})
-       SET d.embedding = $embedding`,
-      { ontologyId, name: datasets[i].name, embedding: embeddings[i] },
-    );
-  }
-}
 ```
+
+**Benefits of YAML-based embeddings:**
+- Captures complete schema structure (not just field names)
+- Includes type information and descriptions
+- Contains relationship metadata
+- Produces more accurate semantic search results
+- No information loss from simplification
 
 **Note:** Embedding generation failure does not fail ontology creation. Ontology will work but without vector search capabilities.
 
@@ -1061,7 +1120,17 @@ For ontologies created before vector search feature:
 
 ```typescript
 async backfillEmbeddings(ontologyId: string): Promise<void> {
-  await this.generateEmbeddings(ontologyId);
+  // Fetch graph to get dataset YAML definitions
+  const graph = await this.getGraph(ontologyId);
+
+  const datasetNodes = graph.nodes
+    .filter((n) => n.label === 'Dataset')
+    .map((n) => ({
+      name: n.properties.name as string,
+      yaml: (n.properties.yaml as string) || '',
+    }));
+
+  await this.generateAndStoreEmbeddings(ontologyId, datasetNodes);
 }
 ```
 
@@ -1935,7 +2004,7 @@ services:
     networks:
       - sandbox-isolated
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
       timeout: 5s
       retries: 3
