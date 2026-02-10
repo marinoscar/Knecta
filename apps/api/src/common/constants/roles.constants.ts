@@ -55,6 +55,11 @@ export const PERMISSIONS = {
   ONTOLOGIES_READ: 'ontologies:read',
   ONTOLOGIES_WRITE: 'ontologies:write',
   ONTOLOGIES_DELETE: 'ontologies:delete',
+
+  // Data Agent
+  DATA_AGENT_READ: 'data_agent:read',
+  DATA_AGENT_WRITE: 'data_agent:write',
+  DATA_AGENT_DELETE: 'data_agent:delete',
 } as const;
 
 export type PermissionName = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

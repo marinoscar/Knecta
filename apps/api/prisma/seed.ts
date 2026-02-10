@@ -62,6 +62,11 @@ const PERMISSIONS = [
   { name: 'ontologies:read', description: 'View ontologies' },
   { name: 'ontologies:write', description: 'Create ontologies' },
   { name: 'ontologies:delete', description: 'Delete ontologies' },
+
+  // Data agent management
+  { name: 'data_agent:read', description: 'View data agent chats and messages' },
+  { name: 'data_agent:write', description: 'Create chats and send messages to data agent' },
+  { name: 'data_agent:delete', description: 'Delete data agent chats' },
 ] as const;
 
 // Role to permissions mapping
@@ -90,6 +95,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'ontologies:read',
     'ontologies:write',
     'ontologies:delete',
+    'data_agent:read',
+    'data_agent:write',
+    'data_agent:delete',
   ],
   contributor: [
     'user_settings:read',
@@ -107,6 +115,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'ontologies:read',
     'ontologies:write',
     'ontologies:delete',
+    'data_agent:read',
+    'data_agent:write',
+    'data_agent:delete',
   ],
   viewer: [
     'user_settings:read',
@@ -115,6 +126,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'connections:read',
     'semantic_models:read',
     'ontologies:read',
+    'data_agent:read',
   ],
 };
 
