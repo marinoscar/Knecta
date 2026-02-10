@@ -41,6 +41,7 @@ model User {
   semanticModels            SemanticModel[]  @relation("UserSemanticModels")
   semanticModelRuns         SemanticModelRun[] @relation("UserSemanticModelRuns")
   ontologies                Ontology[]       @relation("UserOntologies")
+  dataChats                 DataChat[]       @relation("UserDataChats")
 
   @@map("users")
 }
@@ -437,9 +438,48 @@ model Ontology {
   // Relations
   owner         User          @relation("UserOntologies", fields: [ownerId], references: [id], onDelete: Cascade)
   semanticModel SemanticModel @relation("SemanticModelOntologies", fields: [semanticModelId], references: [id], onDelete: Cascade)
+  dataChats     DataChat[]    @relation("OntologyDataChats")
 
   @@index([ownerId])
   @@index([semanticModelId])
   @@index([status])
   @@map("ontologies")
+}
+
+// =============================================================================
+// Data Chats
+// =============================================================================
+
+model DataChat {
+  id         String   @id @default(uuid()) @db.Uuid
+  name       String   @db.VarChar(255)
+  ontologyId String   @map("ontology_id") @db.Uuid
+  ownerId    String   @map("owner_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  ontology Ontology          @relation("OntologyDataChats", fields: [ontologyId], references: [id], onDelete: Cascade)
+  owner    User              @relation("UserDataChats", fields: [ownerId], references: [id], onDelete: Cascade)
+  messages DataChatMessage[]
+
+  @@index([ownerId])
+  @@index([ontologyId])
+  @@map("data_chats")
+}
+
+model DataChatMessage {
+  id        String   @id @default(uuid()) @db.Uuid
+  chatId    String   @map("chat_id") @db.Uuid
+  role      String   @db.VarChar(20)
+  content   String   @db.Text
+  metadata  Json?
+  status    String   @default("complete") @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  chat DataChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+  @@map("data_chat_messages")
 }
