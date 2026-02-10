@@ -55,7 +55,7 @@ export function AppBar({ onMenuClick }: AppBarProps) {
           }}
           onClick={() => navigate('/')}
         >
-          Enterprise App
+          Knecta
         </Typography>
 
         {/* Spacer */}
