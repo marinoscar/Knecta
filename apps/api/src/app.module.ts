@@ -19,6 +19,7 @@ import { ConnectionsModule } from './connections/connections.module';
 import { DiscoveryModule } from './discovery/discovery.module';
 import { LlmModule } from './llm/llm.module';
 import { EmbeddingModule } from './embedding/embedding.module';
+import { SandboxModule } from './sandbox/sandbox.module';
 import { LoggerModule } from './common/logger/logger.module';
 import { TestAuthModule } from './test-auth/test-auth.module';
 import { SemanticModelsModule } from './semantic-models/semantic-models.module';
@@ -65,6 +66,7 @@ import configuration from './config/configuration';
     DiscoveryModule,
     LlmModule,
     EmbeddingModule,
+    SandboxModule,
     SemanticModelsModule,
     OntologiesModule,
 

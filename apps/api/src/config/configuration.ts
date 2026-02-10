@@ -115,6 +115,11 @@ export default () => {
     defaultProvider: process.env.EMBEDDING_DEFAULT_PROVIDER || 'openai',
   },
 
+  // Sandbox
+  sandbox: {
+    url: process.env.SANDBOX_URL || 'http://sandbox:8000',
+  },
+
   logLevel: process.env.LOG_LEVEL || 'info',
   };
 };
