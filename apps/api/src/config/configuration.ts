@@ -110,6 +110,11 @@ export default () => {
     },
   },
 
+  // Embedding Providers (for vector search)
+  embedding: {
+    defaultProvider: process.env.EMBEDDING_DEFAULT_PROVIDER || 'openai',
+  },
+
   logLevel: process.env.LOG_LEVEL || 'info',
   };
 };

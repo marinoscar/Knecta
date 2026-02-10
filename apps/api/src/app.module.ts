@@ -18,6 +18,7 @@ import { StorageModule } from './storage/storage.module';
 import { ConnectionsModule } from './connections/connections.module';
 import { DiscoveryModule } from './discovery/discovery.module';
 import { LlmModule } from './llm/llm.module';
+import { EmbeddingModule } from './embedding/embedding.module';
 import { LoggerModule } from './common/logger/logger.module';
 import { TestAuthModule } from './test-auth/test-auth.module';
 import { SemanticModelsModule } from './semantic-models/semantic-models.module';
@@ -63,6 +64,7 @@ import configuration from './config/configuration';
     ConnectionsModule,
     DiscoveryModule,
     LlmModule,
+    EmbeddingModule,
     SemanticModelsModule,
     OntologiesModule,
 
