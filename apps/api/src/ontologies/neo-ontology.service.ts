@@ -453,6 +453,102 @@ export class NeoOntologyService {
   }
 
   /**
+   * Get all RELATES_TO edges for an ontology (not filtered by dataset names)
+   */
+  async getAllRelationships(
+    ontologyId: string,
+  ): Promise<
+    Array<{
+      fromDataset: string;
+      toDataset: string;
+      name: string;
+      fromColumns: string[];
+      toColumns: string[];
+    }>
+  > {
+    return this.neoGraphService.readTransaction(async (tx) => {
+      const result = await tx.run(
+        `
+        MATCH (from:Dataset {ontologyId: $ontologyId})-[r:RELATES_TO]->(to:Dataset {ontologyId: $ontologyId})
+        RETURN from.name AS fromDataset, to.name AS toDataset,
+               r.name AS name, r.fromColumns AS fromColumns, r.toColumns AS toColumns
+        `,
+        { ontologyId },
+      );
+
+      return result.records.map((record) => ({
+        fromDataset: record.get('fromDataset') as string,
+        toDataset: record.get('toDataset') as string,
+        name: (record.get('name') as string) || '',
+        fromColumns: JSON.parse((record.get('fromColumns') as string) || '[]'),
+        toColumns: JSON.parse((record.get('toColumns') as string) || '[]'),
+      }));
+    });
+  }
+
+  /**
+   * Find join paths between two datasets using Neo4j's shortestPath
+   */
+  async findJoinPaths(
+    ontologyId: string,
+    fromDataset: string,
+    toDataset: string,
+  ): Promise<
+    Array<{
+      datasets: string[];
+      edges: Array<{
+        fromDataset: string;
+        toDataset: string;
+        name: string;
+        fromColumns: string[];
+        toColumns: string[];
+      }>;
+    }>
+  > {
+    return this.neoGraphService.readTransaction(async (tx) => {
+      const result = await tx.run(
+        `
+        MATCH (start:Dataset {ontologyId: $ontologyId, name: $fromDataset}),
+              (end:Dataset {ontologyId: $ontologyId, name: $toDataset}),
+              path = shortestPath((start)-[:RELATES_TO*..5]-(end))
+        RETURN [n IN nodes(path) | n.name] AS pathNames,
+               [r IN relationships(path) | {
+                 from: startNode(r).name,
+                 to: endNode(r).name,
+                 name: r.name,
+                 fromColumns: r.fromColumns,
+                 toColumns: r.toColumns
+               }] AS rels
+        LIMIT 3
+        `,
+        { ontologyId, fromDataset, toDataset },
+      );
+
+      return result.records.map((record) => {
+        const datasets = record.get('pathNames') as string[];
+        const rels = record.get('rels') as Array<{
+          from: string;
+          to: string;
+          name: string;
+          fromColumns: string;
+          toColumns: string;
+        }>;
+
+        return {
+          datasets,
+          edges: rels.map((r) => ({
+            fromDataset: r.from,
+            toDataset: r.to,
+            name: r.name || '',
+            fromColumns: JSON.parse(r.fromColumns || '[]'),
+            toColumns: JSON.parse(r.toColumns || '[]'),
+          })),
+        };
+      });
+    });
+  }
+
+  /**
    * Delete graph from Neo4j
    */
   async deleteGraph(ontologyId: string): Promise<void> {
