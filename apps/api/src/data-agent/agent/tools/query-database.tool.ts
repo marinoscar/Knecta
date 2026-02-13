@@ -19,7 +19,7 @@ export function createQueryDatabaseTool(
   return new DynamicStructuredTool({
     name: 'query_database',
     description:
-      'Execute a read-only SQL query against the database. Returns column names and rows. Only SELECT queries are allowed. Use this to retrieve data, aggregate results, join tables, etc.',
+      'Execute a read-only SQL query against the database. Returns column names and rows (max 500 rows, 30-second timeout). Only SELECT queries are allowed. Use this to retrieve data, aggregate results, join tables, etc. For large result sets, use aggregations, GROUP BY, or LIMIT clauses.',
     schema,
     func: async ({ sql }) => {
       try {

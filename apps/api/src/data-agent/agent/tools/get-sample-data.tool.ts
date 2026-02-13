@@ -28,16 +28,13 @@ export function createGetSampleDataTool(
     func: async ({ datasetName, limit }) => {
       try {
         // Get the source table name from Neo4j (the 'source' property has the schema-qualified name)
-        const graph = await neoOntologyService.getGraph(ontologyId);
-        const dataset = graph.nodes.find(
-          (n) => n.label === 'Dataset' && n.properties.name === datasetName,
-        );
+        const datasets = await neoOntologyService.getDatasetsByNames(ontologyId, [datasetName]);
 
-        if (!dataset) {
+        if (datasets.length === 0) {
           return `Dataset "${datasetName}" not found in ontology.`;
         }
 
-        const source = (dataset.properties.source as string) || datasetName;
+        const source = datasets[0].source || datasetName;
         const actualLimit = Math.min(limit || 5, 20);
 
         // Use a simple SELECT * with LIMIT
