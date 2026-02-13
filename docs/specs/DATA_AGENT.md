@@ -36,6 +36,7 @@ The Data Agent feature enables natural language querying and analysis of data th
 - **Multi-Phase Analytical Pipeline**: 6 specialized phases (Planner, Navigator, SQL Builder, Executor, Verifier, Explainer) with structured artifacts
 - **Sub-Task Decomposition**: Complex questions automatically broken into ordered execution steps with dependencies
 - **Intelligent Dataset Discovery**: Vector similarity search + graph relationship navigation for join path discovery
+- **Semantic Model as Source of Truth**: Full YAML schemas from the semantic model are injected into every phase, ensuring column names, types, and expressions match the authoritative model
 - **Mandatory Verification Gate**: Python-based validation of SQL results with automatic revision loops
 - **Progressive SQL Execution**: Pilot queries (10 rows) followed by full queries to catch errors early
 - **Python Analysis Sandbox**: Isolated Docker environment for data analysis and chart generation
@@ -134,11 +135,13 @@ The Data Agent uses a multi-service architecture combining NestJS backend, Neo4j
 │ - data_chats     │  │ - Dataset nodes │  │                      │
 │ - data_chat_     │  │   with vector   │  │ - Flask server       │
 │   messages       │  │   embeddings    │  │ - pandas, numpy      │
-│                  │  │ - RELATES_TO    │  │ - matplotlib         │
-│ - Conversation   │  │   edges (joins) │  │ - 512MB memory       │
-│   history        │  │ - Vector index  │  │ - Read-only FS       │
-│ - Metadata with  │  │ - Join path     │  │ - No network         │
-│   phase artifacts│  │   discovery     │  │                      │
+│                  │  │ - YAML schemas  │  │ - matplotlib         │
+│ - Conversation   │  │   (field-level) │  │ - 512MB memory       │
+│   history        │  │ - RELATES_TO    │  │ - Read-only FS       │
+│ - Metadata with  │  │   edges (joins) │  │ - No network         │
+│   phase artifacts│  │ - Vector index  │  │                      │
+│                  │  │ - Join path     │  │                      │
+│                  │  │   discovery     │  │                      │
 └──────────────────┘  └─────────────────┘  └──────────────────────┘
 ```
 
@@ -215,6 +218,7 @@ START
 5. **Progressive Execution**: SQL steps run pilot query (10 rows) before full query to catch errors early
 6. **Join Path Discovery**: Navigator uses Neo4j `shortestPath` algorithm to find RELATES_TO paths between datasets
 7. **No ReAct Loop in Main Graph**: Only Navigator uses mini-ReAct (max 8 iterations); other phases are single LLM calls with structured output
+8. **Semantic Model YAML as First-Class Data**: The YAML from the semantic model (stored on Neo4j Dataset nodes) is the authoritative schema. It flows through the entire pipeline: pre-fetched for Planner, carried in JoinPlanArtifact for Navigator/SQL Builder, and passed to Executor repair and Python generation prompts. No phase guesses column names.
 
 ---
 
@@ -228,6 +232,7 @@ START
 - `userQuestion`: Raw user query
 - `conversationContext`: Summarized history from last 10 messages
 - `relevantDatasets`: Top 10 datasets from vector search
+- `relevantDatasetDetails`: Pre-fetched YAML schemas for vector-matched datasets (from `NeoOntologyService.getDatasetsByNames`)
 
 **Output**: `PlanArtifact`
 ```typescript
@@ -263,6 +268,7 @@ START
   - `strategy: 'python'` → analysis/visualization only (uses prior step results)
   - `strategy: 'sql_then_python'` → query then analyze
 - `dependsOn` creates execution order (e.g., step 3 needs results from steps 1 and 2)
+- When `relevantDatasetDetails` is available, the Planner prompt includes full YAML schema blocks for each dataset, enabling informed step decomposition with knowledge of available columns and types
 
 **Example**:
 Question: "Why is Houston underperforming?"
@@ -298,7 +304,7 @@ Question: "Why is Houston underperforming?"
 **Output**: `JoinPlanArtifact`
 ```typescript
 {
-  relevantDatasets: Array<{ name: string; description: string; source: string }>,
+  relevantDatasets: Array<{ name: string; description: string; source: string; yaml: string }>,
   joinPaths: Array<{
     datasets: string[],
     edges: Array<{
@@ -324,6 +330,8 @@ Question: "Why is Houston underperforming?"
 - Uses `findJoinPaths` Neo4j service method (shortestPath algorithm) to discover FK paths between datasets
 - Validates join paths cover all required datasets from plan.steps
 - Emits `tool_start`, `tool_end`, `text` events during mini-ReAct loop
+- Includes full YAML schema for each dataset in `JoinPlanArtifact.relevantDatasets.yaml` — this is the authoritative field-level schema from the semantic model, passed downstream to SQL Builder and Executor
+- Navigator prompt emphasizes YAML from `get_dataset_details` as the authoritative schema — "defines exactly which columns exist and what types they are"
 
 **Neo4j Integration**:
 ```typescript
@@ -382,6 +390,8 @@ LIMIT 3
 - Pilot SQL always includes `LIMIT 10` for fast validation
 - Full SQL has no LIMIT (executor will add row limit dynamically)
 - Validates expected columns match plan requirements
+- Receives full YAML schema via `joinPlan.relevantDatasets[].yaml` — prompts instruct the LLM to use ONLY column names from the semantic model YAML
+- On revision (from Verifier failure), re-fetches dataset details with YAML preserved
 
 **Example Output**:
 ```typescript
@@ -406,7 +416,7 @@ LIMIT 3
 **Inputs**:
 - `plan.steps`: Ordered sub-task list
 - `querySpecs`: SQL for each SQL-involving step
-- `joinPlan`: For on-the-fly SQL adjustments if needed
+- `joinPlan`: YAML schemas used to provide schema context to repair and Python prompts
 
 **Output**: `StepResult[]`
 ```typescript
@@ -451,6 +461,8 @@ LIMIT 3
   2. Pass SQL result to Python as `current_data`
   3. Run Python analysis
 - Each step result is available to subsequent steps with `dependsOn` dependency
+- SQL repair prompt receives dataset YAML schemas so the LLM can fix column name/type errors using authoritative schema
+- Python generation prompt receives dataset YAML schemas for reference when generating analysis code
 
 **Progressive SQL Execution**:
 ```
@@ -729,6 +741,12 @@ export const DataAgentState = Annotation.Root({
     default: () => [],
   }),
 
+  // ─── Pre-fetched Dataset Details (with YAML) ───
+  relevantDatasetDetails: Annotation<Array<{ name: string; description: string; source: string; yaml: string }>>({
+    reducer: (_, next) => next,
+    default: () => [],
+  }),
+
   // ─── Phase Artifacts ───
   plan: Annotation<PlanArtifact | null>({
     reducer: (_, next) => next,
@@ -802,6 +820,7 @@ export type DataAgentStateType = typeof DataAgentState.State;
 | Field | Type | Purpose |
 |-------|------|---------|
 | `plan` | `PlanArtifact` | Planner output: sub-task decomposition |
+| `relevantDatasetDetails` | `Array<{name, description, source, yaml}>` | Pre-fetched YAML schemas for vector-matched datasets |
 | `joinPlan` | `JoinPlanArtifact` | Navigator output: datasets + join paths |
 | `querySpecs` | `QuerySpec[]` | SQL Builder output: SQL per sub-task |
 | `stepResults` | `StepResult[]` | Executor output: results per sub-task |
@@ -1530,7 +1549,7 @@ const embedding = await embeddingService.generateEmbedding(text);
 1. **Ontology Creation**: When semantic model is converted to ontology, dataset descriptions are embedded
 2. **Vector Index**: Embeddings stored in Neo4j Dataset nodes with vector index
 3. **Query Time**: User question is embedded and vector similarity search finds top 10 relevant datasets
-4. **Context Injection**: Relevant datasets passed to Planner phase as `relevantDatasets`
+4. **Context Injection**: Relevant dataset names passed to Planner as `relevantDatasets`; full YAML schemas pre-fetched via `NeoOntologyService.getDatasetsByNames()` and passed as `relevantDatasetDetails`
 
 ---
 
