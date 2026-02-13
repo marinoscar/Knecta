@@ -6,6 +6,8 @@ import {
 import fastifyCookie from '@fastify/cookie';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
+import { NeoGraphService } from '../../src/neo-graph/neo-graph.service';
+import { NeoVectorService } from '../../src/neo-graph/neo-vector.service';
 import { prismaMock } from '../mocks/prisma.mock';
 
 export interface TestContext {
@@ -41,21 +43,59 @@ export async function createTestApp(
   // Default to mocked database for unit/integration tests
   const shouldUseMock = options.useMockDatabase ?? true;
 
+  // Create mocks for Neo4j services (always mocked in tests)
+  const mockSession = {
+    run: jest.fn(),
+    close: jest.fn(),
+    executeRead: jest.fn(),
+    executeWrite: jest.fn(),
+  };
+
+  const mockDriver = {
+    session: jest.fn().mockReturnValue(mockSession),
+    close: jest.fn(),
+  };
+
+  const neoGraphMock = {
+    onModuleInit: jest.fn().mockResolvedValue(undefined),
+    onModuleDestroy: jest.fn().mockResolvedValue(undefined),
+    getSession: jest.fn().mockReturnValue(mockSession),
+    readTransaction: jest.fn(),
+    writeTransaction: jest.fn(),
+    verifyConnectivity: jest.fn().mockResolvedValue(undefined),
+    getDriver: jest.fn().mockReturnValue(mockDriver),
+  };
+
+  const neoVectorMock = {
+    ensureVectorIndex: jest.fn().mockResolvedValue(undefined),
+    updateNodeEmbeddings: jest.fn().mockResolvedValue(undefined),
+    searchSimilar: jest.fn().mockResolvedValue([]),
+  };
+
   let moduleFixture: TestingModule;
 
   if (shouldUseMock) {
-    // Create test module with mocked PrismaService
+    // Create test module with mocked PrismaService and Neo4j services
     moduleFixture = await Test.createTestingModule({
       imports: [AppModule],
     })
       .overrideProvider(PrismaService)
       .useValue(prismaMock)
+      .overrideProvider(NeoGraphService)
+      .useValue(neoGraphMock)
+      .overrideProvider(NeoVectorService)
+      .useValue(neoVectorMock)
       .compile();
   } else {
-    // Create test module with real database (for true E2E tests)
+    // Create test module with real database but mocked Neo4j (for true E2E tests)
     moduleFixture = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(NeoGraphService)
+      .useValue(neoGraphMock)
+      .overrideProvider(NeoVectorService)
+      .useValue(neoVectorMock)
+      .compile();
   }
 
   const app = moduleFixture.createNestApplication<NestFastifyApplication>(

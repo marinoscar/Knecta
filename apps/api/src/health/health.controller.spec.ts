@@ -2,11 +2,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { HealthCheckService, HealthCheckResult } from '@nestjs/terminus';
 import { HealthController } from './health.controller';
 import { DatabaseHealthIndicator } from './indicators/database.indicator';
+import { Neo4jHealthIndicator } from './indicators/neo4j.indicator';
 
 describe('HealthController', () => {
   let controller: HealthController;
   let mockHealthCheckService: jest.Mocked<HealthCheckService>;
   let mockDatabaseIndicator: jest.Mocked<DatabaseHealthIndicator>;
+  let mockNeo4jIndicator: jest.Mocked<Neo4jHealthIndicator>;
 
   beforeEach(async () => {
     mockHealthCheckService = {
@@ -17,11 +19,16 @@ describe('HealthController', () => {
       isHealthy: jest.fn(),
     } as any;
 
+    mockNeo4jIndicator = {
+      isHealthy: jest.fn(),
+    } as any;
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [HealthController],
       providers: [
         { provide: HealthCheckService, useValue: mockHealthCheckService },
         { provide: DatabaseHealthIndicator, useValue: mockDatabaseIndicator },
+        { provide: Neo4jHealthIndicator, useValue: mockNeo4jIndicator },
       ],
     }).compile();
 
@@ -47,7 +54,7 @@ describe('HealthController', () => {
   });
 
   describe('readiness', () => {
-    it('should call health check service with database indicator', async () => {
+    it('should call health check service with database and neo4j indicators', async () => {
       const mockResult: HealthCheckResult = {
         status: 'ok',
         info: {
@@ -68,6 +75,7 @@ describe('HealthController', () => {
       const result = await controller.readiness();
 
       expect(mockHealthCheckService.check).toHaveBeenCalledWith([
+        expect.any(Function),
         expect.any(Function),
       ]);
       expect(result).toMatchObject({
@@ -174,6 +182,7 @@ describe('HealthController', () => {
       const result = await controller.fullHealth();
 
       expect(mockHealthCheckService.check).toHaveBeenCalledWith([
+        expect.any(Function),
         expect.any(Function),
       ]);
       expect(result).toMatchObject({
