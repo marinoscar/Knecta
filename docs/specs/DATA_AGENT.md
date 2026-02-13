@@ -94,11 +94,14 @@ The Data Agent uses a multi-service architecture combining NestJS backend, Neo4j
 │  │  2. get_dataset_details → NeoOntologyService → Neo4j         │  │
 │  │  3. get_sample_data → DiscoveryService → Database            │  │
 │  │  4. run_python → SandboxService → Docker Container           │  │
+│  │  5. list_datasets → NeoOntologyService → Neo4j               │  │
 │  │                                                                │  │
 │  │  System Prompt:                                               │  │
-│  │  - Relevant datasets (from vector search)                    │  │
-│  │  - Conversation history (last 10 messages)                   │  │
+│  │  - Relevant datasets (top 10 from vector search)             │  │
+│  │  - Relationship join hints (FK paths between tables)         │  │
+│  │  - Conversation history (last 10 messages with tool context) │  │
 │  │  - Database type and constraints                             │  │
+│  │  - Error recovery strategies                                 │  │
 │  └───────────────────────────────────────────────────────────────┘  │
 │                                                                       │
 │  EmbeddingService (OpenAI text-embedding-3-small)                    │
@@ -226,8 +229,7 @@ interface MessageMetadata {
   toolCalls?: Array<{
     name: string;
     args: Record<string, any>;
-    result: string;
-    timestamp: string;
+    result?: string;  // Tool execution result (truncated to 2000 chars), used for conversation context
   }>;
 
   // Token usage
@@ -1164,12 +1166,15 @@ import { ChatOpenAI } from '@langchain/openai';
 
 const agent = createReactAgent({
   llm: new ChatOpenAI({ modelName: 'gpt-4', streaming: false }),
-  tools: [queryDatabaseTool, getDatasetDetailsTool, getSampleDataTool, runPythonTool],
+  tools: [queryDatabaseTool, getDatasetDetailsTool, getSampleDataTool, runPythonTool, listDatasetsTool],
   messageModifier: systemPrompt,  // System prompt with context
 });
 
-// Execute with streaming updates
-for await (const event of agent.stream({ messages: [...] }, { streamMode: 'updates' })) {
+// Execute with streaming updates and recursion guard
+for await (const event of agent.stream(
+  { messages: [...] },
+  { streamMode: 'updates', recursionLimit: 30 },
+)) {
   // Process step-by-step updates
 }
 ```
@@ -1179,6 +1184,11 @@ for await (const event of agent.stream({ messages: [...] }, { streamMode: 'updat
 - `streamMode: 'updates'` (step-by-step execution events)
 - No retry loops (agent may iterate naturally if needed)
 
+**Recursion Guard:**
+- `recursionLimit: 30` in stream config — limits graph node invocations
+- Each tool call = 2 node invocations (agent node + tools node), so 30 ≈ 15 tool-call rounds
+- Prevents runaway loops on difficult questions; errors caught and reported via `message_error` SSE event
+
 ---
 
 ### System Prompt Structure
@@ -1187,60 +1197,46 @@ The agent receives a rich system prompt with:
 
 1. **Role Definition**
 2. **Relevant Datasets** (from vector search)
-3. **Database Type and Constraints**
-4. **Tool Usage Instructions**
-5. **Conversation History** (last 10 messages)
+3. **Relationships (Join Hints)** - FK paths between tables
+4. **Database Type and Constraints**
+5. **Enhanced Tool Usage Instructions** - Error recovery, NULL handling, SQL best practices
+6. **Conversation History** (last 10 messages with tool call summaries)
 
-**Template:**
+**Function Signature:**
 ```typescript
-export const buildSystemPrompt = (
-  relevantDatasets: Dataset[],
+export function buildDataAgentSystemPrompt(
+  datasets: Array<{ name: string; description: string; yaml: string; score: number }>,
   databaseType: string,
-  conversationHistory: Message[],
-): string => `
-You are an expert data analyst helping users explore and analyze data from a ${databaseType} database.
-
-## Available Datasets
-
-You have access to the following datasets that may be relevant to the user's question:
-
-${relevantDatasets.map(d => d.yaml).join('\n\n---\n\n')}
-
-## Database Information
-
-- **Type**: ${databaseType}
-- **Access**: Read-only (SELECT queries only)
-- **Query Timeout**: 30 seconds
-- **Max Results**: 500 rows per query
-
-## Instructions
-
-1. **Start with SQL**: Use \`query_database\` to retrieve data from the database
-2. **Check dataset details**: Use \`get_dataset_details\` if you need more information about tables/columns
-3. **Sample data**: Use \`get_sample_data\` to see example rows before writing complex queries
-4. **Analyze with Python**: Use \`run_python\` for data transformations, aggregations, or chart generation
-5. **Format responses**: Use markdown for structure, tables for data, and explain your findings clearly
-
-## Conversation History
-
-${conversationHistory.map(m => `${m.role}: ${m.content.slice(0, 500)}`).join('\n\n')}
-
-## Your Task
-
-Answer the user's question by using the available tools. Think step-by-step and explain your reasoning.
-`;
+  conversationContext: string,
+  relationships: Array<{ fromDataset: string; toDataset: string; name: string; fromColumns: string; toColumns: string }>,
+): string
 ```
+
+**Prompt Structure:**
+
+1. **Role**: Expert data analyst assistant
+2. **Available Datasets**: YAML definitions from vector search (or discovery guidance when empty)
+3. **Relationships (Join Hints)**: Conditional section with FK join paths when relationships exist
+4. **Database**: Type + read-only constraint
+5. **Enhanced Instructions** (6 steps):
+   - Understand the question
+   - Plan approach (use join hints, discovery tools if needed)
+   - Write SQL (schema-qualified names, 500-row limit, NULL handling, DATE_TRUNC)
+   - Recover from errors (0 rows → sample data, column not found → get_dataset_details, SQL error → retry, need tables → list_datasets)
+   - Use Python when helpful (stats, charts, NOT for data retrieval)
+   - Format response
+6. **Previous Conversation**: Enriched with tool call summaries (name, args, results)
 
 **Context Truncation:**
 - Dataset YAML: Full definitions (no truncation)
-- Conversation history: Last 10 messages, 500 chars each
-- Total token budget: ~4000 tokens for system prompt
+- Conversation history: Last 10 messages with tool call summaries (200 chars each for args and results)
+- Total token budget: ~6000 tokens for system prompt
 
 ---
 
 ### Tool Definitions
 
-The agent has 4 tools available:
+The agent has 5 tools available:
 
 #### 1. query_database
 
@@ -1250,7 +1246,7 @@ The agent has 4 tools available:
 ```typescript
 {
   name: 'query_database',
-  description: 'Execute a read-only SQL SELECT query on the database. Returns results as a markdown table.',
+  description: 'Execute a read-only SQL query against the database. Returns column names and rows (max 500 rows, 30-second timeout). Only SELECT queries are allowed. For large result sets, use aggregations, GROUP BY, or LIMIT clauses.',
   schema: z.object({
     sql: z.string().describe('SQL SELECT query to execute'),
   }),
@@ -1461,6 +1457,54 @@ print(df.to_string())
 
 ---
 
+#### 5. list_datasets
+
+**Purpose:** Discover all available datasets in the ontology
+
+**Schema:**
+```typescript
+{
+  name: 'list_datasets',
+  description: 'List ALL available datasets/tables in the ontology. Returns names, descriptions, and source table references. Use this when you need to discover tables beyond those provided in the system prompt.',
+  schema: z.object({}),  // No parameters required
+}
+```
+
+**Implementation:**
+```typescript
+async function listDatasets(): Promise<string> {
+  const datasets = await neoOntologyService.listDatasets(ontologyId);
+
+  if (datasets.length === 0) {
+    return 'No datasets found in the ontology.';
+  }
+
+  const lines = datasets.map(
+    (ds) => `- **${ds.name}**: ${ds.description || 'No description'} (source: ${ds.source || 'unknown'})`,
+  );
+
+  return `${datasets.length} datasets available:\n\n${lines.join('\n')}`;
+}
+```
+
+**Output:**
+```
+5 datasets available:
+
+- **customers**: Customer master data with contact information (source: public.customers)
+- **orders**: Order transactions and line items (source: public.orders)
+- **products**: Product catalog with pricing (source: public.products)
+- **order_items**: Individual items within orders (source: public.order_items)
+- **categories**: Product categories (source: public.categories)
+```
+
+**Use Cases:**
+- Vector search returned 0 results — agent discovers tables manually
+- Question spans more tables than vector search returned
+- Follow-up questions reference tables not in initial context
+
+---
+
 ### Execution Flow
 
 1. **Load Chat Context**
@@ -1474,12 +1518,25 @@ print(df.to_string())
 
 3. **Vector Search for Relevant Datasets**
    ```typescript
-   const relevantDatasets = await neoVectorService.searchSimilarDatasets(
-     ontologyId,
+   const relevantDatasets = await neoVectorService.searchSimilar(
+     'dataset_embedding',
+     ontology.id,
      questionEmbedding,
-     5,  // Top 5 datasets
+     10,  // Top 10 datasets (doubled from 5 for better coverage)
    );
    ```
+
+3a. **Fallback on Empty Vector Results**
+    ```typescript
+    if (relevantDatasets.length === 0) {
+      const allDatasets = await neoOntologyService.listDatasets(ontology.id);
+      if (allDatasets.length === 0) {
+        // Truly empty ontology — fail gracefully
+        return;
+      }
+      // Continue with empty relevantDatasets — agent has list_datasets tool
+    }
+    ```
 
 4. **Load Conversation History**
    ```typescript
@@ -1491,22 +1548,32 @@ print(df.to_string())
    const conversationHistory = messages.reverse();  // Chronological order
    ```
 
+4a. **Get Relationship Join Hints**
+    ```typescript
+    const datasetNames = relevantDatasets.map((ds) => ds.name);
+    const relationships = datasetNames.length > 0
+      ? await neoOntologyService.getDatasetRelationships(ontology.id, datasetNames)
+      : [];
+    ```
+
 5. **Build System Prompt**
    ```typescript
-   const systemPrompt = buildSystemPrompt(
-     relevantDatasets.map(r => r.dataset),
-     connection.type,  // 'postgresql'
-     conversationHistory,
+   const systemPrompt = buildDataAgentSystemPrompt(
+     relevantDatasets,
+     databaseType,
+     conversationContext,
+     relationships,  // NEW: join hints for the prompt
    );
    ```
 
 6. **Create Tools with Bound Dependencies**
    ```typescript
    const tools = [
-     createQueryDatabaseTool(discoveryService, connection.id),
+     createQueryDatabaseTool(discoveryService, connectionId, userId),
      createGetDatasetDetailsTool(neoOntologyService, ontologyId),
-     createGetSampleDataTool(discoveryService, neoOntologyService, connection.id, ontologyId),
+     createGetSampleDataTool(discoveryService, neoOntologyService, connectionId, userId, ontologyId),
      createRunPythonTool(sandboxService),
+     createListDatasetsTool(neoOntologyService, ontologyId),  // NEW: dataset discovery
    ];
    ```
 
@@ -1529,7 +1596,7 @@ print(df.to_string())
    ```typescript
    const stream = agent.stream(
      { messages: [new HumanMessage(userMessage.content)] },
-     { streamMode: 'updates' },
+     { streamMode: 'updates', recursionLimit: 30 },
    );
 
    for await (const event of stream) {
@@ -1682,24 +1749,21 @@ try {
 // From LangGraph updates stream
 for await (const event of agentStream) {
   if (event.tools) {
-    // ToolNode executed
-    const toolMessages = event.tools.messages as ToolMessage[];
+    const toolMessages = event.tools.messages;
 
     for (const msg of toolMessages) {
-      // Find corresponding tool call
-      const toolCall = findToolCall(msg.tool_call_id);
+      // Match by tool_call_id for correct association (handles parallel tool calls)
+      const matchedCall = msg.tool_call_id ? toolCallMap.get(msg.tool_call_id) : undefined;
 
-      // Emit tool_call event
-      emit('tool_call', {
-        name: toolCall.name,
-        args: toolCall.args,
-      });
-
-      // Emit tool_result event (truncate to 2000 chars)
       emit('tool_result', {
-        name: toolCall.name,
+        name: matchedCall?.name || 'unknown',
         result: msg.content.slice(0, 2000),
       });
+
+      // Store result on the matched call for conversation context
+      if (matchedCall) {
+        matchedCall.result = msg.content.slice(0, 2000);
+      }
     }
   } else if (event.agent) {
     // AI response
@@ -2866,16 +2930,21 @@ apps/api/
 │   ├── data-agent/
 │   │   ├── data-agent.module.ts                          # Main module
 │   │   ├── data-agent.service.ts                         # CRUD operations
+│   │   ├── data-agent.service.spec.ts                    # CRUD unit tests
 │   │   ├── data-agent.controller.ts                      # REST API
 │   │   ├── agent-stream.controller.ts                    # SSE streaming
 │   │   ├── agent/
 │   │   │   ├── agent.service.ts                          # ReAct agent creation + execution
+│   │   │   ├── agent.service.spec.ts                     # Agent orchestration unit tests
 │   │   │   ├── prompts.ts                                # System prompt builder
+│   │   │   ├── prompts.spec.ts                           # Prompt builder unit tests
 │   │   │   └── tools/
 │   │   │       ├── query-database.tool.ts                # SQL execution tool
 │   │   │       ├── get-dataset-details.tool.ts           # Dataset YAML tool
 │   │   │       ├── get-sample-data.tool.ts               # Sample rows tool
 │   │   │       ├── run-python.tool.ts                    # Python sandbox tool
+│   │   │       ├── list-datasets.tool.ts                 # Dataset discovery tool
+│   │   │       ├── list-datasets.tool.spec.ts            # Discovery tool unit tests
 │   │   │       └── index.ts                              # Tool factory exports
 │   │   └── dto/
 │   │       ├── create-chat.dto.ts                        # Create validation (Zod)
@@ -2883,7 +2952,8 @@ apps/api/
 │   │       ├── chat-query.dto.ts                         # List query validation (Zod)
 │   │       └── send-message.dto.ts                       # Message validation (Zod)
 │   └── ontologies/
-│       └── neo-ontology.service.ts                       # Embeddings on graph creation (modified)
+│       ├── neo-ontology.service.ts                       # Embedding generation + lightweight queries
+│       └── neo-ontology.service.spec.ts                  # Lightweight query unit tests
 └── test/
     └── data-agent.integration.spec.ts                    # Integration tests
 ```
@@ -3083,6 +3153,102 @@ cd apps/api && npm test -- sandbox.service
 
 ---
 
+#### Unit Tests: Agent Service
+
+File: `apps/api/src/data-agent/agent/agent.service.spec.ts`
+
+**Coverage:**
+- ✅ Vector search uses top-K of 10
+- ✅ Falls back to listDatasets when vector search returns empty
+- ✅ Fails gracefully when ontology has no datasets at all
+- ✅ Sets recursionLimit to 30 on agent stream
+- ✅ Creates 5 tools including list_datasets
+- ✅ Fetches relationships for relevant datasets
+- ✅ Matches tool results by tool_call_id (handles parallel calls)
+- ✅ Persists tool call results in metadata
+- ✅ Includes conversation history with tool context
+- ✅ Emits message_start, tool_call, tool_result, text, token_update, message_complete events
+- ✅ Handles agent errors gracefully (message_error event)
+- ✅ Throws NotFoundException for missing chat/ontology/semantic model
+- ✅ Skips relationships when no relevant datasets found
+- ✅ Truncates tool results to 2000 characters
+- ✅ Handles multiple parallel tool calls correctly
+- ✅ Provides default response when agent produces no content
+
+**Run:**
+```bash
+cd apps/api && npm test -- agent.service
+```
+
+---
+
+#### Unit Tests: Prompt Builder
+
+File: `apps/api/src/data-agent/agent/prompts.spec.ts`
+
+**Coverage:**
+- ✅ Includes dataset YAML in prompt
+- ✅ Includes relationship join hints when relationships provided
+- ✅ Omits relationships section when empty
+- ✅ Shows discovery guidance when no datasets match
+- ✅ Includes enhanced instructions (error recovery, COALESCE, DATE_TRUNC)
+- ✅ Includes conversation context
+- ✅ Shows default when no conversation history
+
+**Run:**
+```bash
+cd apps/api && npm test -- prompts.spec
+```
+
+---
+
+#### Unit Tests: list_datasets Tool
+
+File: `apps/api/src/data-agent/agent/tools/list-datasets.tool.spec.ts`
+
+**Coverage:**
+- ✅ Returns formatted list of datasets
+- ✅ Returns message when no datasets found
+- ✅ Handles errors gracefully (returns string, doesn't throw)
+
+**Run:**
+```bash
+cd apps/api && npm test -- list-datasets.tool
+```
+
+---
+
+#### Unit Tests: NeoOntologyService Lightweight Queries
+
+File: `apps/api/src/ontologies/neo-ontology.service.spec.ts`
+
+**Coverage:**
+
+**listDatasets:**
+- ✅ Returns correct structure (name, description, source)
+- ✅ Returns empty array when no datasets found
+- ✅ Handles null description/source with defaults
+- ✅ Calls readTransaction with correct parameters
+
+**getDatasetsByNames:**
+- ✅ Returns matching datasets with all fields including YAML
+- ✅ Returns empty array when no names match
+- ✅ Handles subset of names matching
+- ✅ Handles null/undefined fields with defaults
+
+**getDatasetRelationships:**
+- ✅ Returns relationships with parsed columns
+- ✅ Returns empty array when no relationships exist
+- ✅ Returns relationships where either from or to matches
+- ✅ Handles empty fromColumns/toColumns with default '[]'
+
+**Run:**
+```bash
+cd apps/api && npm test -- neo-ontology.service
+```
+
+---
+
 ### Frontend Tests
 
 File: `apps/web/src/__tests__/components/data-agent/ChatSidebar.test.tsx`
@@ -3154,8 +3320,11 @@ All required packages already installed from previous features:
 
 The Data Agent feature demonstrates:
 
-- **ReAct Pattern Implementation**: Iterative tool-calling for complex analysis
-- **Vector Similarity Search**: Intelligent dataset discovery via Neo4j embeddings
+- **ReAct Pattern Implementation**: Iterative tool-calling with 5 specialized tools and recursion guard
+- **Intelligent Dataset Discovery**: Vector similarity search (top-10) with fallback to full dataset listing
+- **Relationship-Aware Querying**: Automatic join hint injection from ontology graph relationships
+- **Rich Conversation Context**: Tool call summaries preserved across turns for multi-step analysis
+- **Error Recovery Strategies**: Guided self-correction for empty results, missing columns, and syntax errors
 - **Multi-Provider LLM Architecture**: Pluggable chat + embedding providers
 - **Read-Only Security**: Safe SQL execution with strict validation
 - **Sandboxed Python Execution**: Docker-isolated code execution with resource limits
