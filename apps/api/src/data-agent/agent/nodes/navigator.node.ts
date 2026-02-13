@@ -125,6 +125,7 @@ export function createNavigatorNode(
           name: ds.name,
           description: ds.description,
           source: ds.source,
+          yaml: ds.yaml,
         })),
         joinPaths: relevantRelationships.map((r) => ({
           datasets: [r.fromDataset, r.toDataset],

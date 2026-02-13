@@ -45,7 +45,7 @@ export interface JoinPath {
 }
 
 export interface JoinPlanArtifact {
-  relevantDatasets: Array<{ name: string; description: string; source: string }>;
+  relevantDatasets: Array<{ name: string; description: string; source: string; yaml: string }>;
   joinPaths: JoinPath[];
   notes: string;
 }

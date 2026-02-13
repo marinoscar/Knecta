@@ -43,6 +43,7 @@ export function createSqlBuilderNode(
             name: ds.name,
             description: ds.description,
             source: ds.source,
+            yaml: ds.yaml,
           })),
         };
       }

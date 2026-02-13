@@ -29,6 +29,12 @@ export const DataAgentState = Annotation.Root({
     default: () => [],
   }),
 
+  // ─── Pre-fetched Dataset Details (with YAML) ───
+  relevantDatasetDetails: Annotation<Array<{ name: string; description: string; source: string; yaml: string }>>({
+    reducer: (_, next) => next,
+    default: () => [],
+  }),
+
   // ─── Phase Artifacts ───
   plan: Annotation<PlanArtifact | null>({
     reducer: (_, next) => next,
