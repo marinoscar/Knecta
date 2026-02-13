@@ -118,6 +118,20 @@ describe('DataAgentAgentService', () => {
         { name: 'Dataset2' },
         { name: 'Dataset3' },
       ]),
+      getDatasetsByNames: jest.fn().mockResolvedValue([
+        {
+          name: 'Dataset1',
+          description: 'First dataset',
+          source: 'public.dataset1',
+          yaml: 'name: Dataset1\nfields:\n  - name: id\n    type: integer',
+        },
+        {
+          name: 'Dataset2',
+          description: 'Second dataset',
+          source: 'public.dataset2',
+          yaml: 'name: Dataset2\nfields:\n  - name: id\n    type: integer',
+        },
+      ]),
     } as any;
 
     mockDiscoveryService = {} as any;
@@ -437,6 +451,23 @@ describe('DataAgentAgentService', () => {
       );
     });
 
+    it('should pre-fetch YAML schemas for vector-matched datasets', async () => {
+      const onEvent = jest.fn();
+
+      await service.executeAgent(
+        mockChatId,
+        mockMessageId,
+        'What is the count?',
+        mockUserId,
+        onEvent,
+      );
+
+      expect(mockNeoOntologyService.getDatasetsByNames).toHaveBeenCalledWith(
+        mockOntologyId,
+        ['Dataset1', 'Dataset2'],
+      );
+    });
+
     it('should load conversation history and format context', async () => {
       const onEvent = jest.fn();
 
@@ -494,6 +525,16 @@ describe('DataAgentAgentService', () => {
         databaseType: 'postgresql',
         conversationContext: expect.any(String),
         relevantDatasets: ['Dataset1', 'Dataset2'],
+        relevantDatasetDetails: expect.arrayContaining([
+          expect.objectContaining({
+            name: 'Dataset1',
+            yaml: expect.any(String),
+          }),
+          expect.objectContaining({
+            name: 'Dataset2',
+            yaml: expect.any(String),
+          }),
+        ]),
       });
     });
 
@@ -661,6 +702,9 @@ describe('DataAgentAgentService', () => {
       expect(mockNeoOntologyService.listDatasets).toHaveBeenCalledWith(
         mockOntologyId,
       );
+
+      // When no vector results, getDatasetsByNames should not be called
+      expect(mockNeoOntologyService.getDatasetsByNames).not.toHaveBeenCalled();
 
       // Should still proceed with graph execution
       expect(mockGraph.invoke).toHaveBeenCalled();
