@@ -38,7 +38,6 @@ function extractToolCalls(events: DataAgentStreamEvent[]): ToolCall[] {
   for (const event of events) {
     if ((event.type === 'tool_call' || event.type === 'tool_start') && event.name) {
       // Use a composite key to handle multiple calls to the same tool
-      const key = `${event.name}-${toolCalls.length}`;
       const entry: ToolCall = {
         name: event.name,
         args: event.args,

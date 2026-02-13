@@ -10,7 +10,7 @@ import {
 } from './nodes';
 
 // ─── Event emitter type ───
-export type EmitFn = (event: object) => void;
+export type EmitFn = (event: { type: string; [key: string]: any }) => void;
 
 // ─── Dependencies injected into the graph builder ───
 export interface DataAgentGraphDeps {

@@ -5,7 +5,6 @@ import {
   Step,
   StepLabel,
   Typography,
-  Chip,
   LinearProgress,
 } from '@mui/material';
 import {
