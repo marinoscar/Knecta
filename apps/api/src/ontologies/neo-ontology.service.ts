@@ -375,6 +375,84 @@ export class NeoOntologyService {
   }
 
   /**
+   * List all datasets in the ontology (lightweight, no fields or relationships)
+   */
+  async listDatasets(
+    ontologyId: string,
+  ): Promise<Array<{ name: string; description: string; source: string }>> {
+    return this.neoGraphService.readTransaction(async (tx) => {
+      const result = await tx.run(
+        `
+        MATCH (d:Dataset {ontologyId: $ontologyId})
+        RETURN d.name AS name, d.description AS description, d.source AS source
+        ORDER BY d.name
+        `,
+        { ontologyId },
+      );
+
+      return result.records.map((record) => ({
+        name: record.get('name') as string,
+        description: (record.get('description') as string) || '',
+        source: (record.get('source') as string) || '',
+      }));
+    });
+  }
+
+  /**
+   * Get specific datasets by name with YAML (for schema inspection)
+   */
+  async getDatasetsByNames(
+    ontologyId: string,
+    names: string[],
+  ): Promise<Array<{ name: string; description: string; source: string; yaml: string }>> {
+    return this.neoGraphService.readTransaction(async (tx) => {
+      const result = await tx.run(
+        `
+        MATCH (d:Dataset {ontologyId: $ontologyId})
+        WHERE d.name IN $names
+        RETURN d.name AS name, d.description AS description, d.source AS source, d.yaml AS yaml
+        `,
+        { ontologyId, names },
+      );
+
+      return result.records.map((record) => ({
+        name: record.get('name') as string,
+        description: (record.get('description') as string) || '',
+        source: (record.get('source') as string) || '',
+        yaml: (record.get('yaml') as string) || '',
+      }));
+    });
+  }
+
+  /**
+   * Get relationships involving specific datasets (for join hints)
+   */
+  async getDatasetRelationships(
+    ontologyId: string,
+    datasetNames: string[],
+  ): Promise<Array<{ fromDataset: string; toDataset: string; name: string; fromColumns: string; toColumns: string }>> {
+    return this.neoGraphService.readTransaction(async (tx) => {
+      const result = await tx.run(
+        `
+        MATCH (from:Dataset {ontologyId: $ontologyId})-[r:RELATES_TO]->(to:Dataset {ontologyId: $ontologyId})
+        WHERE from.name IN $datasetNames OR to.name IN $datasetNames
+        RETURN from.name AS fromDataset, to.name AS toDataset,
+               r.name AS name, r.fromColumns AS fromColumns, r.toColumns AS toColumns
+        `,
+        { ontologyId, datasetNames },
+      );
+
+      return result.records.map((record) => ({
+        fromDataset: record.get('fromDataset') as string,
+        toDataset: record.get('toDataset') as string,
+        name: (record.get('name') as string) || '',
+        fromColumns: (record.get('fromColumns') as string) || '[]',
+        toColumns: (record.get('toColumns') as string) || '[]',
+      }));
+    });
+  }
+
+  /**
    * Delete graph from Neo4j
    */
   async deleteGraph(ontologyId: string): Promise<void> {
