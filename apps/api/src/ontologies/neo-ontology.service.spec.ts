@@ -419,4 +419,218 @@ describe('NeoOntologyService', () => {
       );
     });
   });
+
+  describe('getAllRelationships', () => {
+    it('should return all relationships for an ontology with parsed columns', async () => {
+      mockNeoGraphService.readTransaction.mockImplementation(async (work: any) => {
+        const mockTx = {
+          run: jest.fn().mockResolvedValue({
+            records: [
+              mockRecord({
+                fromDataset: 'orders',
+                toDataset: 'customers',
+                name: 'order_customer',
+                fromColumns: '["customer_id"]',
+                toColumns: '["id"]',
+              }),
+              mockRecord({
+                fromDataset: 'orders',
+                toDataset: 'products',
+                name: 'order_product',
+                fromColumns: '["product_id"]',
+                toColumns: '["id"]',
+              }),
+            ],
+          }),
+        };
+        return work(mockTx);
+      });
+
+      const result = await service.getAllRelationships('ontology-123');
+
+      expect(result).toEqual([
+        {
+          fromDataset: 'orders',
+          toDataset: 'customers',
+          name: 'order_customer',
+          fromColumns: ['customer_id'],
+          toColumns: ['id'],
+        },
+        {
+          fromDataset: 'orders',
+          toDataset: 'products',
+          name: 'order_product',
+          fromColumns: ['product_id'],
+          toColumns: ['id'],
+        },
+      ]);
+    });
+
+    it('should return empty array when no relationships exist', async () => {
+      mockNeoGraphService.readTransaction.mockImplementation(async (work: any) => {
+        const mockTx = {
+          run: jest.fn().mockResolvedValue({
+            records: [],
+          }),
+        };
+        return work(mockTx);
+      });
+
+      const result = await service.getAllRelationships('ontology-empty');
+
+      expect(result).toEqual([]);
+    });
+
+    it('should handle null/missing fields gracefully with defaults', async () => {
+      mockNeoGraphService.readTransaction.mockImplementation(async (work: any) => {
+        const mockTx = {
+          run: jest.fn().mockResolvedValue({
+            records: [
+              mockRecord({
+                fromDataset: 'orders',
+                toDataset: 'customers',
+                name: null,
+                fromColumns: null,
+                toColumns: null,
+              }),
+              mockRecord({
+                fromDataset: 'products',
+                toDataset: 'categories',
+                name: undefined,
+                fromColumns: undefined,
+                toColumns: undefined,
+              }),
+            ],
+          }),
+        };
+        return work(mockTx);
+      });
+
+      const result = await service.getAllRelationships('ontology-123');
+
+      expect(result).toEqual([
+        {
+          fromDataset: 'orders',
+          toDataset: 'customers',
+          name: '',
+          fromColumns: [],
+          toColumns: [],
+        },
+        {
+          fromDataset: 'products',
+          toDataset: 'categories',
+          name: '',
+          fromColumns: [],
+          toColumns: [],
+        },
+      ]);
+    });
+  });
+
+  describe('findJoinPaths', () => {
+    it('should return shortest path between two datasets', async () => {
+      mockNeoGraphService.readTransaction.mockImplementation(async (work: any) => {
+        const mockTx = {
+          run: jest.fn().mockResolvedValue({
+            records: [
+              mockRecord({
+                pathNames: ['orders', 'customers'],
+                rels: [
+                  {
+                    from: 'orders',
+                    to: 'customers',
+                    name: 'order_customer',
+                    fromColumns: '["customer_id"]',
+                    toColumns: '["id"]',
+                  },
+                ],
+              }),
+            ],
+          }),
+        };
+        return work(mockTx);
+      });
+
+      const result = await service.findJoinPaths('ontology-123', 'orders', 'customers');
+
+      expect(result).toEqual([
+        {
+          datasets: ['orders', 'customers'],
+          edges: [
+            {
+              fromDataset: 'orders',
+              toDataset: 'customers',
+              name: 'order_customer',
+              fromColumns: ['customer_id'],
+              toColumns: ['id'],
+            },
+          ],
+        },
+      ]);
+    });
+
+    it('should return empty array when no path exists', async () => {
+      mockNeoGraphService.readTransaction.mockImplementation(async (work: any) => {
+        const mockTx = {
+          run: jest.fn().mockResolvedValue({
+            records: [],
+          }),
+        };
+        return work(mockTx);
+      });
+
+      const result = await service.findJoinPaths('ontology-123', 'isolated1', 'isolated2');
+
+      expect(result).toEqual([]);
+    });
+
+    it('should return multiple paths if available', async () => {
+      mockNeoGraphService.readTransaction.mockImplementation(async (work: any) => {
+        const mockTx = {
+          run: jest.fn().mockResolvedValue({
+            records: [
+              mockRecord({
+                pathNames: ['orders', 'customers'],
+                rels: [
+                  {
+                    from: 'orders',
+                    to: 'customers',
+                    name: 'order_customer',
+                    fromColumns: '["customer_id"]',
+                    toColumns: '["id"]',
+                  },
+                ],
+              }),
+              mockRecord({
+                pathNames: ['orders', 'payments', 'customers'],
+                rels: [
+                  {
+                    from: 'orders',
+                    to: 'payments',
+                    name: 'order_payment',
+                    fromColumns: '["id"]',
+                    toColumns: '["order_id"]',
+                  },
+                  {
+                    from: 'payments',
+                    to: 'customers',
+                    name: 'payment_customer',
+                    fromColumns: '["customer_id"]',
+                    toColumns: '["id"]',
+                  },
+                ],
+              }),
+            ],
+          }),
+        };
+        return work(mockTx);
+      });
+
+      const result = await service.findJoinPaths('ontology-123', 'orders', 'customers');
+
+      expect(result).toHaveLength(2);
+      expect(result[0].datasets).toEqual(['orders', 'customers']);
+      expect(result[1].datasets).toEqual(['orders', 'payments', 'customers']);
+    });
+  });
 });
