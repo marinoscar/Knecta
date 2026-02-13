@@ -113,6 +113,12 @@ export class DataAgentAgentService {
       this.logger.log(`Found ${relevantDatasets.length} relevant datasets`);
     }
 
+    // ── Step 3b: Pre-fetch YAML schemas for vector-matched datasets ──
+    const datasetNames = relevantDatasets.map((ds) => ds.name);
+    const relevantDatasetDetails = datasetNames.length > 0
+      ? await this.neoOntologyService.getDatasetsByNames(ontology.id, datasetNames)
+      : [];
+
     // ── Step 4: Load conversation history (last 10 messages) ──
     const previousMessages = await this.prisma.dataChatMessage.findMany({
       where: { chatId, status: 'complete' },
@@ -167,7 +173,8 @@ export class DataAgentAgentService {
         connectionId,
         databaseType,
         conversationContext,
-        relevantDatasets: relevantDatasets.map((ds) => ds.name),
+        relevantDatasets: datasetNames,
+        relevantDatasetDetails,
       });
 
       // ── Step 6: Persist final response ──
@@ -177,7 +184,7 @@ export class DataAgentAgentService {
       const metadata: DataAgentMessageMetadata = {
         toolCalls: finalState.toolCalls || [],
         tokensUsed: finalState.tokensUsed || { prompt: 0, completion: 0, total: 0 },
-        datasetsUsed: relevantDatasets.map((ds) => ds.name),
+        datasetsUsed: datasetNames,
         plan: finalState.plan || undefined,
         joinPlan: finalState.joinPlan || undefined,
         stepResults: finalState.stepResults || undefined,

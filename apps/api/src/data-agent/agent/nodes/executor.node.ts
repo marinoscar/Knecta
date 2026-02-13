@@ -20,6 +20,12 @@ export function createExecutorNode(
     const trackedToolCalls: TrackedToolCall[] = [];
     const plan = state.plan!;
 
+    // Build schema reference string from joinPlan YAML for repair/python prompts
+    const joinPlan = state.joinPlan;
+    const datasetSchemas = joinPlan?.relevantDatasets
+      .map((ds) => `### ${ds.name} (${ds.source})\n\`\`\`yaml\n${ds.yaml}\n\`\`\``)
+      .join('\n\n') || '';
+
     try {
       for (const step of plan.steps) {
         emit({ type: 'step_start', stepId: step.id, description: step.description, strategy: step.strategy });
@@ -60,7 +66,7 @@ export function createExecutorNode(
               emit({ type: 'tool_error', phase: 'executor', stepId: step.id, name: 'query_database', error: errMsg });
 
               try {
-                const repairPrompt = buildExecutorRepairPrompt(step.description, querySpec.pilotSql, errMsg, state.databaseType);
+                const repairPrompt = buildExecutorRepairPrompt(step.description, querySpec.pilotSql, errMsg, state.databaseType, datasetSchemas);
                 const repairResponse = await llm.invoke([new SystemMessage(repairPrompt)]);
                 const repairedSql = typeof repairResponse.content === 'string' ? repairResponse.content.trim() : '';
                 if (repairedSql) {
@@ -109,6 +115,7 @@ export function createExecutorNode(
               step.strategy,
               stepResult.sqlResult?.data || null,
               priorContext,
+              datasetSchemas,
             );
 
             const codeResponse = await llm.invoke([

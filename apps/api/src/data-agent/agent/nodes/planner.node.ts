@@ -39,6 +39,7 @@ export function createPlannerNode(llm: any, emit: EmitFn) {
       const systemPrompt = buildPlannerPrompt(
         state.conversationContext,
         state.relevantDatasets,
+        state.relevantDatasetDetails,
       );
 
       const structuredLlm = llm.withStructuredOutput(PlanArtifactSchema, {
