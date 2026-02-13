@@ -17,6 +17,7 @@ import {
   createMockSemanticModel,
 } from './fixtures/test-data.factory';
 import { randomBytes } from 'crypto';
+import { NeoOntologyService } from '../src/ontologies/neo-ontology.service';
 
 describe('Ontologies (Integration)', () => {
   let context: TestContext;
@@ -69,21 +70,21 @@ describe('Ontologies (Integration)', () => {
       const contributor = await createMockContributorUser(context);
 
       const mockSemanticModel = createMockSemanticModel({
-        id: 'sm-uuid-1',
+        id: '11111111-1111-1111-1111-111111111111',
         name: 'Test Model',
-        connectionId: 'conn-uuid-1',
+        connectionId: '33333333-3333-3333-3333-333333333333',
         ownerId: contributor.id,
       });
 
       const mockOntologies = [
         createMockOntology({
-          id: 'ont-uuid-1',
+          id: '44444444-4444-4444-4444-444444444444',
           name: 'Ontology 1',
           semanticModelId: mockSemanticModel.id,
           ownerId: contributor.id,
         }),
         createMockOntology({
-          id: 'ont-uuid-2',
+          id: '55555555-5555-5555-5555-555555555555',
           name: 'Ontology 2',
           semanticModelId: mockSemanticModel.id,
           ownerId: contributor.id,
@@ -124,9 +125,9 @@ describe('Ontologies (Integration)', () => {
 
       const mockOntologies = [
         createMockOntology({
-          id: 'ont-uuid-1',
+          id: '44444444-4444-4444-4444-444444444444',
           name: 'Ready Ontology',
-          semanticModelId: 'sm-uuid-1',
+          semanticModelId: '11111111-1111-1111-1111-111111111111',
           status: 'ready',
           ownerId: contributor.id,
         }),
@@ -155,9 +156,9 @@ describe('Ontologies (Integration)', () => {
 
       const mockOntologies = [
         createMockOntology({
-          id: 'ont-uuid-1',
+          id: '44444444-4444-4444-4444-444444444444',
           name: 'Sales Ontology',
-          semanticModelId: 'sm-uuid-1',
+          semanticModelId: '11111111-1111-1111-1111-111111111111',
           ownerId: contributor.id,
         }),
       ];
@@ -191,9 +192,9 @@ describe('Ontologies (Integration)', () => {
 
       const mockOntologies = [
         createMockOntology({
-          id: 'ont-uuid-1',
+          id: '44444444-4444-4444-4444-444444444444',
           name: 'My Ontology',
-          semanticModelId: 'sm-uuid-1',
+          semanticModelId: '11111111-1111-1111-1111-111111111111',
           ownerId: contributor.id,
         }),
       ];
@@ -243,9 +244,9 @@ describe('Ontologies (Integration)', () => {
       const contributor = await createMockContributorUser(context);
 
       const mockSemanticModel = createMockSemanticModel({
-        id: 'sm-uuid-1',
+        id: '11111111-1111-1111-1111-111111111111',
         name: 'Test Model',
-        connectionId: 'conn-uuid-1',
+        connectionId: '33333333-3333-3333-3333-333333333333',
         ownerId: contributor.id,
       });
 
@@ -322,7 +323,7 @@ describe('Ontologies (Integration)', () => {
         .post('/api/ontologies')
         .send({
           name: 'Test Ontology',
-          semanticModelId: 'sm-uuid-1',
+          semanticModelId: '11111111-1111-1111-1111-111111111111',
         })
         .expect(401);
     });
@@ -335,7 +336,7 @@ describe('Ontologies (Integration)', () => {
         .set(authHeader(viewer.accessToken))
         .send({
           name: 'Test Ontology',
-          semanticModelId: 'sm-uuid-1',
+          semanticModelId: '11111111-1111-1111-1111-111111111111',
         })
         .expect(403);
     });
@@ -359,9 +360,9 @@ describe('Ontologies (Integration)', () => {
       const contributor = await createMockContributorUser(context);
 
       const mockSemanticModel = createMockSemanticModel({
-        id: 'sm-uuid-1',
+        id: '11111111-1111-1111-1111-111111111111',
         name: 'Test Model',
-        connectionId: 'conn-uuid-1',
+        connectionId: '33333333-3333-3333-3333-333333333333',
         status: 'generating', // Not ready
         ownerId: contributor.id,
       });
@@ -375,7 +376,7 @@ describe('Ontologies (Integration)', () => {
         .set(authHeader(contributor.accessToken))
         .send({
           name: 'Test Ontology',
-          semanticModelId: 'sm-uuid-1',
+          semanticModelId: '11111111-1111-1111-1111-111111111111',
         })
         .expect(400);
     });
@@ -384,9 +385,9 @@ describe('Ontologies (Integration)', () => {
       const contributor = await createMockContributorUser(context);
 
       const mockSemanticModel = createMockSemanticModel({
-        id: 'sm-uuid-1',
+        id: '11111111-1111-1111-1111-111111111111',
         name: 'Test Model',
-        connectionId: 'conn-uuid-1',
+        connectionId: '33333333-3333-3333-3333-333333333333',
         status: 'ready',
         ownerId: contributor.id,
         model: {
@@ -415,7 +416,7 @@ describe('Ontologies (Integration)', () => {
       });
 
       const mockOntology = createMockOntology({
-        id: 'ont-uuid-1',
+        id: '44444444-4444-4444-4444-444444444444',
         name: 'Test Ontology',
         description: 'Test description',
         semanticModelId: mockSemanticModel.id,
@@ -454,7 +455,7 @@ describe('Ontologies (Integration)', () => {
 
       // Mock NeoOntologyService.createGraph
       const mockNeoOntologyService =
-        context.app.get('NeoOntologyService') as any;
+        context.module.get(NeoOntologyService) as any;
       if (mockNeoOntologyService && mockNeoOntologyService.createGraph) {
         mockNeoOntologyService.createGraph.mockResolvedValue({
           nodeCount: 25,
@@ -468,7 +469,7 @@ describe('Ontologies (Integration)', () => {
         .send({
           name: 'Test Ontology',
           description: 'Test description',
-          semanticModelId: 'sm-uuid-1',
+          semanticModelId: '11111111-1111-1111-1111-111111111111',
         })
         .expect(201);
 
@@ -485,9 +486,9 @@ describe('Ontologies (Integration)', () => {
       const contributor = await createMockContributorUser(context);
 
       const mockSemanticModel = createMockSemanticModel({
-        id: 'sm-uuid-1',
+        id: '11111111-1111-1111-1111-111111111111',
         name: 'Test Model',
-        connectionId: 'conn-uuid-1',
+        connectionId: '33333333-3333-3333-3333-333333333333',
         status: 'ready',
         ownerId: contributor.id,
         model: {
@@ -502,7 +503,7 @@ describe('Ontologies (Integration)', () => {
       });
 
       const mockOntology = createMockOntology({
-        id: 'ont-uuid-1',
+        id: '44444444-4444-4444-4444-444444444444',
         name: 'Test Ontology',
         semanticModelId: mockSemanticModel.id,
         status: 'failed',
@@ -530,7 +531,7 @@ describe('Ontologies (Integration)', () => {
 
       // Mock NeoOntologyService.createGraph to throw error
       const mockNeoOntologyService =
-        context.app.get('NeoOntologyService') as any;
+        context.module.get(NeoOntologyService) as any;
       if (mockNeoOntologyService && mockNeoOntologyService.createGraph) {
         mockNeoOntologyService.createGraph.mockRejectedValue(
           new Error('Neo4j connection failed'),
@@ -542,7 +543,7 @@ describe('Ontologies (Integration)', () => {
         .set(authHeader(contributor.accessToken))
         .send({
           name: 'Test Ontology',
-          semanticModelId: 'sm-uuid-1',
+          semanticModelId: '11111111-1111-1111-1111-111111111111',
         })
         .expect(201);
 
@@ -590,7 +591,7 @@ describe('Ontologies (Integration)', () => {
       const mockOntology = createMockOntology({
         id: '123e4567-e89b-12d3-a456-426614174001',
         name: 'To Delete',
-        semanticModelId: 'sm-uuid-1',
+        semanticModelId: '11111111-1111-1111-1111-111111111111',
         ownerId: contributor.id,
       });
 
@@ -600,7 +601,7 @@ describe('Ontologies (Integration)', () => {
 
       // Mock NeoOntologyService.deleteGraph
       const mockNeoOntologyService =
-        context.app.get('NeoOntologyService') as any;
+        context.module.get(NeoOntologyService) as any;
       if (mockNeoOntologyService && mockNeoOntologyService.deleteGraph) {
         mockNeoOntologyService.deleteGraph.mockResolvedValue(undefined);
       }
@@ -633,7 +634,7 @@ describe('Ontologies (Integration)', () => {
       const mockOntology = createMockOntology({
         id: '123e4567-e89b-12d3-a456-426614174001',
         name: 'Test Ontology',
-        semanticModelId: 'sm-uuid-1',
+        semanticModelId: '11111111-1111-1111-1111-111111111111',
         status: 'ready',
         ownerId: contributor.id,
       });
@@ -668,7 +669,7 @@ describe('Ontologies (Integration)', () => {
 
       // Mock NeoOntologyService.getGraph
       const mockNeoOntologyService =
-        context.app.get('NeoOntologyService') as any;
+        context.module.get(NeoOntologyService) as any;
       if (mockNeoOntologyService && mockNeoOntologyService.getGraph) {
         mockNeoOntologyService.getGraph.mockResolvedValue(mockGraph);
       }
@@ -692,7 +693,7 @@ describe('Ontologies (Integration)', () => {
       const mockOntology = createMockOntology({
         id: '123e4567-e89b-12d3-a456-426614174001',
         name: 'Test Ontology',
-        semanticModelId: 'sm-uuid-1',
+        semanticModelId: '11111111-1111-1111-1111-111111111111',
         status: 'creating', // Not ready
         ownerId: contributor.id,
       });

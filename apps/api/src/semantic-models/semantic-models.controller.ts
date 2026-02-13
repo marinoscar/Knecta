@@ -126,6 +126,7 @@ export class SemanticModelsController {
   }
 
   @Post('validate')
+  @HttpCode(HttpStatus.OK)
   @Auth({ permissions: [PERMISSIONS.SEMANTIC_MODELS_WRITE] })
   @ApiOperation({ summary: 'Validate a semantic model structure' })
   @ApiResponse({ status: 200, description: 'Validation result' })

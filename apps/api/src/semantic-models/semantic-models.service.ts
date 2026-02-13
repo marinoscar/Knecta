@@ -131,8 +131,10 @@ export class SemanticModelsService {
       if (!validationResult.isValid) {
         throw new UnprocessableEntityException({
           message: 'Semantic model validation failed',
-          fatalIssues: validationResult.fatalIssues,
-          warnings: validationResult.warnings,
+          details: {
+            fatalIssues: validationResult.fatalIssues,
+            warnings: validationResult.warnings,
+          },
         });
       }
 

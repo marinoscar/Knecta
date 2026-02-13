@@ -8,6 +8,7 @@ import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { NeoGraphService } from '../../src/neo-graph/neo-graph.service';
 import { NeoVectorService } from '../../src/neo-graph/neo-vector.service';
+import { NeoOntologyService } from '../../src/ontologies/neo-ontology.service';
 import { prismaMock } from '../mocks/prisma.mock';
 
 export interface TestContext {
@@ -72,6 +73,18 @@ export async function createTestApp(
     searchSimilar: jest.fn().mockResolvedValue([]),
   };
 
+  const neoOntologyMock = {
+    createGraph: jest.fn().mockResolvedValue({ nodeCount: 0, relationshipCount: 0 }),
+    getGraph: jest.fn().mockResolvedValue({ nodes: [], edges: [] }),
+    deleteGraph: jest.fn().mockResolvedValue(undefined),
+    listDatasets: jest.fn().mockResolvedValue([]),
+    getDatasetsByNames: jest.fn().mockResolvedValue([]),
+    getDatasetRelationships: jest.fn().mockResolvedValue([]),
+    getAllRelationships: jest.fn().mockResolvedValue([]),
+    findJoinPaths: jest.fn().mockResolvedValue([]),
+    backfillEmbeddings: jest.fn().mockResolvedValue(undefined),
+  };
+
   let moduleFixture: TestingModule;
 
   if (shouldUseMock) {
@@ -85,6 +98,8 @@ export async function createTestApp(
       .useValue(neoGraphMock)
       .overrideProvider(NeoVectorService)
       .useValue(neoVectorMock)
+      .overrideProvider(NeoOntologyService)
+      .useValue(neoOntologyMock)
       .compile();
   } else {
     // Create test module with real database but mocked Neo4j (for true E2E tests)
@@ -95,6 +110,8 @@ export async function createTestApp(
       .useValue(neoGraphMock)
       .overrideProvider(NeoVectorService)
       .useValue(neoVectorMock)
+      .overrideProvider(NeoOntologyService)
+      .useValue(neoOntologyMock)
       .compile();
   }
 

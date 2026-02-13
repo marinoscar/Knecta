@@ -516,9 +516,10 @@ describe('Semantic Models (Integration)', () => {
         .expect(422);
 
       expect(response.body.message).toBe('Semantic model validation failed');
-      expect(response.body.fatalIssues).toBeDefined();
-      expect(Array.isArray(response.body.fatalIssues)).toBe(true);
-      expect(response.body.fatalIssues.length).toBeGreaterThan(0);
+      expect(response.body.details).toBeDefined();
+      expect(response.body.details.fatalIssues).toBeDefined();
+      expect(Array.isArray(response.body.details.fatalIssues)).toBe(true);
+      expect(response.body.details.fatalIssues.length).toBeGreaterThan(0);
     });
 
     it('should auto-fix minor issues and return fixedIssues', async () => {
