@@ -20,6 +20,8 @@ services:
     environment:
       - NODE_ENV=development
       - NODE_OPTIONS=--max-old-space-size=4096
+    extra_hosts:
+      - "pgadmin.local:host-gateway"
     command: npm run start:dev
 
   # ---------------------------------------------------------------------------
