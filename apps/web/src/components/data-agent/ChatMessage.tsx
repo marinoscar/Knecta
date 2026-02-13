@@ -1,4 +1,4 @@
-import { Box, Paper, Typography, IconButton, useTheme } from '@mui/material';
+import { Box, Paper, Typography, IconButton, useTheme, Chip } from '@mui/material';
 import { ContentCopy as CopyIcon } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -245,6 +245,26 @@ export function ChatMessage({ message }: ChatMessageProps) {
           >
             {message.content}
           </ReactMarkdown>
+        )}
+
+        {/* Verification and lineage info for completed messages */}
+        {message.status === 'complete' && message.metadata?.verificationReport && (
+          <Box sx={{ mt: 1, pt: 1, borderTop: 1, borderColor: 'divider' }}>
+            <Chip
+              label={message.metadata.verificationReport.passed ? 'Verified' : 'Unverified'}
+              color={message.metadata.verificationReport.passed ? 'success' : 'warning'}
+              size="small"
+              variant="outlined"
+              sx={{ mr: 1 }}
+            />
+            {message.metadata.dataLineage && (
+              <Typography variant="caption" color="text.secondary" component="span">
+                {message.metadata.dataLineage.datasets.length} dataset(s)
+                {message.metadata.dataLineage.rowCount !== null && ` · ${message.metadata.dataLineage.rowCount} rows`}
+                {message.metadata.dataLineage.grain && ` · ${message.metadata.dataLineage.grain}`}
+              </Typography>
+            )}
+          </Box>
         )}
       </Paper>
     </Box>

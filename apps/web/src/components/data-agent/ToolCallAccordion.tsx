@@ -27,29 +27,39 @@ interface ToolCall {
   args?: Record<string, unknown>;
   result?: string;
   isComplete: boolean;
+  phase?: string;
+  stepId?: number;
 }
 
 function extractToolCalls(events: DataAgentStreamEvent[]): ToolCall[] {
-  const toolCalls: Map<string, ToolCall> = new Map();
+  const toolCalls: ToolCall[] = [];
+  const toolCallById = new Map<string, ToolCall>();
 
   for (const event of events) {
-    if (event.type === 'tool_call' && event.name) {
-      toolCalls.set(event.name, {
+    if ((event.type === 'tool_call' || event.type === 'tool_start') && event.name) {
+      // Use a composite key to handle multiple calls to the same tool
+      const key = `${event.name}-${toolCalls.length}`;
+      const entry: ToolCall = {
         name: event.name,
         args: event.args,
         result: undefined,
         isComplete: false,
-      });
-    } else if (event.type === 'tool_result' && event.name) {
-      const existing = toolCalls.get(event.name);
+        phase: event.phase,
+        stepId: event.stepId,
+      };
+      toolCalls.push(entry);
+      toolCallById.set(event.name, entry);
+    } else if ((event.type === 'tool_result' || event.type === 'tool_end') && event.name) {
+      const existing = toolCallById.get(event.name);
       if (existing) {
         existing.result = event.result;
         existing.isComplete = true;
+        toolCallById.delete(event.name); // Allow next call to same tool to create new entry
       }
     }
   }
 
-  return Array.from(toolCalls.values());
+  return toolCalls;
 }
 
 export function ToolCallAccordion({ events, isStreaming }: ToolCallAccordionProps) {
@@ -119,6 +129,9 @@ export function ToolCallAccordion({ events, isStreaming }: ToolCallAccordionProp
                 <Typography variant="body2" fontWeight="medium">
                   {toolCall.name}
                 </Typography>
+                {toolCall.phase && (
+                  <Chip label={toolCall.phase} size="small" variant="outlined" sx={{ ml: 1, height: 20, fontSize: '0.65rem' }} />
+                )}
                 {!toolCall.isComplete && (
                   <CircularProgress size={16} sx={{ ml: 1 }} />
                 )}

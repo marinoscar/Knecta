@@ -15,6 +15,7 @@ import {
 import { Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
 import { ChatMessage } from './ChatMessage';
 import { ToolCallAccordion } from './ToolCallAccordion';
+import { PhaseIndicator } from './PhaseIndicator';
 import type { DataChat, DataChatMessage, DataAgentStreamEvent } from '../../types';
 
 interface ChatViewProps {
@@ -165,12 +166,15 @@ export function ChatView({
             {messages.map((message, index) => (
               <Box key={message.id}>
                 <ChatMessage message={message} />
-                {/* Show tool calls above the current streaming assistant message */}
+                {/* Show phase indicator and tool calls above the current streaming assistant message */}
                 {message.role === 'assistant' &&
                   message.status === 'generating' &&
                   index === messages.length - 1 &&
                   streamEvents.length > 0 && (
-                    <ToolCallAccordion events={streamEvents} isStreaming={isStreaming} />
+                    <>
+                      <PhaseIndicator events={streamEvents} isStreaming={isStreaming} />
+                      <ToolCallAccordion events={streamEvents} isStreaming={isStreaming} />
+                    </>
                   )}
               </Box>
             ))}
