@@ -370,11 +370,27 @@ export interface DataChatMessage {
   role: 'user' | 'assistant';
   content: string;
   metadata?: {
-    toolCalls?: Array<{ name: string; args: Record<string, unknown> }>;
+    toolCalls?: Array<{ phase?: string; stepId?: number; name: string; args: Record<string, unknown>; result?: string }>;
     tokensUsed?: { prompt: number; completion: number; total: number };
     datasetsUsed?: string[];
     error?: string;
     claimed?: boolean;
+    plan?: {
+      complexity: 'simple' | 'analytical';
+      intent: string;
+      steps: Array<{ id: number; description: string; strategy: string }>;
+    };
+    verificationReport?: {
+      passed: boolean;
+      checks: Array<{ name: string; passed: boolean; message: string }>;
+    };
+    dataLineage?: {
+      datasets: string[];
+      joins: Array<{ from: string; to: string; on: string }>;
+      grain: string;
+      rowCount: number | null;
+    };
+    revisionsUsed?: number;
   };
   status: 'generating' | 'complete' | 'failed';
   createdAt: string;
@@ -389,7 +405,22 @@ export interface DataChatsResponse {
 }
 
 export interface DataAgentStreamEvent {
-  type: 'message_start' | 'tool_call' | 'tool_result' | 'text' | 'token_update' | 'message_complete' | 'message_error';
+  type:
+    | 'message_start'
+    | 'tool_call'
+    | 'tool_result'
+    | 'text'
+    | 'token_update'
+    | 'message_complete'
+    | 'message_error'
+    | 'phase_start'
+    | 'phase_complete'
+    | 'phase_artifact'
+    | 'step_start'
+    | 'step_complete'
+    | 'tool_start'
+    | 'tool_end'
+    | 'tool_error';
   name?: string;
   args?: Record<string, unknown>;
   result?: string;
@@ -397,4 +428,11 @@ export interface DataAgentStreamEvent {
   metadata?: Record<string, unknown>;
   message?: string;
   tokensUsed?: { prompt: number; completion: number; total: number };
+  // New phase/step fields
+  phase?: string;
+  description?: string;
+  artifact?: Record<string, unknown>;
+  stepId?: number;
+  strategy?: string;
+  error?: string;
 }
