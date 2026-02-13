@@ -1,10 +1,19 @@
 export function buildPlannerPrompt(
   conversationContext: string,
   relevantDatasets: string[],
+  relevantDatasetDetails?: Array<{ name: string; description: string; source: string; yaml: string }>,
 ): string {
-  const datasetsSection = relevantDatasets.length > 0
-    ? `Datasets found via semantic search: ${relevantDatasets.join(', ')}`
-    : 'No datasets were pre-matched. The navigator will discover relevant tables.';
+  let datasetsSection: string;
+  if (relevantDatasetDetails && relevantDatasetDetails.length > 0) {
+    datasetsSection = 'Available datasets and their schemas (from semantic model):\n\n' +
+      relevantDatasetDetails
+        .map((ds) => `### ${ds.name}\nSource: \`${ds.source}\`\n${ds.description}\n\n\`\`\`yaml\n${ds.yaml}\n\`\`\``)
+        .join('\n\n');
+  } else if (relevantDatasets.length > 0) {
+    datasetsSection = `Datasets found via semantic search: ${relevantDatasets.join(', ')}`;
+  } else {
+    datasetsSection = 'No datasets were pre-matched. The navigator will discover relevant tables.';
+  }
 
   return `You are a data analysis planner. Your job is to decompose the user's question into a structured execution plan.
 
@@ -32,7 +41,7 @@ Analyze the question and produce a structured plan with ordered sub-tasks. Each 
 6. Be specific about what columns, metrics, and dimensions are relevant.
 7. Include acceptance checks that the verifier should run.
 
-## Available Context
+## Available Datasets
 
 ${datasetsSection}
 

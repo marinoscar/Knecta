@@ -6,10 +6,10 @@ export function buildSqlBuilderPrompt(
   databaseType: string,
   revisionDiagnosis: string | null,
 ): string {
-  // Build dataset schema section
+  // Build dataset schema section with full YAML from semantic model
   const schemaSection = joinPlan.relevantDatasets
-    .map((ds) => `- **${ds.name}** (source: ${ds.source}): ${ds.description}`)
-    .join('\n');
+    .map((ds) => `### ${ds.name}\nSource: \`${ds.source}\`\n${ds.description}\n\n\`\`\`yaml\n${ds.yaml}\n\`\`\``)
+    .join('\n\n');
 
   // Build join paths section
   const joinSection = joinPlan.joinPaths
@@ -37,7 +37,10 @@ export function buildSqlBuilderPrompt(
 ## Database Type
 ${databaseType}
 
-## Available Datasets
+## Dataset Schemas (from semantic model)
+
+The YAML below is the **authoritative schema** for each dataset. Use ONLY column names, types, and expressions from these definitions. Do NOT guess or invent column names.
+
 ${schemaSection || 'No datasets specified.'}
 
 ## Join Paths (from ontology)
@@ -48,7 +51,7 @@ ${stepsSection || 'No SQL steps found.'}
 ${revisionSection}
 ## Rules
 
-1. Use ONLY the join paths from the ontology above. Do NOT guess join keys.
+1. Use ONLY the column names from the semantic model YAML above and join paths from the ontology. Do NOT guess column names or join keys.
 2. Use schema-qualified table names from the dataset 'source' field.
 3. For each step, generate TWO queries:
    - **Pilot SQL**: A lightweight probe (LIMIT 10) to verify the query structure works
