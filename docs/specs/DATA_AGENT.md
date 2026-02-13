@@ -4,45 +4,52 @@
 
 1. [Feature Overview](#feature-overview)
 2. [Architecture](#architecture)
-3. [Database Schema](#database-schema)
-4. [API Endpoints](#api-endpoints)
-5. [Security](#security)
-6. [RBAC Permissions](#rbac-permissions)
-7. [Embedding Service](#embedding-service)
-8. [Neo4j Vector Search](#neo4j-vector-search)
-9. [Agent Architecture](#agent-architecture)
-10. [SSE Streaming](#sse-streaming)
-11. [Docker Python Sandbox](#docker-python-sandbox)
-12. [Frontend Components](#frontend-components)
-13. [Configuration](#configuration)
-14. [File Inventory](#file-inventory)
-15. [Testing](#testing)
-16. [Packages](#packages)
+3. [Multi-Phase Agent Architecture](#multi-phase-agent-architecture)
+4. [Phase Descriptions](#phase-descriptions)
+5. [Sub-Task Decomposition](#sub-task-decomposition)
+6. [Conditional Routing](#conditional-routing)
+7. [State Schema](#state-schema)
+8. [Tool Definitions](#tool-definitions)
+9. [SSE Streaming](#sse-streaming)
+10. [Message Metadata](#message-metadata)
+11. [Database Schema](#database-schema)
+12. [API Endpoints](#api-endpoints)
+13. [Security](#security)
+14. [RBAC Permissions](#rbac-permissions)
+15. [Embedding Service](#embedding-service)
+16. [Neo4j Vector Search](#neo4j-vector-search)
+17. [Docker Python Sandbox](#docker-python-sandbox)
+18. [Frontend Components](#frontend-components)
+19. [Configuration](#configuration)
+20. [File Inventory](#file-inventory)
+21. [Testing](#testing)
+22. [Packages](#packages)
 
 ---
 
 ## Feature Overview
 
-The Data Agent feature enables natural language querying and analysis of data through ontology graphs. Users interact with a ChatGPT-style interface where an AI agent understands their questions, finds relevant datasets, executes SQL queries, and performs Python-based analysis with visualizations.
+The Data Agent feature enables natural language querying and analysis of data through ontology graphs. Users interact with a ChatGPT-style interface where a multi-phase AI agent decomposes complex questions, discovers datasets, builds validated SQL, executes queries, verifies results with mandatory Python checks, and synthesizes narrative answers with data lineage.
 
 ### Core Capabilities
 
-- **Natural Language Querying**: Ask questions about data in plain English
-- **Intelligent Dataset Discovery**: Vector similarity search finds relevant datasets from ontology graph
-- **ReAct Agent Pattern**: Iterative tool-calling for complex multi-step analysis
-- **Read-Only SQL Execution**: Safe query execution with 30s timeout and SELECT-only enforcement
+- **Multi-Phase Analytical Pipeline**: 6 specialized phases (Planner, Navigator, SQL Builder, Executor, Verifier, Explainer) with structured artifacts
+- **Sub-Task Decomposition**: Complex questions automatically broken into ordered execution steps with dependencies
+- **Intelligent Dataset Discovery**: Vector similarity search + graph relationship navigation for join path discovery
+- **Mandatory Verification Gate**: Python-based validation of SQL results with automatic revision loops
+- **Progressive SQL Execution**: Pilot queries (10 rows) followed by full queries to catch errors early
 - **Python Analysis Sandbox**: Isolated Docker environment for data analysis and chart generation
-- **Conversational History**: Persistent chat threads with full context retrieval
-- **Real-Time Streaming**: SSE-based streaming of agent reasoning and tool execution
-- **ChatGPT-Style UI**: Modern chat interface with markdown rendering, syntax highlighting, and image display
+- **Conversational History**: Persistent chat threads with full context retrieval and metadata
+- **Real-Time Phase Progress**: SSE streaming of phase transitions, sub-task execution, and tool calls
+- **ChatGPT-Style UI**: Modern chat interface with phase indicators, verification badges, and data lineage
 
 ### Use Cases
 
-1. **Business Analysts**: Query sales trends, customer metrics, and KPIs without SQL knowledge
-2. **Data Scientists**: Perform exploratory data analysis with automatic chart generation
-3. **Product Managers**: Get quick insights and data visualizations for decision-making
-4. **Developers**: Test semantic models by asking natural language questions
-5. **Executives**: Access business intelligence through conversational interface
+1. **Complex Analytical Questions**: "Why is Houston underperforming?" → Multi-step decomposition with variance analysis
+2. **Cross-Dataset Joins**: Automatic discovery of join paths through ontology graph relationships
+3. **Data Quality Validation**: Verifier catches grain issues, duplicate joins, and incorrect aggregations
+4. **Exploratory Analysis**: Progressive execution with Python-based statistical analysis and charts
+5. **Auditable Results**: Full data lineage tracking datasets, joins, filters, time windows, and grain
 
 ### Current Limitations
 
@@ -51,13 +58,14 @@ The Data Agent feature enables natural language querying and analysis of data th
 - **Single Ontology per Chat**: Each conversation scoped to one ontology
 - **30s Query Timeout**: Long-running queries will timeout
 - **512MB Sandbox Memory**: Large dataset processing may hit memory limits
+- **3 Revision Cycles**: Verifier allows maximum 3 revision attempts before returning with caveats
 - **No External Network**: Python sandbox cannot access external APIs or packages beyond pre-installed
 
 ---
 
 ## Architecture
 
-The Data Agent uses a multi-service architecture combining NestJS backend, Neo4j vector search, LangGraph ReAct agent, and Docker-isolated Python execution:
+The Data Agent uses a multi-service architecture combining NestJS backend, Neo4j vector search + graph navigation, LangGraph StateGraph with 6 phases, and Docker-isolated Python execution:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -65,9 +73,10 @@ The Data Agent uses a multi-service architecture combining NestJS backend, Neo4j
 │  React + Material UI + SSE Streaming                                 │
 │                                                                       │
 │  ChatSidebar (conversation list)                                     │
-│  ChatView (message display with markdown + charts)                   │
+│  ChatView (message display + PhaseIndicator)                         │
 │  ChatInput (textarea with Enter to send)                             │
-│  ToolCallAccordion (collapsible tool execution details)              │
+│  ChatMessage (verification badge + data lineage)                     │
+│  ToolCallAccordion (grouped by phase + step)                         │
 │  WelcomeScreen (empty state with suggestions)                        │
 │  NewChatDialog (ontology selection)                                  │
 └────────────────────────────┬─────────────────────────────────────────┘
@@ -84,29 +93,38 @@ The Data Agent uses a multi-service architecture combining NestJS backend, Neo4j
 │           ↓                                                           │
 │  AgentStreamController (SSE streaming endpoint)                      │
 │           ↓                                                           │
-│  DataAgentAgentService (ReAct agent orchestration)                   │
+│  DataAgentAgentService (StateGraph orchestration)                    │
 │           ↓                                                           │
 │  ┌───────────────────────────────────────────────────────────────┐  │
-│  │ ReAct Agent (LangGraph)                                       │  │
+│  │ Multi-Phase StateGraph (LangGraph)                            │  │
 │  │                                                                │  │
-│  │  Tools:                                                       │  │
-│  │  1. query_database → DiscoveryService → Database             │  │
-│  │  2. get_dataset_details → NeoOntologyService → Neo4j         │  │
-│  │  3. get_sample_data → DiscoveryService → Database            │  │
-│  │  4. run_python → SandboxService → Docker Container           │  │
-│  │  5. list_datasets → NeoOntologyService → Neo4j               │  │
+│  │  START → [Planner] ──────────→ [Navigator] ──→ [SQL Builder] │  │
+│  │              │                       │              │         │  │
+│  │              │ (simple)              │              │         │  │
+│  │              ↓                       │              │         │  │
+│  │          [Executor] ←────────────────┴──────────────┘         │  │
+│  │              │                                                 │  │
+│  │              ↓                                                 │  │
+│  │          [Verifier] ─────→ [Explainer] → END                  │  │
+│  │              │                                                 │  │
+│  │              │ (fail, revisions < 3)                          │  │
+│  │              ↓                                                 │  │
+│  │          [Navigator/SQL Builder] (revision loop)              │  │
 │  │                                                                │  │
-│  │  System Prompt:                                               │  │
-│  │  - Relevant datasets (top 10 from vector search)             │  │
-│  │  - Relationship join hints (FK paths between tables)         │  │
-│  │  - Conversation history (last 10 messages with tool context) │  │
-│  │  - Database type and constraints                             │  │
-│  │  - Error recovery strategies                                 │  │
+│  │  Tools per Phase:                                             │  │
+│  │  - Planner: none (structured output)                          │  │
+│  │  - Navigator: list_datasets, get_dataset_details,            │  │
+│  │               get_relationships (mini-ReAct)                  │  │
+│  │  - SQL Builder: get_dataset_details, get_sample_data         │  │
+│  │  - Executor: query_database, run_python                      │  │
+│  │  - Verifier: run_python (validation checks)                  │  │
+│  │  - Explainer: run_python (charts)                            │  │
 │  └───────────────────────────────────────────────────────────────┘  │
 │                                                                       │
 │  EmbeddingService (OpenAI text-embedding-3-small)                    │
 │           ↓                                                           │
 │  NeoVectorService (vector similarity search in Neo4j)                │
+│  NeoOntologyService (relationship navigation + join paths)           │
 └─────────────┬────────────────┬────────────────┬────────────────────┘
               │                │                │
               ▼                ▼                ▼
@@ -116,11 +134,12 @@ The Data Agent uses a multi-service architecture combining NestJS backend, Neo4j
 │ - data_chats     │  │ - Dataset nodes │  │                      │
 │ - data_chat_     │  │   with vector   │  │ - Flask server       │
 │   messages       │  │   embeddings    │  │ - pandas, numpy      │
-│                  │  │ - Vector index  │  │ - matplotlib         │
-│ - Conversation   │  │ - Similarity    │  │ - 512MB memory       │
-│   history        │  │   search        │  │ - Read-only FS       │
-└──────────────────┘  └─────────────────┘  │ - No network         │
-                                            └──────────────────────┘
+│                  │  │ - RELATES_TO    │  │ - matplotlib         │
+│ - Conversation   │  │   edges (joins) │  │ - 512MB memory       │
+│   history        │  │ - Vector index  │  │ - Read-only FS       │
+│ - Metadata with  │  │ - Join path     │  │ - No network         │
+│   phase artifacts│  │   discovery     │  │                      │
+└──────────────────┘  └─────────────────┘  └──────────────────────┘
 ```
 
 ### System Components
@@ -128,29 +147,1025 @@ The Data Agent uses a multi-service architecture combining NestJS backend, Neo4j
 #### Backend Modules
 - **DataAgentModule**: Main feature module
 - **DataAgentService**: CRUD operations for chats and messages
-- **DataAgentAgentService**: ReAct agent creation and execution
+- **DataAgentAgentService**: StateGraph creation and execution (replaces ReAct agent)
 - **AgentStreamController**: SSE streaming endpoint
 - **EmbeddingService**: Multi-provider embedding generation (OpenAI)
 - **NeoVectorService**: Vector index management and similarity search
+- **NeoOntologyService**: Relationship navigation and join path discovery (NEW methods)
 - **SandboxService**: Python code execution client
 - **DiscoveryService**: Database schema discovery and query execution
 
 #### Frontend Components
 - **DataAgentPage**: Full-page layout with sidebar + chat area
 - **ChatSidebar**: Conversation list with search, grouping, rename/delete
-- **ChatView**: Message display with auto-scroll and markdown rendering
-- **ChatMessage**: Individual message bubble with role-based styling
-- **ToolCallAccordion**: Collapsible tool execution display
+- **ChatView**: Message display with PhaseIndicator showing 6-phase progress
+- **ChatMessage**: Individual message bubble with verification badge and data lineage
+- **PhaseIndicator**: MUI Stepper showing current phase (NEW)
+- **ToolCallAccordion**: Collapsible tool execution display grouped by phase + step (UPDATED)
 - **ChatInput**: Auto-resize textarea with Enter to send
 - **WelcomeScreen**: Empty state with suggestion cards
 - **NewChatDialog**: Ontology selection for new chats
 
 #### External Services
-- **Neo4j**: Vector index on Dataset nodes for semantic search
+- **Neo4j**: Vector index on Dataset nodes + RELATES_TO edges for join paths
 - **PostgreSQL**: Chat and message persistence
 - **Docker Sandbox**: Isolated Python execution environment
 - **OpenAI API**: Embedding generation (text-embedding-3-small)
 - **LLM Provider**: Chat completion (OpenAI, Anthropic, or Azure)
+
+---
+
+## Multi-Phase Agent Architecture
+
+The Data Agent uses a custom LangGraph StateGraph with 6 specialized phase nodes. Each phase produces a structured artifact consumed by the next phase. A mandatory verification gate blocks incorrect answers with automatic revision loops (up to 3 cycles).
+
+### Phase Pipeline Diagram
+
+```
+START
+  |
+  v
+[Planner] ────────────────────────────────────────┐
+  |                                                |
+  | (analytical)                                   | (simple: schema questions,
+  |                                                |  conversational queries)
+  v                                                v
+[Navigator] ───> [SQL Builder] ───> [Executor] <──┘
+                                        |
+                                        v
+                                   [Verifier]
+                                        |
+                   ┌────────────────────┼────────────────────┐
+                   |                    |                    |
+           (pass)  |            (fail,  |            (fail,  |
+                   |         revisions<3)        revisions>=3)
+                   v                    |                    |
+              [Explainer] ──> END       |                    |
+                                        v                    v
+                           [Navigator/SQL Builder]     [Explainer]
+                              (revision loop)       (with caveats)
+```
+
+### Key Architectural Decisions
+
+1. **Structured Artifacts**: Each phase emits a typed artifact (PlanArtifact, JoinPlanArtifact, QuerySpec[], etc.) stored in state
+2. **Sub-Task Decomposition**: Planner ALWAYS decomposes questions into ordered steps with strategies (sql, python, sql_then_python)
+3. **Short-Circuit Path**: Simple questions (schema exploration, conversational) skip Navigator/SQL Builder/Verifier
+4. **Mandatory Verification**: All analytical queries require Python validation; failures trigger Navigator or SQL Builder revision
+5. **Progressive Execution**: SQL steps run pilot query (10 rows) before full query to catch errors early
+6. **Join Path Discovery**: Navigator uses Neo4j `shortestPath` algorithm to find RELATES_TO paths between datasets
+7. **No ReAct Loop in Main Graph**: Only Navigator uses mini-ReAct (max 8 iterations); other phases are single LLM calls with structured output
+
+---
+
+## Phase Descriptions
+
+### Phase 1: Planner
+
+**Purpose**: Decompose user question into ordered sub-tasks with execution strategies.
+
+**Inputs**:
+- `userQuestion`: Raw user query
+- `conversationContext`: Summarized history from last 10 messages
+- `relevantDatasets`: Top 10 datasets from vector search
+
+**Output**: `PlanArtifact`
+```typescript
+{
+  complexity: 'simple' | 'analytical',
+  intent: string,
+  metrics: string[],
+  dimensions: string[],
+  timeWindow: string | null,
+  filters: string[],
+  grain: string,
+  ambiguities: Array<{ question: string; assumption: string }>,
+  acceptanceChecks: string[],
+  steps: Array<{
+    id: number,
+    description: string,
+    strategy: 'sql' | 'python' | 'sql_then_python',
+    dependsOn: number[],
+    datasets: string[],
+    expectedOutput: string,
+  }>,
+}
+```
+
+**Tools**: None (pure structured output)
+
+**Key Behavior**:
+- ALWAYS produces sub-task list (even for simple questions, may be single step)
+- `complexity: 'simple'` triggers short-circuit to Executor (skip Navigator/SQL Builder/Verifier)
+- `complexity: 'analytical'` triggers full pipeline
+- Each step specifies:
+  - `strategy: 'sql'` → query database only
+  - `strategy: 'python'` → analysis/visualization only (uses prior step results)
+  - `strategy: 'sql_then_python'` → query then analyze
+- `dependsOn` creates execution order (e.g., step 3 needs results from steps 1 and 2)
+
+**Example**:
+Question: "Why is Houston underperforming?"
+```typescript
+{
+  complexity: 'analytical',
+  intent: 'Identify revenue drivers for Houston vs peer stores',
+  metrics: ['revenue', 'order_count', 'avg_order_value'],
+  dimensions: ['store_city', 'time_period'],
+  timeWindow: 'last 6 months',
+  filters: [],
+  grain: 'store-month',
+  steps: [
+    { id: 1, description: "Get monthly revenue per store", strategy: "sql", dependsOn: [], datasets: ["orders", "stores"] },
+    { id: 2, description: "Compare Houston vs peer stores", strategy: "sql", dependsOn: [1], datasets: ["orders", "stores"] },
+    { id: 3, description: "Decompose variance into volume/price/mix", strategy: "sql_then_python", dependsOn: [1, 2], datasets: ["order_items", "products"] },
+    { id: 4, description: "Visualize the comparison chart", strategy: "python", dependsOn: [2, 3], datasets: [] },
+  ],
+}
+```
+
+---
+
+### Phase 2: Navigator
+
+**Purpose**: Find ontology subgraph and join paths for ALL SQL-involving sub-tasks.
+
+**Inputs**:
+- `plan.steps`: All sub-tasks from planner
+- `plan.metrics`, `plan.dimensions`: Required data elements
+- `ontologyId`: Graph to search
+
+**Output**: `JoinPlanArtifact`
+```typescript
+{
+  relevantDatasets: Array<{ name: string; description: string; source: string }>,
+  joinPaths: Array<{
+    datasets: string[],
+    edges: Array<{
+      fromDataset: string,
+      toDataset: string,
+      fromColumns: string[],
+      toColumns: string[],
+      relationshipName: string,
+    }>,
+  }>,
+  notes: string,
+}
+```
+
+**Tools**:
+- `list_datasets`: Discover available datasets in ontology
+- `get_dataset_details`: Get schema (fields, descriptions) for specific datasets
+- `get_relationships`: Get ALL RELATES_TO edges in ontology (NEW tool)
+
+**Key Behavior**:
+- Mini-ReAct loop (max 8 iterations) with ontology tools
+- Calls `get_relationships` to get all available join edges
+- Uses `findJoinPaths` Neo4j service method (shortestPath algorithm) to discover FK paths between datasets
+- Validates join paths cover all required datasets from plan.steps
+- Emits `tool_start`, `tool_end`, `text` events during mini-ReAct loop
+
+**Neo4j Integration**:
+```typescript
+// NEW NeoOntologyService methods
+getAllRelationships(ontologyId: string): Promise<RelationshipEdge[]>
+findJoinPaths(ontologyId: string, fromDataset: string, toDataset: string): Promise<JoinPath[]>
+```
+
+Cypher queries:
+```cypher
+-- getAllRelationships
+MATCH (from:Dataset {ontologyId: $ontologyId})-[r:RELATES_TO]->(to:Dataset {ontologyId: $ontologyId})
+RETURN from.name, to.name, r.name, r.fromColumns, r.toColumns
+
+-- findJoinPaths (uses shortestPath)
+MATCH (start:Dataset {ontologyId: $ontologyId, name: $fromDataset}),
+      (end:Dataset {ontologyId: $ontologyId, name: $toDataset}),
+      path = shortestPath((start)-[:RELATES_TO*..5]-(end))
+RETURN [n IN nodes(path) | n.name] AS pathNames,
+       [r IN relationships(path) | {...}] AS rels
+LIMIT 3
+```
+
+---
+
+### Phase 3: SQL Builder
+
+**Purpose**: Generate pilot + full SQL for each SQL-involving sub-task.
+
+**Inputs**:
+- `plan.steps`: Sub-task list (filters for `strategy: 'sql'` or `'sql_then_python'`)
+- `joinPlan`: Dataset schemas and join paths
+- `databaseType`: PostgreSQL
+
+**Output**: `QuerySpec[]`
+```typescript
+[
+  {
+    stepId: number,
+    description: string,
+    pilotSql: string,  // LIMIT 10
+    fullSql: string,   // Full query
+    expectedColumns: string[],
+    notes: string,
+  },
+]
+```
+
+**Tools**:
+- `get_dataset_details`: Confirm schema and field names
+- `get_sample_data`: Inspect data types and value formats
+
+**Key Behavior**:
+- Generates SQL per sub-task in `plan.steps` order
+- Uses `joinPlan.joinPaths` to build correct JOIN clauses
+- Pilot SQL always includes `LIMIT 10` for fast validation
+- Full SQL has no LIMIT (executor will add row limit dynamically)
+- Validates expected columns match plan requirements
+
+**Example Output**:
+```typescript
+[
+  {
+    stepId: 1,
+    description: "Get monthly revenue per store",
+    pilotSql: "SELECT s.store_id, s.city, DATE_TRUNC('month', o.order_date) AS month, SUM(o.total_amount) AS revenue FROM stores s JOIN orders o ON s.store_id = o.store_id WHERE o.order_date >= CURRENT_DATE - INTERVAL '6 months' GROUP BY s.store_id, s.city, month LIMIT 10",
+    fullSql: "SELECT s.store_id, s.city, DATE_TRUNC('month', o.order_date) AS month, SUM(o.total_amount) AS revenue FROM stores s JOIN orders o ON s.store_id = o.store_id WHERE o.order_date >= CURRENT_DATE - INTERVAL '6 months' GROUP BY s.store_id, s.city, month",
+    expectedColumns: ["store_id", "city", "month", "revenue"],
+    notes: "Join stores → orders via store_id FK",
+  },
+]
+```
+
+---
+
+### Phase 4: Executor
+
+**Purpose**: Iterate through sub-tasks in dependency order, executing SQL and/or Python.
+
+**Inputs**:
+- `plan.steps`: Ordered sub-task list
+- `querySpecs`: SQL for each SQL-involving step
+- `joinPlan`: For on-the-fly SQL adjustments if needed
+
+**Output**: `StepResult[]`
+```typescript
+[
+  {
+    stepId: number,
+    description: string,
+    strategy: 'sql' | 'python' | 'sql_then_python',
+    sqlResult?: {
+      rowCount: number,
+      columns: string[],
+      data: string,  // Truncated to first 100 rows for metadata storage
+    },
+    pythonResult?: {
+      stdout: string,
+      charts: string[],  // base64-encoded PNG images
+    },
+    error?: string,
+  },
+]
+```
+
+**Tools**:
+- `query_database`: Execute SQL queries (pilot → full)
+- `run_python`: Execute Python analysis code with prior step results as data
+- `get_sample_data`: Inspect schemas if SQL errors occur
+- `get_dataset_details`: Schema lookup for error recovery
+
+**Key Behavior**:
+- Iterates `plan.steps` in dependency order (respects `dependsOn`)
+- For `strategy: 'sql'`:
+  1. Run `pilotSql` via `query_database` (fast validation)
+  2. If pilot succeeds, run `fullSql`
+  3. If pilot fails, attempt ONE repair with executor repair prompt + LLM
+  4. Store result in `stepResults[stepId]`
+- For `strategy: 'python'`:
+  1. Build Python script that references prior step results (e.g., `step_1_data`, `step_2_data`)
+  2. Run via `run_python` sandbox
+  3. Store stdout + charts
+- For `strategy: 'sql_then_python'`:
+  1. Run SQL first (pilot → full)
+  2. Pass SQL result to Python as `current_data`
+  3. Run Python analysis
+- Each step result is available to subsequent steps with `dependsOn` dependency
+
+**Progressive SQL Execution**:
+```
+Pilot Query (LIMIT 10) → Success → Full Query
+                      ↓ Failure
+                LLM Repair (1 attempt) → Retry Pilot → Full Query
+```
+
+**Emits SSE Events**:
+- `step_start`: `{ stepId, description, strategy }`
+- `step_complete`: `{ stepId }`
+- `tool_start`: `{ phase: 'executor', stepId, name, args }`
+- `tool_end`: `{ phase: 'executor', stepId, name, result }`
+
+---
+
+### Phase 5: Verifier
+
+**Purpose**: Validate combined results with Python checks. Block on failure with revision routing.
+
+**Inputs**:
+- `plan`: Original plan with acceptance checks
+- `stepResults`: All execution results
+- `joinPlan`: Join paths used
+- `revisionCount`: Current revision cycle count
+
+**Output**: `VerificationReport`
+```typescript
+{
+  passed: boolean,
+  checks: Array<{
+    name: string,
+    passed: boolean,
+    message: string,
+  }>,
+  diagnosis: string,
+  recommendedTarget: 'navigator' | 'sql_builder' | null,
+}
+```
+
+**Tools**:
+- `run_python`: Execute validation checks
+
+**Key Behavior**:
+- Generates Python verification script based on `plan.acceptanceChecks`
+- Common checks:
+  - Grain validation (no duplicates at expected grain)
+  - Row count sanity (not empty, not suspiciously large)
+  - NULL value inspection (critical fields should not be NULL)
+  - Join cardinality (detect many-to-many explosions)
+  - Expected columns present
+- Runs checks via `run_python` sandbox
+- Parses JSON output: `{ checks: [...] }`
+- If `passed: false` and `revisionCount < 3`:
+  - `recommendedTarget: 'navigator'` if join paths seem wrong
+  - `recommendedTarget: 'sql_builder'` if SQL syntax/logic error
+  - Graph routes to recommended target (revision loop)
+  - Increments `revisionCount` and sets `revisionDiagnosis`
+- If `passed: false` and `revisionCount >= 3`:
+  - Graph routes to Explainer with caveats mode (stop trying)
+- If Python check execution fails (sandbox error):
+  - Treat as PASS with warning caveat (don't block on verification failure)
+
+**Revision Routing Logic** (in `graph.ts`):
+```typescript
+function routeAfterVerification(state: DataAgentStateType): 'explainer' | 'navigator' | 'sql_builder' {
+  const report = state.verificationReport;
+
+  if (!report || report.passed) return 'explainer';
+  if (state.revisionCount >= 3) return 'explainer';  // Max retries, give up with caveats
+
+  if (report.recommendedTarget === 'navigator') return 'navigator';
+  return 'sql_builder';
+}
+```
+
+---
+
+### Phase 6: Explainer
+
+**Purpose**: Synthesize all sub-task results into narrative answer with data lineage.
+
+**Inputs**:
+- `userQuestion`: Original question
+- `plan`: Question decomposition
+- `stepResults`: All execution results
+- `verificationReport`: Validation status
+- `revisionCount`: Number of revision cycles
+
+**Output**: `ExplainerOutput`
+```typescript
+{
+  narrative: string,  // Markdown-formatted answer
+  dataLineage: {
+    datasets: string[],
+    joins: Array<{ from: string; to: string; on: string }>,
+    timeWindow: string | null,
+    filters: string[],
+    grain: string,
+    rowCount: number | null,
+  },
+  caveats: string[],
+  charts: string[],  // base64 PNG images
+}
+```
+
+**Tools**:
+- `run_python`: Optional chart generation (if not already in stepResults)
+
+**Key Behavior**:
+- Synthesizes narrative that:
+  - Answers the original question
+  - References specific data points from stepResults
+  - Explains any ambiguities and assumptions made (from plan.ambiguities)
+  - Notes verification status (passed / failed with caveats)
+- Builds data lineage summary:
+  - All datasets accessed
+  - All joins performed
+  - Time window applied
+  - Filters applied
+  - Final grain level
+  - Total row count
+- If `verificationReport.passed === false`:
+  - Adds caveats to narrative (e.g., "Note: grain validation failed, results may contain duplicates")
+  - If `revisionCount >= 3`, adds "Maximum revision attempts reached"
+- If stepResults contain charts, includes them in output
+- Optionally generates additional summary charts via `run_python`
+
+**Stored in Message Content**:
+The `narrative` field becomes the message `content` (markdown). The full `ExplainerOutput` is stored in `metadata.explainerOutput`.
+
+---
+
+## Sub-Task Decomposition
+
+The Planner phase ALWAYS decomposes questions into ordered sub-tasks. This enables:
+
+1. **Complex Multi-Step Analysis**: Break "Why is Houston underperforming?" into revenue calculation → comparison → variance decomposition → visualization
+2. **Dependency Management**: Later steps depend on results from earlier steps (e.g., step 3 needs output from steps 1 and 2)
+3. **Mixed Strategies**: Combine SQL queries with Python analysis in a coherent pipeline
+4. **Incremental Progress**: SSE events show completion of individual steps
+5. **Targeted Revisions**: Verifier can identify which step failed and route to appropriate phase
+
+### Strategy Types
+
+| Strategy | Description | Tool Usage | Example |
+|----------|-------------|------------|---------|
+| `sql` | Query database only | `query_database` | "Get monthly revenue per store" |
+| `python` | Analyze/visualize using prior step results | `run_python` | "Create comparison chart from steps 1 and 2" |
+| `sql_then_python` | Query then analyze | `query_database` → `run_python` | "Get revenue breakdown, then calculate variance drivers" |
+
+### Dependency Resolution
+
+The Executor respects `dependsOn` to ensure correct execution order:
+
+```typescript
+// Example sub-task list
+steps: [
+  { id: 1, dependsOn: [] },        // Execute first
+  { id: 2, dependsOn: [1] },       // Execute after step 1 completes
+  { id: 3, dependsOn: [1, 2] },    // Execute after steps 1 and 2 complete
+  { id: 4, dependsOn: [3] },       // Execute after step 3 completes
+]
+```
+
+Executor builds a dependency graph and processes steps in topological order, injecting prior step results as variables:
+
+```python
+# Inside Python sandbox for step 3 (depends on steps 1 and 2)
+import pandas as pd
+import json
+
+step_1_data = pd.read_json(json.loads('''<step 1 result JSON>'''))
+step_2_data = pd.read_json(json.loads('''<step 2 result JSON>'''))
+
+# Now step 3 analysis code can reference step_1_data and step_2_data
+```
+
+---
+
+## Conditional Routing
+
+The graph has two conditional routing points:
+
+### 1. Planner Short-Circuit
+
+After Planner phase, route based on question complexity:
+
+```typescript
+function routeAfterPlanner(state: DataAgentStateType): 'navigator' | 'executor' {
+  if (state.plan?.complexity === 'simple') {
+    return 'executor';  // Skip Navigator, SQL Builder, Verifier
+  }
+  return 'navigator';   // Full analytical pipeline
+}
+```
+
+**Simple complexity examples**:
+- Schema exploration: "What fields are in the orders table?"
+- Conversational: "How do I interpret this metric?"
+- Single-dataset queries: "Show me 10 recent orders"
+
+**Analytical complexity examples**:
+- Multi-dataset joins: "Compare revenue by product category and region"
+- Aggregation + filtering: "What are the top 10 customers by LTV in 2025?"
+- Root cause analysis: "Why is Houston underperforming?"
+
+### 2. Verifier Revision Loop
+
+After Verifier phase, route based on validation result:
+
+```typescript
+function routeAfterVerification(state: DataAgentStateType): 'explainer' | 'navigator' | 'sql_builder' {
+  const report = state.verificationReport;
+
+  // Pass → explainer
+  if (!report || report.passed) {
+    return 'explainer';
+  }
+
+  // Fail but max revisions reached → explainer with caveats
+  if (state.revisionCount >= 3) {
+    return 'explainer';
+  }
+
+  // Fail → route to recommended target
+  if (report.recommendedTarget === 'navigator') {
+    return 'navigator';  // Join path issue, re-discover
+  }
+  return 'sql_builder';  // SQL logic issue, regenerate SQL
+}
+```
+
+**Revision scenarios**:
+
+| Issue Detected | Recommended Target | Action |
+|----------------|-------------------|--------|
+| Grain validation failed (duplicates) | `sql_builder` | Regenerate SQL with corrected GROUP BY |
+| Join cardinality explosion | `navigator` | Re-discover join paths, avoid many-to-many |
+| NULL critical fields | `sql_builder` | Add COALESCE or adjust WHERE clause |
+| Empty result set | `navigator` | Broaden dataset selection |
+| Row count suspiciously high | `sql_builder` | Add DISTINCT or adjust aggregation |
+
+**Revision state tracking**:
+- `revisionCount`: Incremented each time Verifier routes to Navigator or SQL Builder
+- `revisionDiagnosis`: Human-readable explanation of what failed
+- `revisionTarget`: Which phase to retry ('navigator' or 'sql_builder')
+
+These fields are passed to the retried phase via state, allowing it to adjust behavior based on diagnosis.
+
+---
+
+## State Schema
+
+The agent uses LangGraph `Annotation.Root` state following the pattern from `apps/api/src/semantic-models/agent/state.ts`:
+
+```typescript
+import { Annotation } from '@langchain/langgraph';
+import { BaseMessage } from '@langchain/core/messages';
+
+export const DataAgentState = Annotation.Root({
+  // ─── Inputs (set once at invocation) ───
+  userQuestion: Annotation<string>,
+  chatId: Annotation<string>,
+  messageId: Annotation<string>,
+  userId: Annotation<string>,
+  ontologyId: Annotation<string>,
+  connectionId: Annotation<string>,
+  databaseType: Annotation<string>,
+  conversationContext: Annotation<string>({
+    reducer: (_, next) => next,
+    default: () => '',
+  }),
+  relevantDatasets: Annotation<string[]>({
+    reducer: (_, next) => next,
+    default: () => [],
+  }),
+
+  // ─── Phase Artifacts ───
+  plan: Annotation<PlanArtifact | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+  joinPlan: Annotation<JoinPlanArtifact | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+  querySpecs: Annotation<QuerySpec[] | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+  stepResults: Annotation<StepResult[] | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+  verificationReport: Annotation<VerificationReport | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+  explainerOutput: Annotation<ExplainerOutput | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+
+  // ─── Control Flow ───
+  currentPhase: Annotation<DataAgentPhase | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+  revisionCount: Annotation<number>({
+    reducer: (_, next) => next,
+    default: () => 0,
+  }),
+  revisionDiagnosis: Annotation<string | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+  revisionTarget: Annotation<'navigator' | 'sql_builder' | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+
+  // ─── Tracking ───
+  toolCalls: Annotation<TrackedToolCall[]>({
+    reducer: (prev, next) => [...prev, ...next],
+    default: () => [],
+  }),
+  tokensUsed: Annotation<{ prompt: number; completion: number; total: number }>({
+    reducer: (_, next) => next,
+    default: () => ({ prompt: 0, completion: 0, total: 0 }),
+  }),
+  error: Annotation<string | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+
+  // ─── Navigator Messages (for mini-ReAct loop) ───
+  messages: Annotation<BaseMessage[]>({
+    reducer: (prev, next) => [...prev, ...next],
+    default: () => [],
+  }),
+});
+
+export type DataAgentStateType = typeof DataAgentState.State;
+```
+
+### Key State Fields
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `plan` | `PlanArtifact` | Planner output: sub-task decomposition |
+| `joinPlan` | `JoinPlanArtifact` | Navigator output: datasets + join paths |
+| `querySpecs` | `QuerySpec[]` | SQL Builder output: SQL per sub-task |
+| `stepResults` | `StepResult[]` | Executor output: results per sub-task |
+| `verificationReport` | `VerificationReport` | Verifier output: pass/fail + diagnosis |
+| `explainerOutput` | `ExplainerOutput` | Explainer output: narrative + lineage |
+| `revisionCount` | `number` | Tracks revision loop iterations |
+| `revisionDiagnosis` | `string` | Why verification failed |
+| `revisionTarget` | `'navigator' \| 'sql_builder'` | Which phase to retry |
+| `toolCalls` | `TrackedToolCall[]` | Accumulator: all tool calls with phase + stepId |
+| `messages` | `BaseMessage[]` | Accumulator: Navigator mini-ReAct messages |
+
+---
+
+## Tool Definitions
+
+All tools rebuilt from scratch for multi-phase architecture. Each tool is allocated to specific phases.
+
+### Tool 1: `list_datasets`
+
+**Phase**: Navigator
+
+**Purpose**: Discover available datasets in the ontology.
+
+**Arguments**:
+```typescript
+{
+  ontologyId: string,
+}
+```
+
+**Returns**: List of dataset names.
+
+**Implementation**:
+```typescript
+// Calls NeoOntologyService.listDatasets(ontologyId)
+// Cypher: MATCH (d:Dataset {ontologyId: $ontologyId}) RETURN d.name
+```
+
+---
+
+### Tool 2: `get_dataset_details`
+
+**Phases**: Navigator, SQL Builder
+
+**Purpose**: Get full schema (fields, descriptions, sample values) for a dataset.
+
+**Arguments**:
+```typescript
+{
+  datasetName: string,
+  ontologyId: string,
+}
+```
+
+**Returns**: YAML-formatted schema with field names, descriptions, types, sample values.
+
+**Implementation**:
+```typescript
+// Calls NeoOntologyService.getDatasetAsYaml(ontologyId, datasetName)
+// Returns OSI-format dataset definition
+```
+
+---
+
+### Tool 3: `get_relationships`
+
+**Phase**: Navigator
+
+**Purpose**: Get ALL RELATES_TO edges in the ontology (for join path discovery).
+
+**Arguments**:
+```typescript
+{
+  ontologyId: string,
+}
+```
+
+**Returns**: List of relationship edges with from/to dataset names and column mappings.
+
+**Implementation**:
+```typescript
+// NEW tool, calls NeoOntologyService.getAllRelationships(ontologyId)
+// Cypher:
+// MATCH (from:Dataset {ontologyId: $ontologyId})-[r:RELATES_TO]->(to:Dataset {ontologyId: $ontologyId})
+// RETURN from.name, to.name, r.name, r.fromColumns, r.toColumns
+```
+
+---
+
+### Tool 4: `get_sample_data`
+
+**Phases**: SQL Builder, Executor
+
+**Purpose**: Fetch sample rows (LIMIT 10) from a table.
+
+**Arguments**:
+```typescript
+{
+  tableName: string,
+  connectionId: string,
+  limit?: number,  // default: 10
+}
+```
+
+**Returns**: JSON array of sample rows.
+
+**Implementation**:
+```typescript
+// Calls DiscoveryService.executeSampleQuery(connectionId, tableName, limit)
+// Executes: SELECT * FROM <schema>.<table> LIMIT 10
+```
+
+---
+
+### Tool 5: `query_database`
+
+**Phase**: Executor
+
+**Purpose**: Execute SQL query (pilot or full) with 30s timeout and SELECT-only enforcement.
+
+**Arguments**:
+```typescript
+{
+  sql: string,
+  connectionId: string,
+  maxRows?: number,  // default: 1000
+}
+```
+
+**Returns**: `{ rows: any[], rowCount: number, columns: string[] }`
+
+**Implementation**:
+```typescript
+// Calls DiscoveryService.executeQuery(connectionId, sql, maxRows, timeout: 30000)
+// Validates SQL is SELECT-only (no INSERT/UPDATE/DELETE/DROP)
+// Enforces 30s timeout
+// Truncates result to maxRows
+```
+
+**Safety**:
+- Read-only enforcement via SQL regex validation
+- Connection pool isolation (cannot access other users' connections)
+- Query timeout (30s hard limit)
+- Result size limit (maxRows parameter)
+
+---
+
+### Tool 6: `run_python`
+
+**Phases**: Executor, Verifier, Explainer
+
+**Purpose**: Execute Python code in isolated Docker sandbox with data injection.
+
+**Arguments**:
+```typescript
+{
+  code: string,
+  data?: Record<string, any>,  // Injected as variables
+  timeout?: number,  // default: 30s
+}
+```
+
+**Returns**: `{ stdout: string, stderr: string, charts: string[], error?: string }`
+
+**Implementation**:
+```typescript
+// Calls SandboxService.executeCode(code, data, timeout)
+// POSTs to Docker sandbox Flask API: http://sandbox:5000/execute
+// Sandbox runs code in isolated process with 512MB memory limit
+// Pre-installed packages: pandas, numpy, matplotlib, seaborn, scipy, scikit-learn
+// Charts saved to /tmp/*.png and returned as base64-encoded strings
+```
+
+**Safety**:
+- No network access (--network none in Docker)
+- Read-only filesystem except /tmp
+- 512MB memory limit
+- 30s execution timeout
+- No file system access beyond /tmp
+- Cannot access environment variables or secrets
+
+---
+
+## SSE Streaming
+
+The agent streams execution progress via Server-Sent Events (SSE) using the same `AgentStreamController` pattern as semantic models.
+
+### SSE Event Types
+
+| Event Type | Payload | Emitted By | Description |
+|------------|---------|------------|-------------|
+| `message_start` | `{ messageId, chatId }` | Stream controller | Message generation started |
+| `message_chunk` | `{ chunk: string }` | Explainer | Streaming narrative chunks (if streaming enabled) |
+| `message_complete` | `{ messageId, metadata }` | Stream controller | Message generation complete |
+| `message_error` | `{ error: string, code: string }` | Stream controller | Fatal error occurred |
+| `phase_start` | `{ phase: string, description: string }` | All phase nodes | Phase execution started |
+| `phase_complete` | `{ phase: string }` | All phase nodes | Phase execution complete |
+| `phase_artifact` | `{ phase: string, artifact: object }` | All phase nodes | Structured phase output |
+| `step_start` | `{ stepId: number, description: string, strategy: string }` | Executor | Sub-task execution started |
+| `step_complete` | `{ stepId: number }` | Executor | Sub-task execution complete |
+| `tool_start` | `{ phase: string, stepId?: number, name: string, args: object }` | All phases | Tool call started |
+| `tool_end` | `{ phase: string, stepId?: number, name: string, result: string }` | All phases | Tool call complete |
+| `tool_error` | `{ phase: string, stepId?: number, name: string, error: string }` | All phases | Tool call failed |
+
+### SSE Event Examples
+
+```typescript
+// Phase start
+event: phase_start
+data: {"phase":"planner","description":"Decomposing question into sub-tasks"}
+
+// Phase artifact (structured output)
+event: phase_artifact
+data: {"phase":"planner","artifact":{"complexity":"analytical","intent":"...","steps":[...]}}
+
+// Phase complete
+event: phase_complete
+data: {"phase":"planner"}
+
+// Step start (from executor)
+event: step_start
+data: {"stepId":1,"description":"Get monthly revenue per store","strategy":"sql"}
+
+// Tool call (with phase and stepId)
+event: tool_start
+data: {"phase":"executor","stepId":1,"name":"query_database","args":{"sql":"SELECT ...","connectionId":"..."}}
+
+event: tool_end
+data: {"phase":"executor","stepId":1,"name":"query_database","result":"100 rows returned"}
+
+// Step complete
+event: step_complete
+data: {"stepId":1}
+
+// Verification event
+event: phase_artifact
+data: {"phase":"verifier","artifact":{"passed":true,"checks":[{"name":"Grain validation","passed":true,"message":"No duplicates at store-month level"}]}}
+
+// Final message complete
+event: message_complete
+data: {"messageId":"uuid","metadata":{"toolCalls":[...],"tokensUsed":{...},"plan":{...},"verificationReport":{...},"dataLineage":{...}}}
+```
+
+### Frontend SSE Parsing
+
+The `useDataChat.ts` hook parses SSE events using `fetch()` + `ReadableStream`:
+
+```typescript
+const response = await fetch(`/api/data-agent/stream/${messageId}`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ chatId, question }),
+});
+
+const reader = response.body.getReader();
+const decoder = new TextDecoder();
+
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+
+  const chunk = decoder.decode(value);
+  const lines = chunk.split('\n');
+
+  for (const line of lines) {
+    if (line.startsWith('data: ')) {
+      const data = JSON.parse(line.slice(6));
+      handleEvent(data);  // Dispatch to state reducers
+    }
+  }
+}
+```
+
+### Phase Progress Tracking
+
+The frontend maintains phase progress state:
+
+```typescript
+const [phaseProgress, setPhaseProgress] = useState({
+  current: null,
+  completed: [],
+  phases: ['planner', 'navigator', 'sql_builder', 'executor', 'verifier', 'explainer'],
+});
+
+function handleEvent(event: DataAgentStreamEvent) {
+  if (event.type === 'phase_start') {
+    setPhaseProgress(prev => ({ ...prev, current: event.phase }));
+  }
+  if (event.type === 'phase_complete') {
+    setPhaseProgress(prev => ({
+      ...prev,
+      current: null,
+      completed: [...prev.completed, event.phase],
+    }));
+  }
+}
+```
+
+---
+
+## Message Metadata
+
+All phase artifacts and tracking data are stored in `data_chat_messages.metadata` JSONB column:
+
+```typescript
+interface DataAgentMessageMetadata {
+  // Tool execution tracking (extended with phase + stepId)
+  toolCalls: Array<{
+    phase: string,              // 'planner' | 'navigator' | 'sql_builder' | 'executor' | 'verifier' | 'explainer'
+    stepId?: number,            // Only for executor tools
+    name: string,
+    args: Record<string, any>,
+    result?: string,            // Truncated to 2000 chars
+  }>;
+
+  // Token usage
+  tokensUsed: {
+    prompt: number;
+    completion: number;
+    total: number;
+  };
+
+  // Dataset references
+  datasetsUsed: string[];
+
+  // Phase artifacts (NEW)
+  plan?: PlanArtifact;                      // Sub-task decomposition
+  joinPlan?: JoinPlanArtifact;              // Discovered join paths
+  stepResults?: StepResult[];               // Execution results per sub-task
+  verificationReport?: {                    // Validation status
+    passed: boolean;
+    checks: Array<{ name: string; passed: boolean; message: string }>;
+  };
+  dataLineage?: {                           // Final data lineage
+    datasets: string[];
+    joins: Array<{ from: string; to: string; on: string }>;
+    timeWindow: string | null;
+    filters: string[];
+    grain: string;
+    rowCount: number | null;
+  };
+
+  // Revision tracking (NEW)
+  revisionsUsed: number;
+
+  // Error tracking
+  error?: {
+    message: string;
+    code: string;
+    timestamp: string;
+  };
+
+  // Execution state
+  claimed?: boolean;
+}
+```
+
+### Metadata Usage
+
+1. **Conversation Context**: Last 10 messages' metadata used to build context for Planner
+2. **Data Lineage Display**: Frontend shows `dataLineage` in message footer
+3. **Verification Badge**: Frontend shows checkmark or warning icon based on `verificationReport.passed`
+4. **Tool Call Inspection**: ToolCallAccordion groups tools by `phase` and `stepId`
+5. **Debugging**: Full execution trace available in metadata for troubleshooting
 
 ---
 
@@ -185,7 +1200,7 @@ model DataChatMessage {
   chatId    String   @map("chat_id") @db.Uuid
   role      String   @db.VarChar(20)  // 'user' or 'assistant'
   content   String   @db.Text
-  metadata  Json?    // { toolCalls, tokensUsed, datasetsUsed, error, claimed }
+  metadata  Json?    // Extended with phase artifacts
   status    String   @default("complete") @db.VarChar(20)  // 'generating', 'complete', 'failed'
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
@@ -198,69 +1213,7 @@ model DataChatMessage {
 }
 ```
 
-### DataChat Fields
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | UUID | Yes | Primary key |
-| `name` | String | Yes | Chat title (max 255 chars) |
-| `ontologyId` | UUID | Yes | Foreign key to ontologies.id |
-| `ownerId` | UUID | Yes | Foreign key to users.id |
-| `createdAt` | Timestamp | Yes | Chat creation time |
-| `updatedAt` | Timestamp | Yes | Last message time (auto-updated) |
-
-### DataChatMessage Fields
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | UUID | Yes | Primary key |
-| `chatId` | UUID | Yes | Foreign key to data_chats.id |
-| `role` | Enum | Yes | Message role: 'user' or 'assistant' |
-| `content` | Text | Yes | Message content (markdown for assistant) |
-| `metadata` | JSONB | No | Tool calls, tokens, datasets used, errors |
-| `status` | Enum | Yes | Status: 'generating', 'complete', 'failed' |
-| `createdAt` | Timestamp | Yes | Message creation time |
-
-### Metadata Structure
-
-```typescript
-interface MessageMetadata {
-  // Tool execution tracking
-  toolCalls?: Array<{
-    name: string;
-    args: Record<string, any>;
-    result?: string;  // Tool execution result (truncated to 2000 chars), used for conversation context
-  }>;
-
-  // Token usage
-  tokensUsed?: {
-    prompt: number;
-    completion: number;
-    total: number;
-  };
-
-  // Dataset references
-  datasetsUsed?: string[];  // Array of dataset names accessed
-
-  // Error tracking
-  error?: {
-    message: string;
-    code: string;
-    timestamp: string;
-  };
-
-  // Execution state
-  claimed?: boolean;  // True if message generation started
-}
-```
-
-### Indexes
-
-- `data_chats.ownerId` - Fast lookup for user's chats
-- `data_chats.ontologyId` - Find chats for an ontology
-- `data_chats.updatedAt` - Sort by recent activity
-- `data_chat_messages.chatId` - Fetch messages for chat
-- `data_chat_messages.createdAt` - Chronological ordering
+No schema changes required for multi-phase architecture (metadata structure extended but JSONB is flexible).
 
 ---
 
@@ -275,12 +1228,12 @@ GET /api/data-agent/chats
 ```
 
 **Query Parameters:**
-- `page` (number, default: 1) - Page number
-- `pageSize` (number, default: 20) - Items per page
-- `search` (string, optional) - Search in chat name
-- `ontologyId` (UUID, optional) - Filter by ontology
-- `sortBy` (enum, default: 'updatedAt') - Sort field (updatedAt, createdAt, name)
-- `sortOrder` (enum, default: 'desc') - Sort direction (asc, desc)
+- `page` (number, default: 1)
+- `pageSize` (number, default: 20)
+- `search` (string, optional)
+- `ontologyId` (UUID, optional)
+- `sortBy` (enum, default: 'updatedAt')
+- `sortOrder` (enum, default: 'desc')
 
 **Permission:** `data_agent:read`
 
@@ -299,68 +1252,19 @@ GET /api/data-agent/chats
         "messageCount": 12
       }
     ],
-    "total": 25,
-    "page": 1,
-    "pageSize": 20,
-    "totalPages": 2
+    "pagination": {
+      "page": 1,
+      "pageSize": 20,
+      "totalItems": 45,
+      "totalPages": 3
+    }
   }
 }
 ```
 
 ---
 
-### 2. Get Data Chat by ID
-
-```http
-GET /api/data-agent/chats/:id
-```
-
-**Parameters:**
-- `id` (UUID, path) - Chat ID
-
-**Permission:** `data_agent:read`
-
-**Response (200):**
-```json
-{
-  "data": {
-    "id": "uuid",
-    "name": "Sales Analysis Q4 2025",
-    "ontologyId": "uuid",
-    "ownerId": "uuid",
-    "createdAt": "2025-01-15T10:00:00Z",
-    "updatedAt": "2025-01-15T14:30:00Z",
-    "messages": [
-      {
-        "id": "uuid",
-        "role": "user",
-        "content": "What were the top 5 customers by revenue?",
-        "metadata": null,
-        "status": "complete",
-        "createdAt": "2025-01-15T10:01:00Z"
-      },
-      {
-        "id": "uuid",
-        "role": "assistant",
-        "content": "Based on the sales data, here are the top 5 customers...",
-        "metadata": {
-          "toolCalls": [...],
-          "tokensUsed": { "prompt": 1500, "completion": 800, "total": 2300 },
-          "datasetsUsed": ["customers", "orders"]
-        },
-        "status": "complete",
-        "createdAt": "2025-01-15T10:01:15Z"
-      }
-    ]
-  }
-}
-```
-
-**Response (404):** Chat not found or not owned by user
-
----
-
-### 3. Create Data Chat
+### 2. Create Data Chat
 
 ```http
 POST /api/data-agent/chats
@@ -376,10 +1280,6 @@ POST /api/data-agent/chats
 }
 ```
 
-**Validation Rules:**
-- `name`: Required, 1-255 characters
-- `ontologyId`: Required, must reference a "ready" ontology owned by user
-
 **Response (201):**
 ```json
 {
@@ -389,25 +1289,45 @@ POST /api/data-agent/chats
     "ontologyId": "uuid",
     "ownerId": "uuid",
     "createdAt": "2025-01-15T10:00:00Z",
-    "updatedAt": "2025-01-15T10:00:00Z",
-    "messages": []
+    "updatedAt": "2025-01-15T10:00:00Z"
   }
 }
 ```
 
-**Response (400):** Validation error or ontology not ready
+---
 
-**Response (404):** Ontology not found or not owned by user
+### 3. Get Data Chat
+
+```http
+GET /api/data-agent/chats/:chatId
+```
+
+**Permission:** `data_agent:read` (owner only)
+
+**Response (200):**
+```json
+{
+  "data": {
+    "id": "uuid",
+    "name": "Sales Analysis Q4 2025",
+    "ontologyId": "uuid",
+    "ownerId": "uuid",
+    "createdAt": "2025-01-15T10:00:00Z",
+    "updatedAt": "2025-01-15T14:30:00Z",
+    "messageCount": 12
+  }
+}
+```
 
 ---
 
 ### 4. Update Data Chat
 
 ```http
-PATCH /api/data-agent/chats/:id
+PATCH /api/data-agent/chats/:chatId
 ```
 
-**Permission:** `data_agent:write`
+**Permission:** `data_agent:write` (owner only)
 
 **Request Body:**
 ```json
@@ -416,2634 +1336,613 @@ PATCH /api/data-agent/chats/:id
 }
 ```
 
-**Validation Rules:**
-- `name`: Optional, 1-255 characters
-
-**Response (200):** Updated chat object
-
-**Response (404):** Chat not found or not owned by user
+**Response (200):**
+```json
+{
+  "data": {
+    "id": "uuid",
+    "name": "Updated Chat Name",
+    "ontologyId": "uuid",
+    "ownerId": "uuid",
+    "createdAt": "2025-01-15T10:00:00Z",
+    "updatedAt": "2025-01-15T15:00:00Z"
+  }
+}
+```
 
 ---
 
 ### 5. Delete Data Chat
 
 ```http
-DELETE /api/data-agent/chats/:id
+DELETE /api/data-agent/chats/:chatId
 ```
 
-**Permission:** `data_agent:delete`
+**Permission:** `data_agent:delete` (owner only)
 
-**Response (204):** No content (success)
-
-**Response (404):** Chat not found or not owned by user
-
-**Side Effects:**
-- Deletes chat record from PostgreSQL
-- Cascades deletion to all messages
-- Creates audit event
+**Response (204):** No content
 
 ---
 
-### 6. Send Message
+### 6. List Messages
 
 ```http
-POST /api/data-agent/chats/:id/messages
+GET /api/data-agent/chats/:chatId/messages
 ```
 
-**Permission:** `data_agent:write`
+**Query Parameters:**
+- `page` (number, default: 1)
+- `pageSize` (number, default: 50)
 
-**Request Body:**
-```json
-{
-  "content": "What were the top 5 customers by revenue in Q4?"
-}
-```
+**Permission:** `data_agent:read` (owner only)
 
-**Validation Rules:**
-- `content`: Required, 1-10000 characters
-
-**Response (201):**
+**Response (200):**
 ```json
 {
   "data": {
-    "userMessage": {
-      "id": "uuid",
-      "role": "user",
-      "content": "What were the top 5 customers by revenue in Q4?",
-      "status": "complete",
-      "createdAt": "2025-01-15T10:01:00Z"
-    },
-    "assistantMessage": {
-      "id": "uuid",
-      "role": "assistant",
-      "content": "",
-      "status": "generating",
-      "createdAt": "2025-01-15T10:01:00Z"
+    "items": [
+      {
+        "id": "uuid",
+        "chatId": "uuid",
+        "role": "user",
+        "content": "What were the top selling products last month?",
+        "metadata": null,
+        "status": "complete",
+        "createdAt": "2025-01-15T10:00:00Z"
+      },
+      {
+        "id": "uuid",
+        "chatId": "uuid",
+        "role": "assistant",
+        "content": "Based on the analysis...",
+        "metadata": {
+          "toolCalls": [...],
+          "tokensUsed": {...},
+          "datasetsUsed": ["orders", "products"],
+          "plan": {...},
+          "verificationReport": { "passed": true, "checks": [...] },
+          "dataLineage": {...},
+          "revisionsUsed": 0
+        },
+        "status": "complete",
+        "createdAt": "2025-01-15T10:01:30Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "pageSize": 50,
+      "totalItems": 12,
+      "totalPages": 1
     }
   }
 }
 ```
 
-**Response (404):** Chat not found or not owned by user
-
-**Side Effects:**
-- Creates user message (status: 'complete')
-- Creates assistant message placeholder (status: 'generating')
-- Both messages created in single transaction
-- Frontend opens SSE stream to `/stream` endpoint with assistant message ID
-
 ---
 
-### 7. Stream Agent Response (SSE)
+### 7. Send Message (SSE Streaming)
 
 ```http
-POST /api/data-agent/chats/:chatId/messages/:messageId/stream
+POST /api/data-agent/stream/:messageId
 ```
 
-**Permission:** `data_agent:write`
+**Permission:** `data_agent:write` (owner only)
 
-**Headers:**
-- `Accept: text/event-stream`
-
-**Response:** Server-Sent Events stream
-
-**SSE Event Types:**
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `message_start` | `{}` | Agent processing started |
-| `tool_call` | `{ name: string, args: object }` | Tool invoked |
-| `tool_result` | `{ name: string, result: string }` | Tool completed (result truncated to 2000 chars) |
-| `text` | `{ content: string }` | AI response text |
-| `token_update` | `{ tokensUsed: { prompt, completion, total } }` | Final token counts |
-| `message_complete` | `{ content: string, metadata: object }` | Execution finished |
-| `message_error` | `{ message: string }` | Execution failed |
-
-**SSE Format:**
-```
-event: message_start
-data: {}
-
-event: tool_call
-data: {"name":"query_database","args":{"sql":"SELECT * FROM customers LIMIT 5"}}
-
-event: tool_result
-data: {"name":"query_database","result":"| id | name | revenue |\n|---|---|---|\n| 1 | Acme | 50000 |"}
-
-event: text
-data: {"content":"Based on the query results, here are the top 5 customers..."}
-
-event: token_update
-data: {"tokensUsed":{"prompt":1500,"completion":800,"total":2300}}
-
-event: message_complete
-data: {"content":"Full response text...","metadata":{"toolCalls":[...],"tokensUsed":{...},"datasetsUsed":[...]}}
+**Request Body:**
+```json
+{
+  "chatId": "uuid",
+  "question": "What were the top selling products last month?"
+}
 ```
 
-**Error Handling:**
-- 30s keep-alive heartbeat (`:heartbeat\n\n`)
-- Atomic message claiming prevents duplicate execution
-- Failed executions update message status to 'failed'
-- Errors emitted via `message_error` event before stream closes
+**Response (200):** SSE stream (see SSE Streaming section for event types)
 
-**Response (404):** Chat or message not found or not owned by user
-
-**Response (409):** Message already claimed (generation in progress)
+**Flow:**
+1. Frontend creates message with status='generating'
+2. POST to `/api/data-agent/stream/:messageId`
+3. Backend executes StateGraph and streams phase/step/tool events
+4. Frontend updates UI in real-time
+5. On completion, message status set to 'complete' with full metadata
 
 ---
 
 ## Security
 
-### Read-Only SQL Enforcement
+### Authentication & Authorization
 
-All database queries executed via `DiscoveryService.executeQuery()` with strict safety:
+- All endpoints require JWT authentication
+- Chat ownership enforced (users can only access their own chats)
+- RBAC permissions: `data_agent:read`, `data_agent:write`, `data_agent:delete`
+- Ontology access validated (user must have `ontologies:read` permission for ontologyId)
 
-1. **SELECT-only validation**: Regex check blocks INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, TRUNCATE, GRANT, REVOKE
-2. **Transaction isolation**: All queries run in `READ ONLY` transaction mode
-3. **Timeout enforcement**: 30-second query timeout (prevents runaway queries)
-4. **Connection pooling**: Queries use existing database connections (from connections table)
-5. **Result size limits**: Maximum 500 rows returned per query
-6. **Error sanitization**: Database errors sanitized to prevent credential leaks
+### SQL Injection Prevention
 
-**Validation Pattern:**
-```typescript
-const SQL_READ_ONLY_REGEX = /^\s*(SELECT|WITH)/i;
-const SQL_DANGEROUS_KEYWORDS = /\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|GRANT|REVOKE)\b/i;
-
-if (!SQL_READ_ONLY_REGEX.test(sql) || SQL_DANGEROUS_KEYWORDS.test(sql)) {
-  throw new Error('Only SELECT queries are allowed');
-}
-
-// Execute with read-only transaction
-await connection.query('BEGIN TRANSACTION READ ONLY');
-const result = await connection.query(sql);
-await connection.query('COMMIT');
-```
-
----
+- All SQL queries executed via parameterized queries (Prisma, pg driver)
+- User-provided SQL is NOT parameterized (agent generates raw SQL)
+- SQL validation enforces SELECT-only (regex check for INSERT/UPDATE/DELETE/DROP)
+- Connection pool isolation (agent can only access connectionId owned by userId)
 
 ### Python Sandbox Security
 
-Docker container runs with aggressive isolation:
+- Isolated Docker container with no network access (`--network none`)
+- Read-only filesystem except `/tmp`
+- 512MB memory limit
+- 30s execution timeout
+- No environment variables or secrets passed to sandbox
+- Pre-installed packages only (no pip install)
 
-1. **Read-only filesystem**: Container FS mounted read-only except `/tmp`
-2. **No capabilities**: All Linux capabilities dropped
-3. **Resource limits**: 512MB memory, 1 CPU core
-4. **No external network**: Container on isolated bridge network
-5. **Execution timeout**: 30s default (configurable per request)
-6. **No persistent state**: Each execution isolated, no shared memory
-7. **Library whitelist**: Only pre-installed packages (pandas, numpy, matplotlib, etc.)
-8. **Subprocess isolation**: Python code runs in subprocess with timeout
+### Neo4j Security
 
-**Docker Security Configuration:**
-```yaml
-sandbox:
-  image: knecta-sandbox:latest
-  read_only: true
-  tmpfs:
-    - /tmp:rw,size=100M
-  cap_drop:
-    - ALL
-  security_opt:
-    - no-new-privileges:true
-  deploy:
-    resources:
-      limits:
-        memory: 512M
-        cpus: '1.0'
-  networks:
-    - sandbox-isolated  # No external access
-```
+- All Cypher queries scoped to `ontologyId` (namespace isolation)
+- No WRITE operations (read-only graph access)
+- Graph access validated (user must own ontology)
 
----
+### Rate Limiting
 
-### Namespace Isolation
-
-All Neo4j vector searches filtered by `ontologyId`:
-
-1. **Vector index scoped**: Similarity search post-filters by `ontologyId` property
-2. **Dataset details query**: `MATCH (d:Dataset {ontologyId: $ontologyId})` filter on all queries
-3. **No cross-ontology access**: Users can only query datasets from their owned ontologies
-4. **Ownership chain validation**: Chat → Ontology → Semantic Model → Connection (all owned by user)
-
----
-
-### Ownership Enforcement
-
-All operations verify ownership chain:
-
-1. **Chat ownership**: `chat.ownerId === userId`
-2. **Ontology ownership**: `ontology.ownerId === userId` (via chat → ontology relation)
-3. **Message ownership**: Inherited from chat ownership
-4. **Connection access**: Semantic model references connection owned by user
-
-**Ownership Validation:**
-```typescript
-// Verify chat ownership
-const chat = await prisma.dataChat.findUnique({
-  where: { id: chatId },
-  include: { ontology: { include: { semanticModel: true } } }
-});
-
-if (chat.ownerId !== userId) {
-  throw new ForbiddenException('Not authorized to access this chat');
-}
-
-if (chat.ontology.ownerId !== userId) {
-  throw new ForbiddenException('Not authorized to access this ontology');
-}
-```
-
----
-
-### Atomic Message Claiming
-
-Prevents duplicate agent execution:
-
-```typescript
-async claimMessage(messageId: string): Promise<boolean> {
-  // Atomic update: only claim if not already claimed.
-  // The message is created with metadata={}, so we check for that exact value.
-  // After claiming, metadata becomes {claimed:true}, so a second attempt won't match.
-  const result = await this.prisma.dataChatMessage.updateMany({
-    where: {
-      id: messageId,
-      status: 'generating',
-      metadata: {
-        equals: {},  // Only match messages with empty metadata (initial state)
-      },
-    },
-    data: {
-      metadata: {
-        claimed: true,
-      },
-    },
-  });
-
-  return result.count === 1;  // True if we claimed it, false if already claimed
-}
-```
-
-**Implementation Note:**
-
-The implementation uses `metadata: { equals: {} }` instead of JSON path filtering because of PostgreSQL's three-valued NULL logic. When metadata is `{}`, the JSON path expression `['claimed']` returns NULL, and `NOT (NULL = true)` evaluates to NULL (not TRUE), so the row never matches the WHERE clause.
-
-The fix checks that metadata equals the empty object `{}` (initial state). After claiming, metadata becomes `{claimed: true}`, so duplicate attempts fail the WHERE condition.
-
-**Flow:**
-1. Frontend opens SSE stream
-2. Backend attempts to claim message via `claimMessage()`
-3. If claim succeeds → start agent execution
-4. If claim fails → return 409 Conflict (already processing)
-5. React StrictMode safe: 100ms delay in useEffect before fetch allows cleanup to abort
+- SSE streaming endpoint limited to 1 concurrent request per user
+- Atomic claim check prevents duplicate agent execution for same messageId
+- Tool execution timeouts prevent infinite loops
 
 ---
 
 ## RBAC Permissions
 
-Defined in `apps/api/src/common/constants/roles.constants.ts`:
+### Data Agent Permissions
 
-```typescript
-export const PERMISSIONS = {
-  DATA_AGENT_READ: 'data_agent:read',
-  DATA_AGENT_WRITE: 'data_agent:write',
-  DATA_AGENT_DELETE: 'data_agent:delete',
-} as const;
-```
+| Permission | Roles | Description |
+|------------|-------|-------------|
+| `data_agent:read` | Viewer, Contributor, Admin | View own chats and messages |
+| `data_agent:write` | Contributor, Admin | Create chats, send messages |
+| `data_agent:delete` | Contributor, Admin | Delete own chats |
 
-### Permission Matrix
+### Dependency Permissions
 
-| Role | data_agent:read | data_agent:write | data_agent:delete |
-|------|----------------|------------------|------------------|
-| **Admin** | ✅ | ✅ | ✅ |
-| **Contributor** | ✅ | ✅ | ✅ |
-| **Viewer** | ✅ | ❌ | ❌ |
+Data Agent requires access to related resources:
 
-**Note:** Viewers can read chat history but cannot create chats, send messages, or delete chats.
-
-### Controller Usage
-
-```typescript
-@Get()
-@Auth({ permissions: [PERMISSIONS.DATA_AGENT_READ] })
-@ApiOperation({ summary: 'List data chats' })
-async list(
-  @Query() query: ChatQueryDto,
-  @CurrentUser('id') userId: string,
-) {
-  return this.dataAgentService.list(query, userId);
-}
-
-@Post(':id/messages')
-@Auth({ permissions: [PERMISSIONS.DATA_AGENT_WRITE] })
-@ApiOperation({ summary: 'Send message to chat' })
-async sendMessage(
-  @Param('id') chatId: string,
-  @Body() dto: SendMessageDto,
-  @CurrentUser('id') userId: string,
-) {
-  return this.dataAgentService.sendMessage(chatId, dto.content, userId);
-}
-```
+| Permission | Required For |
+|------------|--------------|
+| `ontologies:read` | Load ontology for chat creation |
+| `connections:read` | Access database connection for query execution |
+| `semantic_models:read` | Optional: view source semantic model |
 
 ---
 
 ## Embedding Service
 
-The EmbeddingService provides multi-provider text embedding generation for semantic search.
+The `EmbeddingService` generates vector embeddings for dataset descriptions to enable semantic search.
 
-### Architecture
+### Provider Support
 
-```
-EmbeddingService (facade)
-    ↓
-EmbeddingProvider (interface)
-    ↓
-OpenAIEmbeddingProvider (implementation)
-```
+Currently supports **OpenAI** only:
+- Model: `text-embedding-3-small` (1536 dimensions)
+- Configuration: `OPENAI_API_KEY` environment variable
 
-### EmbeddingProvider Interface
+### Usage
 
 ```typescript
-export interface EmbeddingProvider {
-  /**
-   * Generate embedding for a single text
-   */
-  generateEmbedding(text: string): Promise<number[]>;
-
-  /**
-   * Generate embeddings for multiple texts (batch)
-   */
-  generateEmbeddings(texts: string[]): Promise<number[][]>;
-
-  /**
-   * Get dimensionality of embeddings
-   */
-  getDimensions(): number;
-}
+const embedding = await embeddingService.generateEmbedding(text);
+// Returns: number[] (1536 dimensions)
 ```
 
-### OpenAI Provider
+### Integration
 
-**Model:** `text-embedding-3-small`
-**Dimensions:** 1536
-**Cost:** ~$0.02 / 1M tokens
-
-**Implementation:**
-```typescript
-@Injectable()
-export class OpenAIEmbeddingProvider implements EmbeddingProvider {
-  private readonly openai: OpenAI;
-
-  constructor(config: ConfigService) {
-    this.openai = new OpenAI({
-      apiKey: config.get('llm.openai.apiKey'),
-    });
-  }
-
-  async generateEmbedding(text: string): Promise<number[]> {
-    const response = await this.openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: text,
-      encoding_format: 'float',
-    });
-
-    return response.data[0].embedding;
-  }
-
-  async generateEmbeddings(texts: string[]): Promise<number[][]> {
-    const response = await this.openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: texts,
-      encoding_format: 'float',
-    });
-
-    return response.data.map(item => item.embedding);
-  }
-
-  getDimensions(): number {
-    return 1536;
-  }
-}
-```
-
-### Service Usage
-
-```typescript
-@Injectable()
-export class EmbeddingService {
-  constructor(
-    @Inject('EMBEDDING_PROVIDER') private readonly provider: EmbeddingProvider,
-  ) {}
-
-  async embedText(text: string): Promise<number[]> {
-    return this.provider.generateEmbedding(text);
-  }
-
-  async embedTexts(texts: string[]): Promise<number[][]> {
-    return this.provider.generateEmbeddings(texts);
-  }
-
-  getDimensions(): number {
-    return this.provider.getDimensions();
-  }
-}
-```
-
-### Configuration
-
-```typescript
-// apps/api/src/config/configuration.ts
-export default () => ({
-  embedding: {
-    defaultProvider: process.env.EMBEDDING_DEFAULT_PROVIDER || 'openai',
-  },
-  llm: {
-    openai: {
-      apiKey: process.env.OPENAI_API_KEY,  // Reused for embeddings
-    },
-  },
-});
-```
-
-**Environment Variables:**
-- `EMBEDDING_DEFAULT_PROVIDER=openai` (default, currently only option)
-- `OPENAI_API_KEY` (required for OpenAI embeddings)
-
-### Future Providers
-
-The interface supports adding providers:
-- **Azure OpenAI Embeddings** (text-embedding-ada-002)
-- **Anthropic Embeddings** (if/when available)
-- **Local Models** (via Ollama or Hugging Face)
+1. **Ontology Creation**: When semantic model is converted to ontology, dataset descriptions are embedded
+2. **Vector Index**: Embeddings stored in Neo4j Dataset nodes with vector index
+3. **Query Time**: User question is embedded and vector similarity search finds top 10 relevant datasets
+4. **Context Injection**: Relevant datasets passed to Planner phase as `relevantDatasets`
 
 ---
 
 ## Neo4j Vector Search
 
-Vector similarity search on Dataset nodes enables intelligent dataset discovery.
+The `NeoVectorService` manages vector indexes and performs similarity search on ontology graphs.
 
-### Vector Index
+### Vector Index Creation
 
-**Index Name:** `dataset_embedding`
-**Node Label:** `Dataset`
-**Property:** `embedding` (array of floats, 1536 dimensions)
-**Similarity Function:** Cosine similarity
+When an ontology is created, a vector index is created on Dataset nodes:
 
-### Index Creation
-
-Automatically created on application startup:
-
-```typescript
-@Injectable()
-export class NeoVectorService {
-  constructor(
-    @Inject('NEO4J_DRIVER') private readonly driver: Driver,
-  ) {}
-
-  async ensureVectorIndex(): Promise<void> {
-    const session = this.driver.session();
-    try {
-      await session.run(`
-        CREATE VECTOR INDEX dataset_embedding IF NOT EXISTS
-        FOR (d:Dataset)
-        ON d.embedding
-        OPTIONS {
-          indexConfig: {
-            \`vector.dimensions\`: 1536,
-            \`vector.similarity_function\`: 'cosine'
-          }
-        }
-      `);
-    } finally {
-      await session.close();
-    }
+```cypher
+CREATE VECTOR INDEX dataset_embedding_idx IF NOT EXISTS
+FOR (d:Dataset)
+ON d.embedding
+OPTIONS {
+  indexConfig: {
+    `vector.dimensions`: 1536,
+    `vector.similarity_function`: 'cosine'
   }
 }
 ```
-
-**Note:** Index creation is idempotent (`IF NOT EXISTS`).
-
----
 
 ### Similarity Search
 
-**Method:** `searchSimilarDatasets(ontologyId, queryEmbedding, topK)`
+At query time, the user question is embedded and top-K similar datasets are retrieved:
 
-**Flow:**
-1. Query vector index with `db.index.vector.queryNodes()`
-2. Request `topK * 4` candidates (account for post-filtering)
-3. Post-filter results by `ontologyId` property
-4. Return top `topK` after filtering
-
-**Cypher Query:**
 ```cypher
 CALL db.index.vector.queryNodes(
-  'dataset_embedding',
+  'dataset_embedding_idx',
   $topK,
   $queryEmbedding
-) YIELD node, score
+)
+YIELD node, score
 WHERE node.ontologyId = $ontologyId
-RETURN node, score
+RETURN node.name, node.description, node.source, score
 ORDER BY score DESC
-LIMIT $limit
 ```
 
-**Implementation:**
-```typescript
-async searchSimilarDatasets(
-  ontologyId: string,
-  queryEmbedding: number[],
-  topK: number = 5,
-): Promise<Array<{ dataset: Dataset; score: number }>> {
-  const session = this.driver.session();
-  try {
-    // Request more candidates to account for post-filtering
-    const internalTopK = Math.min(topK * 4, 50);
-
-    const result = await session.run(
-      `
-      CALL db.index.vector.queryNodes(
-        'dataset_embedding',
-        $internalTopK,
-        $queryEmbedding
-      ) YIELD node, score
-      WHERE node.ontologyId = $ontologyId
-      RETURN node, score
-      ORDER BY score DESC
-      LIMIT $topK
-      `,
-      { ontologyId, queryEmbedding, internalTopK, topK },
-    );
-
-    return result.records.map(record => ({
-      dataset: this.transformDatasetNode(record.get('node')),
-      score: record.get('score'),
-    }));
-  } finally {
-    await session.close();
-  }
-}
-```
-
-**Input Validation:**
-- `ontologyId`: UUID format validation
-- `queryEmbedding`: Array of 1536 floats
-- `topK`: Integer between 1 and 50
-
----
-
-### Embedding Generation
-
-Embeddings generated during ontology creation in `NeoOntologyService.createGraph()`:
-
-**Dataset Embedding Source:**
-
-The full YAML definition of each dataset is used as the embedding text. This provides rich semantic information including dataset name, description, all field names, types, descriptions, and relationships.
-
-Example YAML used for embedding:
-```yaml
-name: customers
-description: Customer master data with contact information
-source: public.customers
-fields:
-  - name: customer_id
-    expression: customer_id
-    label: Customer ID
-    description: Unique identifier for customer
-    data_type: integer
-    is_primary_key: true
-  - name: name
-    expression: name
-    label: Customer Name
-    description: Full name of the customer
-    data_type: varchar
-  - name: email
-    expression: email
-    label: Email Address
-    description: Customer email address
-    data_type: varchar
-  - name: created_at
-    expression: created_at
-    label: Created At
-    description: Timestamp when customer was created
-    data_type: timestamp
-```
-
-**Process:**
-```typescript
-async createGraph(ontologyId: string, osiModel: OSISemanticModel): Promise<void> {
-  const datasetNodes: Array<{
-    name: string;
-    source: string;
-    description: string;
-    yaml: string;
-  }> = [];
-
-  // 1. Serialize each dataset to YAML and store on node
-  for (const dataset of osiModel.semantic_model[0].datasets) {
-    const datasetYaml = yaml.dump(dataset, {
-      indent: 2,
-      lineWidth: 120,
-      noRefs: true,
-      sortKeys: false,
-    });
-
-    datasetNodes.push({
-      name: dataset.name || '',
-      source: dataset.source || '',
-      description: dataset.description || '',
-      yaml: datasetYaml,
-    });
-  }
-
-  // 2. Create Dataset nodes with YAML property (batch operation)
-  // ...
-
-  // 3. Create Field nodes and relationships
-  // ...
-
-  // 4. Generate and store embeddings using full YAML definitions
-  await this.generateAndStoreEmbeddings(ontologyId, datasetNodes);
-}
-
-private async generateAndStoreEmbeddings(
-  ontologyId: string,
-  datasetNodes: Array<{ name: string; yaml: string }>,
-): Promise<void> {
-  try {
-    const provider = this.embeddingService.getProvider();
-
-    // Use the full YAML definition as embedding text for each dataset.
-    // YAML contains rich schema info: column names, types, descriptions,
-    // relationships — producing much better semantic search matches.
-    const embeddingTexts = datasetNodes.map((ds) => ds.yaml);
-
-    // Batch generate embeddings
-    const embeddings = await provider.generateEmbeddings(embeddingTexts);
-
-    // Build update payload
-    const embeddingUpdates = datasetNodes.map((ds, i) => ({
-      name: ds.name,
-      embedding: embeddings[i],
-    }));
-
-    // Store embeddings on Dataset nodes
-    await this.neoVectorService.updateNodeEmbeddings(ontologyId, 'Dataset', embeddingUpdates);
-
-    // Ensure vector index exists
-    await this.neoVectorService.ensureVectorIndex(
-      'dataset_embedding',
-      'Dataset',
-      'embedding',
-      provider.getDimensions(),
-    );
-  } catch (error) {
-    // Log error but don't fail graph creation
-    this.logger.error('Failed to generate embeddings', error);
-  }
-}
-```
-
-**Benefits of YAML-based embeddings:**
-- Captures complete schema structure (not just field names)
-- Includes type information and descriptions
-- Contains relationship metadata
-- Produces more accurate semantic search results
-- No information loss from simplification
-
-**Note:** Embedding generation failure does not fail ontology creation. Ontology will work but without vector search capabilities.
-
----
-
-### Backfill for Existing Ontologies
-
-For ontologies created before vector search feature:
-
-```typescript
-async backfillEmbeddings(ontologyId: string): Promise<void> {
-  // Fetch graph to get dataset YAML definitions
-  const graph = await this.getGraph(ontologyId);
-
-  const datasetNodes = graph.nodes
-    .filter((n) => n.label === 'Dataset')
-    .map((n) => ({
-      name: n.properties.name as string,
-      yaml: (n.properties.yaml as string) || '',
-    }));
-
-  await this.generateAndStoreEmbeddings(ontologyId, datasetNodes);
-}
-```
-
-**Usage:**
-```bash
-# Via admin endpoint or script
-POST /api/admin/ontologies/:id/backfill-embeddings
-```
-
----
-
-## Agent Architecture
-
-The Data Agent uses the **ReAct pattern** (Reasoning + Acting) for iterative tool-calling and problem-solving.
-
-### ReAct Pattern
-
-**Not Plan-Then-Execute:** The agent does not create an upfront plan. Instead, it iteratively:
-
-1. **Think** - Reason about the current state and next action
-2. **Act** - Call a tool (query_database, get_dataset_details, etc.)
-3. **Observe** - Process tool result
-4. **Repeat** - Continue until answer is complete
-
-**LangGraph Implementation:**
-Uses `createReactAgent` from `@langchain/langgraph/prebuilt`
-
-```typescript
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
-import { ChatOpenAI } from '@langchain/openai';
-
-const agent = createReactAgent({
-  llm: new ChatOpenAI({ modelName: 'gpt-4', streaming: false }),
-  tools: [queryDatabaseTool, getDatasetDetailsTool, getSampleDataTool, runPythonTool, listDatasetsTool],
-  messageModifier: systemPrompt,  // System prompt with context
-});
-
-// Execute with streaming updates and recursion guard
-for await (const event of agent.stream(
-  { messages: [...] },
-  { streamMode: 'updates', recursionLimit: 30 },
-)) {
-  // Process step-by-step updates
-}
-```
-
-**Key Configuration:**
-- `streaming: false` on LLM (avoids tool_calls corruption, see Lessons Learned)
-- `streamMode: 'updates'` (step-by-step execution events)
-- No retry loops (agent may iterate naturally if needed)
-
-**Recursion Guard:**
-- `recursionLimit: 30` in stream config — limits graph node invocations
-- Each tool call = 2 node invocations (agent node + tools node), so 30 ≈ 15 tool-call rounds
-- Prevents runaway loops on difficult questions; errors caught and reported via `message_error` SSE event
-
----
-
-### System Prompt Structure
-
-The agent receives a rich system prompt with:
-
-1. **Role Definition**
-2. **Relevant Datasets** (from vector search)
-3. **Relationships (Join Hints)** - FK paths between tables
-4. **Database Type and Constraints**
-5. **Enhanced Tool Usage Instructions** - Error recovery, NULL handling, SQL best practices
-6. **Conversation History** (last 10 messages with tool call summaries)
-
-**Function Signature:**
-```typescript
-export function buildDataAgentSystemPrompt(
-  datasets: Array<{ name: string; description: string; yaml: string; score: number }>,
-  databaseType: string,
-  conversationContext: string,
-  relationships: Array<{ fromDataset: string; toDataset: string; name: string; fromColumns: string; toColumns: string }>,
-): string
-```
-
-**Prompt Structure:**
-
-1. **Role**: Expert data analyst assistant
-2. **Available Datasets**: YAML definitions from vector search (or discovery guidance when empty)
-3. **Relationships (Join Hints)**: Conditional section with FK join paths when relationships exist
-4. **Database**: Type + read-only constraint
-5. **Enhanced Instructions** (6 steps):
-   - Understand the question
-   - Plan approach (use join hints, discovery tools if needed)
-   - Write SQL (schema-qualified names, 500-row limit, NULL handling, DATE_TRUNC)
-   - Recover from errors (0 rows → sample data, column not found → get_dataset_details, SQL error → retry, need tables → list_datasets)
-   - Use Python when helpful (stats, charts, NOT for data retrieval)
-   - Format response
-6. **Previous Conversation**: Enriched with tool call summaries (name, args, results)
-
-**Context Truncation:**
-- Dataset YAML: Full definitions (no truncation)
-- Conversation history: Last 10 messages with tool call summaries (200 chars each for args and results)
-- Total token budget: ~6000 tokens for system prompt
-
----
-
-### Tool Definitions
-
-The agent has 5 tools available:
-
-#### 1. query_database
-
-**Purpose:** Execute read-only SQL queries
-
-**Schema:**
-```typescript
-{
-  name: 'query_database',
-  description: 'Execute a read-only SQL query against the database. Returns column names and rows (max 500 rows, 30-second timeout). Only SELECT queries are allowed. For large result sets, use aggregations, GROUP BY, or LIMIT clauses.',
-  schema: z.object({
-    sql: z.string().describe('SQL SELECT query to execute'),
-  }),
-}
-```
-
-**Implementation:**
-```typescript
-async function executeQueryDatabase(args: { sql: string }): Promise<string> {
-  // Validate read-only
-  if (!SQL_READ_ONLY_REGEX.test(args.sql)) {
-    return 'Error: Only SELECT queries are allowed';
-  }
-
-  // Execute via DiscoveryService
-  const result = await discoveryService.executeQuery(connectionId, args.sql);
-
-  // Format as markdown table
-  return formatAsMarkdownTable(result.rows);
-}
-```
-
-**Output Format:**
-```markdown
-| customer_id | name | revenue |
-|---|---|---|
-| 1 | Acme Corp | 50000 |
-| 2 | TechStart | 35000 |
-| 3 | DataCo | 42000 |
-
-(3 rows, 45ms)
-```
-
----
-
-#### 2. get_dataset_details
-
-**Purpose:** Retrieve full YAML definitions for specific datasets
-
-**Schema:**
-```typescript
-{
-  name: 'get_dataset_details',
-  description: 'Get detailed YAML definitions for specific datasets by name',
-  schema: z.object({
-    datasetNames: z.array(z.string()).describe('Array of dataset names to fetch'),
-  }),
-}
-```
-
-**Implementation:**
-```typescript
-async function getDatasetDetails(args: { datasetNames: string[] }): Promise<string> {
-  const datasets = await neoOntologyService.getDatasetsByNames(ontologyId, args.datasetNames);
-
-  return datasets.map(d => d.yaml).join('\n\n---\n\n');
-}
-```
-
-**Output:**
-```yaml
-name: customers
-description: Customer master data
-table: public.customers
-fields:
-  - name: customer_id
-    type: integer
-    primary_key: true
-  - name: name
-    type: varchar
-  - name: email
-    type: varchar
-
----
-
-name: orders
-description: Order transactions
-table: public.orders
-fields:
-  - name: order_id
-    type: integer
-    primary_key: true
-  - name: customer_id
-    type: integer
-  - name: total_amount
-    type: numeric
-```
-
----
-
-#### 3. get_sample_data
-
-**Purpose:** Retrieve sample rows from a dataset
-
-**Schema:**
-```typescript
-{
-  name: 'get_sample_data',
-  description: 'Get sample rows from a dataset to understand data structure and values',
-  schema: z.object({
-    datasetName: z.string().describe('Name of the dataset'),
-    limit: z.number().optional().default(10).describe('Number of rows to return (default 10)'),
-  }),
-}
-```
-
-**Implementation:**
-```typescript
-async function getSampleData(args: { datasetName: string; limit?: number }): Promise<string> {
-  const dataset = await neoOntologyService.getDatasetByName(ontologyId, args.datasetName);
-
-  const sql = `SELECT * FROM ${dataset.source} LIMIT ${args.limit || 10}`;
-  const result = await discoveryService.executeQuery(connectionId, sql);
-
-  return formatAsMarkdownTable(result.rows);
-}
-```
-
-**Output:**
-```markdown
-| order_id | customer_id | total_amount | created_at |
-|---|---|---|---|
-| 1001 | 5 | 249.99 | 2025-01-10 14:30:00 |
-| 1002 | 12 | 89.50 | 2025-01-10 15:45:00 |
-| 1003 | 5 | 399.00 | 2025-01-11 09:15:00 |
-
-(3 rows)
-```
-
----
-
-#### 4. run_python
-
-**Purpose:** Execute Python code for analysis and visualization
-
-**Schema:**
-```typescript
-{
-  name: 'run_python',
-  description: 'Execute Python code in a sandboxed environment. Use pandas for data manipulation and matplotlib/seaborn for charts. Returns stdout and base64-encoded chart images.',
-  schema: z.object({
-    code: z.string().describe('Python code to execute'),
-  }),
-}
-```
-
-**Implementation:**
-```typescript
-async function runPython(args: { code: string }): Promise<string> {
-  const result = await sandboxService.executeCode(args.code, 30000);
-
-  let output = '';
-
-  if (result.stdout) {
-    output += `**Output:**\n\`\`\`\n${result.stdout}\n\`\`\`\n\n`;
-  }
-
-  if (result.stderr) {
-    output += `**Errors:**\n\`\`\`\n${result.stderr}\n\`\`\`\n\n`;
-  }
-
-  if (result.files && result.files.length > 0) {
-    output += '**Charts:**\n';
-    for (const file of result.files) {
-      output += `![chart](data:image/png;base64,${file.data})\n`;
-    }
-  }
-
-  output += `\n(Executed in ${result.executionTimeMs}ms)`;
-
-  return output;
-}
-```
-
-**Example Code:**
-```python
-import pandas as pd
-import matplotlib.pyplot as plt
-
-# Sample data
-data = {'product': ['A', 'B', 'C'], 'sales': [100, 150, 120]}
-df = pd.DataFrame(data)
-
-# Create chart
-plt.figure(figsize=(8, 6))
-plt.bar(df['product'], df['sales'])
-plt.title('Sales by Product')
-plt.xlabel('Product')
-plt.ylabel('Sales')
-plt.savefig('/tmp/chart.png')
-
-print(df.to_string())
-```
-
-**Output:**
-```
-**Output:**
-  product  sales
-0       A    100
-1       B    150
-2       C    120
-
-**Charts:**
-![chart](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...)
-
-(Executed in 1250ms)
-```
-
----
-
-#### 5. list_datasets
-
-**Purpose:** Discover all available datasets in the ontology
-
-**Schema:**
-```typescript
-{
-  name: 'list_datasets',
-  description: 'List ALL available datasets/tables in the ontology. Returns names, descriptions, and source table references. Use this when you need to discover tables beyond those provided in the system prompt.',
-  schema: z.object({}),  // No parameters required
-}
-```
-
-**Implementation:**
-```typescript
-async function listDatasets(): Promise<string> {
-  const datasets = await neoOntologyService.listDatasets(ontologyId);
-
-  if (datasets.length === 0) {
-    return 'No datasets found in the ontology.';
-  }
-
-  const lines = datasets.map(
-    (ds) => `- **${ds.name}**: ${ds.description || 'No description'} (source: ${ds.source || 'unknown'})`,
-  );
-
-  return `${datasets.length} datasets available:\n\n${lines.join('\n')}`;
-}
-```
-
-**Output:**
-```
-5 datasets available:
-
-- **customers**: Customer master data with contact information (source: public.customers)
-- **orders**: Order transactions and line items (source: public.orders)
-- **products**: Product catalog with pricing (source: public.products)
-- **order_items**: Individual items within orders (source: public.order_items)
-- **categories**: Product categories (source: public.categories)
-```
-
-**Use Cases:**
-- Vector search returned 0 results — agent discovers tables manually
-- Question spans more tables than vector search returned
-- Follow-up questions reference tables not in initial context
-
----
-
-### Execution Flow
-
-1. **Load Chat Context**
-   - Fetch chat → ontology → semantic model → connection (FK chain)
-   - Verify ownership at each step
-
-2. **Embed User Question**
-   ```typescript
-   const questionEmbedding = await embeddingService.embedText(userMessage.content);
-   ```
-
-3. **Vector Search for Relevant Datasets**
-   ```typescript
-   const relevantDatasets = await neoVectorService.searchSimilar(
-     'dataset_embedding',
-     ontology.id,
-     questionEmbedding,
-     10,  // Top 10 datasets (doubled from 5 for better coverage)
-   );
-   ```
-
-3a. **Fallback on Empty Vector Results**
-    ```typescript
-    if (relevantDatasets.length === 0) {
-      const allDatasets = await neoOntologyService.listDatasets(ontology.id);
-      if (allDatasets.length === 0) {
-        // Truly empty ontology — fail gracefully
-        return;
-      }
-      // Continue with empty relevantDatasets — agent has list_datasets tool
-    }
-    ```
-
-4. **Load Conversation History**
-   ```typescript
-   const messages = await prisma.dataChatMessage.findMany({
-     where: { chatId },
-     orderBy: { createdAt: 'desc' },
-     take: 10,
-   });
-   const conversationHistory = messages.reverse();  // Chronological order
-   ```
-
-4a. **Get Relationship Join Hints**
-    ```typescript
-    const datasetNames = relevantDatasets.map((ds) => ds.name);
-    const relationships = datasetNames.length > 0
-      ? await neoOntologyService.getDatasetRelationships(ontology.id, datasetNames)
-      : [];
-    ```
-
-5. **Build System Prompt**
-   ```typescript
-   const systemPrompt = buildDataAgentSystemPrompt(
-     relevantDatasets,
-     databaseType,
-     conversationContext,
-     relationships,  // NEW: join hints for the prompt
-   );
-   ```
-
-6. **Create Tools with Bound Dependencies**
-   ```typescript
-   const tools = [
-     createQueryDatabaseTool(discoveryService, connectionId, userId),
-     createGetDatasetDetailsTool(neoOntologyService, ontologyId),
-     createGetSampleDataTool(discoveryService, neoOntologyService, connectionId, userId, ontologyId),
-     createRunPythonTool(sandboxService),
-     createListDatasetsTool(neoOntologyService, ontologyId),  // NEW: dataset discovery
-   ];
-   ```
-
-7. **Create ReAct Agent**
-   ```typescript
-   const llm = new ChatOpenAI({
-     modelName: config.get('llm.openai.model'),
-     apiKey: config.get('llm.openai.apiKey'),
-     streaming: false,  // Critical: prevents tool_calls corruption
-   });
-
-   const agent = createReactAgent({
-     llm,
-     tools,
-     messageModifier: systemPrompt,
-   });
-   ```
-
-8. **Execute Agent with Streaming**
-   ```typescript
-   const stream = agent.stream(
-     { messages: [new HumanMessage(userMessage.content)] },
-     { streamMode: 'updates', recursionLimit: 30 },
-   );
-
-   for await (const event of stream) {
-     // Emit SSE events based on event type
-     if (event.tools) {
-       // Tool node executed
-       emitToolResults(event.tools.messages);
-     } else if (event.agent) {
-       // AI response generated
-       emitText(event.agent.messages);
-     }
-   }
-   ```
-
-9. **Track Token Usage**
-   ```typescript
-   // Via BaseCallbackHandler.handleChatModelStart
-   handleChatModelStart(llm, messages) {
-     const promptTokens = countTokens(messages);
-     this.tokensUsed.prompt += promptTokens;
-   }
-
-   handleChatModelEnd(output) {
-     const completionTokens = countTokens(output.generations);
-     this.tokensUsed.completion += completionTokens;
-   }
-   ```
-
-10. **Persist Final Response**
-    ```typescript
-    await prisma.dataChatMessage.update({
-      where: { id: assistantMessageId },
-      data: {
-        content: finalContent,
-        status: 'complete',
-        metadata: {
-          toolCalls: [...],
-          tokensUsed: { prompt, completion, total },
-          datasetsUsed: [...],
-        },
-      },
-    });
-    ```
-
----
-
-## SSE Streaming
-
-Server-Sent Events (SSE) provide real-time streaming of agent execution to the frontend.
-
-### Why SSE Instead of WebSockets
-
-- **Simpler protocol**: Text-based, HTTP-compatible
-- **Auto-reconnection**: Browsers handle reconnection automatically
-- **POST method support**: Via `fetch()` + `ReadableStream` (not `EventSource`)
-- **Authentication**: Easy to include JWT in headers
-- **Firewall-friendly**: Uses standard HTTP
-
----
-
-### Fastify SSE Implementation
-
-**Pattern:** `res.hijack()` → raw HTTP response
-
-**Critical:** MUST call `hijack()` before SSE streaming or Fastify will call `res.end()` when controller returns.
-
-```typescript
-@Post(':chatId/messages/:messageId/stream')
-@Auth({ permissions: [PERMISSIONS.DATA_AGENT_WRITE] })
-async stream(
-  @Param('chatId') chatId: string,
-  @Param('messageId') messageId: string,
-  @CurrentUser('id') userId: string,
-  @Res() reply: FastifyReply,
-) {
-  // Set SSE headers
-  reply.raw.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-  });
-
-  // CRITICAL: Hijack response lifecycle
-  reply.hijack();
-
-  try {
-    // Emit SSE helper
-    const emit = (event: string, data: any) => {
-      reply.raw.write(`event: ${event}\n`);
-      reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
-    };
-
-    // Start streaming
-    emit('message_start', {});
-
-    // Execute agent with streaming
-    await this.agentService.executeAgent(chatId, messageId, userId, emit);
-
-    emit('message_complete', { ... });
-  } catch (error) {
-    reply.raw.write(`event: message_error\n`);
-    reply.raw.write(`data: ${JSON.stringify({ message: error.message })}\n\n`);
-  } finally {
-    reply.raw.end();
-  }
-}
-```
-
-**Note:** `@Res()` decorator tells NestJS to skip response handling, but Fastify still calls `end()` unless `hijack()` is called.
-
----
-
-### Event Types
-
-| Event | Payload | When Emitted |
-|-------|---------|--------------|
-| `message_start` | `{}` | Agent processing begins |
-| `tool_call` | `{ name: string, args: object }` | Tool invoked by agent |
-| `tool_result` | `{ name: string, result: string }` | Tool execution completed |
-| `text` | `{ content: string }` | AI generates response text |
-| `token_update` | `{ tokensUsed: { prompt, completion, total } }` | Final token counts |
-| `message_complete` | `{ content: string, metadata: object }` | Execution finished successfully |
-| `message_error` | `{ message: string }` | Execution failed with error |
-
----
-
-### Keep-Alive Heartbeat
-
-Prevent connection timeouts during long-running operations:
-
-```typescript
-const heartbeatInterval = setInterval(() => {
-  reply.raw.write(':heartbeat\n\n');
-}, 30000);  // 30 seconds
-
-try {
-  // Execute agent
-} finally {
-  clearInterval(heartbeatInterval);
-}
-```
-
-**Note:** Comments (`:` prefix) are ignored by SSE parsers but keep connection alive.
-
----
-
-### Tool Event Emission
-
-```typescript
-// From LangGraph updates stream
-for await (const event of agentStream) {
-  if (event.tools) {
-    const toolMessages = event.tools.messages;
-
-    for (const msg of toolMessages) {
-      // Match by tool_call_id for correct association (handles parallel tool calls)
-      const matchedCall = msg.tool_call_id ? toolCallMap.get(msg.tool_call_id) : undefined;
-
-      emit('tool_result', {
-        name: matchedCall?.name || 'unknown',
-        result: msg.content.slice(0, 2000),
-      });
-
-      // Store result on the matched call for conversation context
-      if (matchedCall) {
-        matchedCall.result = msg.content.slice(0, 2000);
-      }
-    }
-  } else if (event.agent) {
-    // AI response
-    const aiMessages = event.agent.messages as AIMessage[];
-
-    for (const msg of aiMessages) {
-      if (msg.content) {
-        emit('text', { content: msg.content });
-      }
-    }
-  }
-}
-```
-
-**Result Truncation:** Tool results truncated to 2000 chars for SSE (full results stored in database).
-
----
-
-### Error Handling
-
-```typescript
-try {
-  // Claim message (atomic)
-  const claimed = await this.dataAgentService.claimMessage(messageId);
-  if (!claimed) {
-    reply.raw.write(`event: message_error\n`);
-    reply.raw.write(`data: ${JSON.stringify({ message: 'Message already being processed' })}\n\n`);
-    reply.raw.end();
-    return;
-  }
-
-  // Execute agent
-  await this.agentService.executeAgent(...);
-
-} catch (error) {
-  // Update message status to failed
-  await this.dataAgentService.updateMessage(messageId, {
-    status: 'failed',
-    metadata: { error: { message: error.message, timestamp: new Date() } },
-  });
-
-  // Emit error event
-  reply.raw.write(`event: message_error\n`);
-  reply.raw.write(`data: ${JSON.stringify({ message: error.message })}\n\n`);
-} finally {
-  reply.raw.end();
-}
-```
-
----
-
-### Frontend SSE Consumption
-
-**Pattern:** `fetch()` + `ReadableStream` (not `EventSource` due to POST + auth headers)
-
-```typescript
-const response = await fetch(
-  `/api/data-agent/chats/${chatId}/messages/${messageId}/stream`,
-  {
-    method: 'POST',
-    headers: {
-      'Accept': 'text/event-stream',
-      'Authorization': `Bearer ${token}`,
-    },
-  }
-);
-
-const reader = response.body.getReader();
-const decoder = new TextDecoder();
-
-let buffer = '';
-while (true) {
-  const { done, value } = await reader.read();
-  if (done) break;
-
-  buffer += decoder.decode(value, { stream: true });
-  const lines = buffer.split('\n\n');
-  buffer = lines.pop() || '';  // Keep incomplete event in buffer
-
-  for (const line of lines) {
-    if (!line.trim()) continue;
-
-    const [eventLine, dataLine] = line.split('\n');
-    const event = eventLine.replace('event: ', '');
-    const data = JSON.parse(dataLine.replace('data: ', ''));
-
-    handleEvent(event, data);
-  }
-}
-```
-
-**React StrictMode Fix:** 100ms delay before fetch to allow cleanup abort:
-
-```typescript
-useEffect(() => {
-  const abortController = new AbortController();
-  let timeoutId: NodeJS.Timeout;
-
-  const startStream = async () => {
-    // Wait 100ms to allow StrictMode cleanup to abort
-    await new Promise(resolve => {
-      timeoutId = setTimeout(resolve, 100);
-    });
-
-    if (abortController.signal.aborted) return;
-
-    // Start SSE stream
-    const response = await fetch(..., { signal: abortController.signal });
-    // ...
-  };
-
-  startStream();
-
-  return () => {
-    clearTimeout(timeoutId);
-    abortController.abort();
-  };
-}, [messageId]);
+### Relationship Navigation (NEW)
+
+Multi-phase architecture adds graph navigation for join path discovery:
+
+```cypher
+-- Get all RELATES_TO edges (for Navigator)
+MATCH (from:Dataset {ontologyId: $ontologyId})-[r:RELATES_TO]->(to:Dataset {ontologyId: $ontologyId})
+RETURN from.name, to.name, r.name, r.fromColumns, r.toColumns
+
+-- Find shortest join path between two datasets (for Navigator)
+MATCH (start:Dataset {ontologyId: $ontologyId, name: $fromDataset}),
+      (end:Dataset {ontologyId: $ontologyId, name: $toDataset}),
+      path = shortestPath((start)-[:RELATES_TO*..5]-(end))
+RETURN [n IN nodes(path) | n.name] AS pathNames,
+       [r IN relationships(path) | {
+         from: startNode(r).name,
+         to: endNode(r).name,
+         fromColumns: r.fromColumns,
+         toColumns: r.toColumns,
+         name: r.name
+       }] AS rels
+LIMIT 3
 ```
 
 ---
 
 ## Docker Python Sandbox
 
-Isolated Python execution environment for data analysis and chart generation.
+The `SandboxService` executes Python code in an isolated Docker container for data analysis and visualization.
 
-### Container Architecture
+### Sandbox Architecture
 
-**Base Image:** `python:3.11-slim`
-**Server:** Flask + Gunicorn
-**Port:** 8000 (internal only)
-**Filesystem:** Read-only except `/tmp`
-**Network:** Isolated bridge (no external access)
-**Resources:** 512MB memory, 1 CPU core
+- **Image**: `knecta-data-agent-sandbox` (Flask-based)
+- **Runtime**: Docker container with 512MB memory limit
+- **Network**: No network access (`--network none`)
+- **Filesystem**: Read-only except `/tmp`
+- **Process Isolation**: Each execution runs in a separate subprocess
 
----
+### Pre-installed Packages
 
-### Dockerfile
+- `pandas`, `numpy` - Data manipulation
+- `matplotlib`, `seaborn` - Visualization
+- `scipy`, `scikit-learn` - Statistical analysis
+- `json`, `base64` - Serialization
 
-Located at `infra/sandbox/Dockerfile`:
+### API Endpoint
 
-```dockerfile
-FROM python:3.11-slim
+```http
+POST http://sandbox:5000/execute
+Content-Type: application/json
 
-# Install Python packages
-COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r /app/requirements.txt
-
-# Copy executor server
-COPY executor.py /app/
-WORKDIR /app
-
-# Create non-root user
-RUN useradd -m -u 1000 sandbox && \
-    chown -R sandbox:sandbox /app && \
-    chmod 755 /app
-
-USER sandbox
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD python -c "import requests; requests.get('http://localhost:8000/health')"
-
-# Run with gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "60", "executor:app"]
+{
+  "code": "import pandas as pd\nprint(df.head())",
+  "data": {
+    "df": [{"col1": 1, "col2": 2}]
+  },
+  "timeout": 30
+}
 ```
 
----
-
-### Python Dependencies
-
-Located at `infra/sandbox/requirements.txt`:
-
-```
-flask==3.0.0
-gunicorn==21.2.0
-pandas==2.1.4
-numpy==1.26.2
-matplotlib==3.8.2
-seaborn==0.13.0
-scipy==1.11.4
-openpyxl==3.1.2
+**Response:**
+```json
+{
+  "stdout": "   col1  col2\n0     1     2",
+  "stderr": "",
+  "charts": [],  // base64-encoded PNG strings
+  "error": null
+}
 ```
 
-**Note:** No external packages allowed at runtime (no pip install in sandbox).
+### Chart Generation
 
----
-
-### Executor Server
-
-Located at `infra/sandbox/executor.py`:
+Code can generate charts by saving to `/tmp/*.png`:
 
 ```python
-from flask import Flask, request, jsonify
-import subprocess
-import base64
-import os
-import time
-import glob
+import matplotlib.pyplot as plt
+import pandas as pd
 
-app = Flask(__name__)
-
-@app.route('/health', methods=['GET'])
-def health():
-    return jsonify({'status': 'ok'})
-
-@app.route('/execute', methods=['POST'])
-def execute():
-    data = request.json
-    code = data.get('code', '')
-    timeout = data.get('timeout', 30)  # Default 30s
-
-    # Write code to temp file
-    code_file = f'/tmp/code_{int(time.time() * 1000)}.py'
-    with open(code_file, 'w') as f:
-        f.write(code)
-
-    start_time = time.time()
-
-    try:
-        # Execute code in subprocess
-        result = subprocess.run(
-            ['python', code_file],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd='/tmp',
-        )
-
-        execution_time = int((time.time() - start_time) * 1000)
-
-        # Collect matplotlib figures
-        chart_files = glob.glob('/tmp/*.png') + glob.glob('/tmp/*.jpg')
-        files = []
-        for chart_path in chart_files:
-            with open(chart_path, 'rb') as f:
-                files.append({
-                    'filename': os.path.basename(chart_path),
-                    'data': base64.b64encode(f.read()).decode('utf-8'),
-                })
-            os.remove(chart_path)  # Cleanup
-
-        # Cleanup code file
-        os.remove(code_file)
-
-        return jsonify({
-            'stdout': result.stdout,
-            'stderr': result.stderr,
-            'returnCode': result.returncode,
-            'files': files,
-            'executionTimeMs': execution_time,
-        })
-
-    except subprocess.TimeoutExpired:
-        os.remove(code_file)
-        return jsonify({
-            'stdout': '',
-            'stderr': f'Execution timeout after {timeout}s',
-            'returnCode': -1,
-            'files': [],
-            'executionTimeMs': timeout * 1000,
-        }), 408
-
-    except Exception as e:
-        return jsonify({
-            'stdout': '',
-            'stderr': str(e),
-            'returnCode': -1,
-            'files': [],
-            'executionTimeMs': 0,
-        }), 500
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000)
+df = pd.DataFrame(data)
+df.plot(kind='bar')
+plt.savefig('/tmp/chart.png')
 ```
 
----
+The sandbox Flask app scans `/tmp/` after execution and returns all `.png` files as base64-encoded strings.
 
-### Docker Compose Configuration
+### Security
 
-Located in `infra/compose/base.compose.yml`:
-
-```yaml
-services:
-  sandbox:
-    build:
-      context: ../sandbox
-      dockerfile: Dockerfile
-    container_name: knecta-sandbox
-    read_only: true
-    tmpfs:
-      - /tmp:rw,size=100M
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '1.0'
-    networks:
-      - sandbox-isolated
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
-networks:
-  sandbox-isolated:
-    driver: bridge
-    internal: true  # No external network access
-```
-
----
-
-### Node.js Client (SandboxService)
-
-Located at `apps/api/src/sandbox/sandbox.service.ts`:
-
-```typescript
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-
-export interface ExecutionResult {
-  stdout: string;
-  stderr: string;
-  returnCode: number;
-  files: Array<{ filename: string; data: string }>;
-  executionTimeMs: number;
-}
-
-@Injectable()
-export class SandboxService {
-  private readonly sandboxUrl: string;
-
-  constructor(private readonly config: ConfigService) {
-    this.sandboxUrl = this.config.get<string>('sandbox.url', 'http://sandbox:8000');
-  }
-
-  async executeCode(code: string, timeout: number = 30000): Promise<ExecutionResult> {
-    const response = await fetch(`${this.sandboxUrl}/execute`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, timeout: timeout / 1000 }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Sandbox execution failed: ${response.statusText}`);
-    }
-
-    return response.json();
-  }
-
-  async isHealthy(): Promise<boolean> {
-    try {
-      const response = await fetch(`${this.sandboxUrl}/health`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(5000),
-      });
-      return response.ok;
-    } catch {
-      return false;
-    }
-  }
-}
-```
-
----
-
-### Security Features
-
-1. **Read-Only Filesystem**
-   - Container FS mounted read-only
-   - Only `/tmp` writable (100MB tmpfs)
-   - Prevents persistence across executions
-
-2. **No Capabilities**
-   - All Linux capabilities dropped
-   - Cannot modify system, access hardware, or escalate privileges
-
-3. **Resource Limits**
-   - 512MB memory hard limit
-   - 1 CPU core
-   - Prevents resource exhaustion attacks
-
-4. **Network Isolation**
-   - Internal bridge network only
-   - No external network access
-   - Cannot exfiltrate data or download packages
-
-5. **Execution Timeout**
-   - Default 30s timeout
-   - Configurable per request
-   - Subprocess timeout enforcement
-
-6. **Process Isolation**
-   - Each execution runs in fresh subprocess
-   - No shared memory or state
-   - Code cleanup after execution
+- No access to host filesystem
+- No environment variables
+- No network access (cannot download packages or call APIs)
+- Memory limit enforced by Docker (`--memory=512m`)
+- Execution timeout (default 30s, configurable)
 
 ---
 
 ## Frontend Components
 
-ChatGPT-style interface at `/agent` and `/agent/:chatId`.
+### PhaseIndicator (NEW)
 
-### Page Layout
+MUI Stepper component showing 6-phase progress.
 
+**Location**: `apps/web/src/components/data-agent/PhaseIndicator.tsx`
+
+**Props**:
+```typescript
+{
+  currentPhase: string | null,
+  completedPhases: string[],
+  phases: string[],  // ['planner', 'navigator', 'sql_builder', 'executor', 'verifier', 'explainer']
+}
 ```
-┌────────────────────────────────────────────────────────────────┐
-│                        App Header                              │
-├──────────────┬─────────────────────────────────────────────────┤
-│  Sidebar     │  Main Content Area                              │
-│  (280px)     │                                                  │
-│              │  ┌──────────────────────────────────────────┐   │
-│  New Chat    │  │  Chat Header (name + ontology chip)     │   │
-│  Button      │  ├──────────────────────────────────────────┤   │
-│              │  │                                          │   │
-│  Search      │  │  ChatView (messages with auto-scroll)   │   │
-│              │  │                                          │   │
-│  Today       │  │  - User message (right, primary)        │   │
-│  - Chat 1    │  │  - Assistant message (left, markdown)   │   │
-│  - Chat 2    │  │  - Tool calls (collapsible accordions)  │   │
-│              │  │  - Charts (base64 images)               │   │
-│  Yesterday   │  │                                          │   │
-│  - Chat 3    │  │                                          │   │
-│              │  │                                          │   │
-│  Last 7 Days │  ├──────────────────────────────────────────┤   │
-│  - Chat 4    │  │  ChatInput (textarea, Enter to send)    │   │
-│              │  └──────────────────────────────────────────┘   │
-│              │                                                  │
-│              │  OR: WelcomeScreen (when no chat selected)      │
-│              │  - Icon, title, suggestion cards                │
-└──────────────┴─────────────────────────────────────────────────┘
-```
+
+**Rendering**:
+- Active step: `currentPhase`
+- Completed steps: checkmark icon
+- Pending steps: gray
+- Updates in real-time as SSE events arrive
 
 ---
 
-### 1. DataAgentPage
+### ChatMessage (UPDATED)
 
-File: `apps/web/src/pages/DataAgentPage.tsx`
+Message bubble component with verification badge and data lineage.
 
-**Purpose:** Full-page layout with sidebar + chat area
+**Location**: `apps/web/src/components/data-agent/ChatMessage.tsx`
 
-**Layout:**
+**New Features**:
+- Verification badge: checkmark (passed) or warning icon (failed with caveats)
+- Data lineage footer: datasets, joins, grain, row count
+- Expandable metadata inspector (toolCalls, plan, stepResults)
+
+**Verification Badge**:
 ```tsx
-<Box sx={{ display: 'flex', height: '100vh' }}>
-  <ChatSidebar
-    chats={chats}
-    currentChatId={chatId}
-    onNewChat={handleNewChat}
-    onSelectChat={handleSelectChat}
-    onDeleteChat={handleDeleteChat}
+{metadata?.verificationReport && (
+  <Chip
+    size="small"
+    icon={metadata.verificationReport.passed ? <CheckCircleIcon /> : <WarningIcon />}
+    label={metadata.verificationReport.passed ? 'Verified' : 'Unverified (see caveats)'}
+    color={metadata.verificationReport.passed ? 'success' : 'warning'}
   />
-
-  <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-    {chatId ? (
-      <ChatView chatId={chatId} />
-    ) : (
-      <WelcomeScreen onNewChat={handleNewChat} />
-    )}
-  </Box>
-</Box>
+)}
 ```
 
-**State:**
-```typescript
-const { chatId } = useParams();
-const navigate = useNavigate();
-const { chats, fetchChats, createChat, deleteChat } = useDataAgent();
-```
-
-**Routing:**
-- `/agent` - No chat selected, shows WelcomeScreen
-- `/agent/:chatId` - Specific chat, shows ChatView
-
----
-
-### 2. ChatSidebar
-
-File: `apps/web/src/components/data-agent/ChatSidebar.tsx`
-
-**Purpose:** Left panel with conversation list
-
-**Features:**
-- New Chat button at top
-- Search input (filters by name)
-- Chats grouped by date:
-  - Today
-  - Yesterday
-  - Last 7 Days
-  - Last 30 Days
-  - Older
-- Each chat shows:
-  - Name (truncated to 30 chars)
-  - Hover actions: Rename, Delete
-  - Active state highlight
-- Empty state message
-
-**Grouping Logic:**
-```typescript
-const groupChatsByDate = (chats: DataChat[]) => {
-  const now = new Date();
-  const today = startOfDay(now);
-  const yesterday = subDays(today, 1);
-  const last7Days = subDays(today, 7);
-  const last30Days = subDays(today, 30);
-
-  return {
-    today: chats.filter(c => isAfter(c.updatedAt, today)),
-    yesterday: chats.filter(c => isAfter(c.updatedAt, yesterday) && !isAfter(c.updatedAt, today)),
-    last7Days: chats.filter(c => isAfter(c.updatedAt, last7Days) && !isAfter(c.updatedAt, yesterday)),
-    last30Days: chats.filter(c => isAfter(c.updatedAt, last30Days) && !isAfter(c.updatedAt, last7Days)),
-    older: chats.filter(c => !isAfter(c.updatedAt, last30Days)),
-  };
-};
-```
-
----
-
-### 3. ChatView
-
-File: `apps/web/src/components/data-agent/ChatView.tsx`
-
-**Purpose:** Main chat area with messages and input
-
-**Layout:**
+**Data Lineage**:
 ```tsx
-<Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-  {/* Header */}
-  <Box sx={{ borderBottom: 1, borderColor: 'divider', p: 2 }}>
-    <Typography variant="h6">{chat.name}</Typography>
-    <Chip label={ontology.name} size="small" />
-  </Box>
-
-  {/* Messages */}
-  <Box ref={messagesEndRef} sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
-    {messages.map(message => (
-      <ChatMessage key={message.id} message={message} />
-    ))}
-  </Box>
-
-  {/* Input */}
-  <Box sx={{ borderTop: 1, borderColor: 'divider', p: 2 }}>
-    <ChatInput
-      onSend={handleSendMessage}
-      disabled={isStreaming}
-    />
-  </Box>
-</Box>
-```
-
-**Auto-Scroll:**
-```typescript
-const messagesEndRef = useRef<HTMLDivElement>(null);
-
-useEffect(() => {
-  messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-}, [messages]);
-```
-
-**State:**
-```typescript
-const { chat, messages, sendMessage, isStreaming } = useDataChat(chatId);
-```
-
----
-
-### 4. ChatMessage
-
-File: `apps/web/src/components/data-agent/ChatMessage.tsx`
-
-**Purpose:** Individual message bubble
-
-**User Message:**
-```tsx
-<Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-  <Paper sx={{ bgcolor: 'primary.main', color: 'primary.contrastText', p: 2, maxWidth: '70%' }}>
-    <Typography>{message.content}</Typography>
-  </Paper>
-</Box>
-```
-
-**Assistant Message:**
-```tsx
-<Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: 2 }}>
-  <Paper sx={{ bgcolor: 'grey.100', p: 2, maxWidth: '80%' }}>
-    {/* Tool calls (if any) */}
-    {message.metadata?.toolCalls?.map(tool => (
-      <ToolCallAccordion key={tool.timestamp} toolCall={tool} />
-    ))}
-
-    {/* Markdown content */}
-    <ReactMarkdown
-      components={{
-        code: ({ inline, children, ...props }) =>
-          inline ? (
-            <code {...props}>{children}</code>
-          ) : (
-            <SyntaxHighlighter language="python" style={docco}>
-              {children}
-            </SyntaxHighlighter>
-          ),
-        table: ({ children }) => (
-          <TableContainer component={Paper}>
-            <Table size="small">{children}</Table>
-          </TableContainer>
-        ),
-        img: ({ src, alt }) => (
-          <img src={src} alt={alt} style={{ maxWidth: '100%' }} />
-        ),
-      }}
-    >
-      {message.content}
-    </ReactMarkdown>
-
-    {/* Status indicator */}
-    {message.status === 'generating' && <CircularProgress size={20} />}
-  </Paper>
-</Box>
-```
-
-**Markdown Features:**
-- Syntax highlighting (react-syntax-highlighter)
-- MUI tables for markdown tables
-- Base64 image display
-- Code blocks with language detection
-- Links, lists, bold, italic, etc.
-
----
-
-### 5. ToolCallAccordion
-
-File: `apps/web/src/components/data-agent/ToolCallAccordion.tsx`
-
-**Purpose:** Collapsible display of tool execution
-
-**Layout:**
-```tsx
-<Accordion>
-  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-      <CodeIcon fontSize="small" />
-      <Typography variant="body2">
-        {getToolLabel(toolCall.name)}
-      </Typography>
-    </Box>
-  </AccordionSummary>
-
-  <AccordionDetails>
-    {/* Arguments */}
+{metadata?.dataLineage && (
+  <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
     <Typography variant="caption" color="text.secondary">
-      Arguments:
+      Data: {metadata.dataLineage.datasets.join(', ')} |
+      Grain: {metadata.dataLineage.grain} |
+      Rows: {metadata.dataLineage.rowCount?.toLocaleString()} |
+      {metadata.dataLineage.joins.length} joins
     </Typography>
-    <SyntaxHighlighter language="json" style={docco}>
-      {JSON.stringify(toolCall.args, null, 2)}
-    </SyntaxHighlighter>
-
-    {/* Result */}
-    <Typography variant="caption" color="text.secondary" sx={{ mt: 2 }}>
-      Result:
-    </Typography>
-    <Box sx={{ bgcolor: 'grey.50', p: 1, borderRadius: 1, fontFamily: 'monospace', fontSize: '0.875rem' }}>
-      {toolCall.result}
-    </Box>
-  </AccordionDetails>
-</Accordion>
-```
-
-**Tool Labels:**
-```typescript
-const getToolLabel = (toolName: string): string => {
-  const labels = {
-    query_database: 'Analyzed data',
-    get_dataset_details: 'Checked dataset details',
-    get_sample_data: 'Viewed sample data',
-    run_python: 'Ran Python analysis',
-  };
-  return labels[toolName] || toolName;
-};
-```
-
-**Visual:** Looks like ChatGPT's "Used code interpreter" or "Analyzed data" accordions.
-
----
-
-### 6. ChatInput
-
-File: `apps/web/src/components/data-agent/ChatInput.tsx`
-
-**Purpose:** Bottom input textarea
-
-**Features:**
-- Auto-resize (1-10 lines)
-- Enter to send, Shift+Enter for newline
-- Send button
-- Disabled during streaming
-- Placeholder text
-
-**Implementation:**
-```tsx
-<Box sx={{ display: 'flex', gap: 1 }}>
-  <TextField
-    multiline
-    maxRows={10}
-    fullWidth
-    placeholder="Ask a question about your data..."
-    value={input}
-    onChange={(e) => setInput(e.target.value)}
-    onKeyDown={(e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleSend();
-      }
-    }}
-    disabled={disabled}
-  />
-
-  <IconButton
-    color="primary"
-    onClick={handleSend}
-    disabled={disabled || !input.trim()}
-  >
-    <SendIcon />
-  </IconButton>
-</Box>
+  </Box>
+)}
 ```
 
 ---
 
-### 7. WelcomeScreen
+### ToolCallAccordion (UPDATED)
 
-File: `apps/web/src/components/data-agent/WelcomeScreen.tsx`
+Collapsible tool execution display grouped by phase and step.
 
-**Purpose:** Empty state when no chat selected
+**Location**: `apps/web/src/components/data-agent/ToolCallAccordion.tsx`
 
-**Layout:**
-```tsx
-<Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 4 }}>
-  <SmartToyIcon sx={{ fontSize: 80, color: 'primary.main' }} />
+**New Features**:
+- Group tool calls by `phase`
+- Within Executor phase, group by `stepId`
+- Show phase name and step description
+- Syntax highlighting for SQL and Python code
 
-  <Typography variant="h4">Data Agent</Typography>
-
-  <Typography variant="body1" color="text.secondary" textAlign="center">
-    Ask questions about your data in natural language.<br />
-    Select a conversation from the sidebar or start a new one.
-  </Typography>
-
-  <Button
-    variant="contained"
-    startIcon={<AddIcon />}
-    onClick={onNewChat}
-  >
-    New Chat
-  </Button>
-
-  {/* Suggestion Cards */}
-  <Grid container spacing={2} maxWidth="md">
-    {suggestions.map(suggestion => (
-      <Grid item xs={6} key={suggestion.title}>
-        <Card sx={{ cursor: 'pointer' }} onClick={() => onSuggestion(suggestion.prompt)}>
-          <CardContent>
-            <Typography variant="body2" fontWeight="bold">
-              {suggestion.title}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {suggestion.description}
-            </Typography>
-          </CardContent>
-        </Card>
-      </Grid>
-    ))}
-  </Grid>
-</Box>
+**Structure**:
 ```
+📋 Navigator
+  └─ list_datasets → [...]
+  └─ get_relationships → [...]
+  └─ get_dataset_details → [...]
 
-**Suggestions:**
-```typescript
-const suggestions = [
-  { title: 'Top Customers', description: 'Who are our top 10 customers by revenue?', prompt: 'Show me the top 10 customers by revenue' },
-  { title: 'Sales Trends', description: 'What are the sales trends over the last 6 months?', prompt: 'Show sales trends over the last 6 months' },
-  { title: 'Product Analysis', description: 'Which products have the highest profit margin?', prompt: 'Which products have the highest profit margin?' },
-  { title: 'Customer Segmentation', description: 'Can you segment customers by purchase frequency?', prompt: 'Segment customers by purchase frequency' },
-];
+🔧 Executor
+  └─ Step 1: Get monthly revenue per store
+      └─ query_database → 100 rows
+  └─ Step 2: Compare Houston vs peers
+      └─ query_database → 50 rows
+  └─ Step 3: Decompose variance
+      └─ query_database → 200 rows
+      └─ run_python → [chart]
+
+✅ Verifier
+  └─ run_python → Verification checks passed
 ```
 
 ---
 
-### 8. NewChatDialog
+### ChatView (UPDATED)
 
-File: `apps/web/src/components/data-agent/NewChatDialog.tsx`
+Main chat display with PhaseIndicator integration.
 
-**Purpose:** Modal for creating new chat
+**Location**: `apps/web/src/components/data-agent/ChatView.tsx`
 
-**Form:**
-```tsx
-<Dialog open={open} onClose={onClose}>
-  <DialogTitle>New Chat</DialogTitle>
-
-  <DialogContent>
-    <FormControl fullWidth margin="normal">
-      <InputLabel>Ontology</InputLabel>
-      <Select
-        value={ontologyId}
-        onChange={(e) => setOntologyId(e.target.value)}
-      >
-        {ontologies
-          .filter(o => o.status === 'ready')
-          .map(o => (
-            <MenuItem key={o.id} value={o.id}>
-              {o.name}
-            </MenuItem>
-          ))}
-      </Select>
-      <FormHelperText>
-        Select the ontology (data model) for this conversation
-      </FormHelperText>
-    </FormControl>
-
-    <TextField
-      fullWidth
-      margin="normal"
-      label="Chat Name (Optional)"
-      value={name}
-      onChange={(e) => setName(e.target.value)}
-      helperText="Auto-generated from first question if left empty"
-    />
-  </DialogContent>
-
-  <DialogActions>
-    <Button onClick={onClose}>Cancel</Button>
-    <Button
-      variant="contained"
-      onClick={handleCreate}
-      disabled={!ontologyId}
-    >
-      Create
-    </Button>
-  </DialogActions>
-</Dialog>
-```
-
-**Auto-Generated Name:**
-- If name empty, use first question as chat name
-- Truncate to 50 chars
-- Example: "What were the top customers..." → "Top customers by revenue"
+**Changes**:
+- Render `<PhaseIndicator />` above message list during generation
+- Show elapsed time during generation
+- Auto-scroll to bottom on new phase/step events
 
 ---
 
-### 9. useDataAgent Hook
+### WelcomeScreen
 
-File: `apps/web/src/hooks/useDataAgent.ts`
+Empty state when no chat is selected.
 
-**Purpose:** State management for chat list
+**Location**: `apps/web/src/components/data-agent/WelcomeScreen.tsx`
 
-**State:**
-```typescript
-const [chats, setChats] = useState<DataChat[]>([]);
-const [total, setTotal] = useState(0);
-const [page, setPage] = useState(1);
-const [pageSize, setPageSize] = useState(20);
-const [search, setSearch] = useState('');
-const [isLoading, setIsLoading] = useState(false);
-const [error, setError] = useState<string | null>(null);
-```
-
-**Methods:**
-```typescript
-const fetchChats = async () => {
-  setIsLoading(true);
-  try {
-    const response = await api.listDataChats({ page, pageSize, search });
-    setChats(response.data.items);
-    setTotal(response.data.total);
-  } catch (err) {
-    setError(err.message);
-  } finally {
-    setIsLoading(false);
-  }
-};
-
-const createChat = async (ontologyId: string, name?: string) => {
-  const response = await api.createDataChat({ ontologyId, name });
-  setChats([response.data, ...chats]);
-  return response.data;
-};
-
-const updateChat = async (id: string, name: string) => {
-  const response = await api.updateDataChat(id, { name });
-  setChats(chats.map(c => c.id === id ? response.data : c));
-};
-
-const deleteChat = async (id: string) => {
-  await api.deleteDataChat(id);
-  setChats(chats.filter(c => c.id !== id));
-};
-```
+**Features**:
+- Suggestion cards: "Analyze sales trends", "Compare regional performance", "Find top customers"
+- Click card → populate ChatInput with question
 
 ---
 
-### 10. useDataChat Hook
+### ChatInput
 
-File: `apps/web/src/hooks/useDataChat.ts`
+Auto-resize textarea with Enter to send.
 
-**Purpose:** State management for single chat + SSE streaming
+**Location**: `apps/web/src/components/data-agent/ChatInput.tsx`
 
-**State:**
-```typescript
-const [chat, setChat] = useState<DataChat | null>(null);
-const [messages, setMessages] = useState<DataChatMessage[]>([]);
-const [isStreaming, setIsStreaming] = useState(false);
-const [error, setError] = useState<string | null>(null);
-```
-
-**Send Message:**
-```typescript
-const sendMessage = async (content: string) => {
-  setIsStreaming(true);
-
-  try {
-    // Create message pair (user + assistant placeholder)
-    const response = await api.sendDataChatMessage(chatId, { content });
-    const { userMessage, assistantMessage } = response.data;
-
-    setMessages([...messages, userMessage, assistantMessage]);
-
-    // Open SSE stream
-    await streamAssistantResponse(assistantMessage.id);
-
-  } catch (err) {
-    setError(err.message);
-  } finally {
-    setIsStreaming(false);
-  }
-};
-```
-
-**SSE Streaming:**
-```typescript
-const streamAssistantResponse = async (messageId: string) => {
-  const abortController = new AbortController();
-  let timeoutId: NodeJS.Timeout;
-
-  try {
-    // Wait 100ms for StrictMode cleanup
-    await new Promise(resolve => {
-      timeoutId = setTimeout(resolve, 100);
-    });
-
-    if (abortController.signal.aborted) return;
-
-    const response = await fetch(
-      `/api/data-agent/chats/${chatId}/messages/${messageId}/stream`,
-      {
-        method: 'POST',
-        headers: {
-          'Accept': 'text/event-stream',
-          'Authorization': `Bearer ${token}`,
-        },
-        signal: abortController.signal,
-      }
-    );
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-
-    let buffer = '';
-    let accumulatedContent = '';
-    let toolCalls: ToolCall[] = [];
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (!line.trim() || line.startsWith(':')) continue;
-
-        const [eventLine, dataLine] = line.split('\n');
-        const event = eventLine.replace('event: ', '');
-        const data = JSON.parse(dataLine.replace('data: ', ''));
-
-        switch (event) {
-          case 'tool_call':
-            toolCalls.push({ name: data.name, args: data.args, result: '', timestamp: new Date() });
-            break;
-
-          case 'tool_result':
-            const lastTool = toolCalls[toolCalls.length - 1];
-            if (lastTool) lastTool.result = data.result;
-            break;
-
-          case 'text':
-            accumulatedContent += data.content;
-            updateMessage(messageId, { content: accumulatedContent });
-            break;
-
-          case 'message_complete':
-            updateMessage(messageId, {
-              content: data.content,
-              status: 'complete',
-              metadata: data.metadata,
-            });
-            break;
-
-          case 'message_error':
-            updateMessage(messageId, {
-              status: 'failed',
-              metadata: { error: { message: data.message } },
-            });
-            break;
-        }
-      }
-    }
-  } finally {
-    clearTimeout(timeoutId);
-    abortController.abort();
-  }
-};
-```
-
-**Update Message Helper:**
-```typescript
-const updateMessage = (id: string, updates: Partial<DataChatMessage>) => {
-  setMessages(messages.map(m =>
-    m.id === id ? { ...m, ...updates } : m
-  ));
-};
-```
+**Features**:
+- Enter to send (Shift+Enter for new line)
+- Auto-resize up to 5 rows
+- Disabled during message generation
 
 ---
 
-### Navigation
+### NewChatDialog
 
-**Sidebar Entry:**
+Ontology selection dialog for creating new chats.
 
-File: `apps/web/src/components/navigation/Sidebar.tsx`
+**Location**: `apps/web/src/components/data-agent/NewChatDialog.tsx`
 
-```tsx
-import SmartToyIcon from '@mui/icons-material/SmartToy';
-
-<RequirePermission permission="data_agent:read">
-  <ListItem button component={Link} to="/agent">
-    <ListItemIcon>
-      <SmartToyIcon />
-    </ListItemIcon>
-    <ListItemText primary="Data Agent" />
-  </ListItem>
-</RequirePermission>
-```
-
-**Route Definitions:**
-
-File: `apps/web/src/App.tsx`
-
-```tsx
-<Route path="/agent" element={<DataAgentPage />} />
-<Route path="/agent/:chatId" element={<DataAgentPage />} />
-```
+**Features**:
+- List available ontologies (requires `ontologies:read` permission)
+- Filter by semantic model or connection
+- Automatically generate chat name based on first message
 
 ---
 
 ## Configuration
 
-### Environment Variables
+### Required Environment Variables
 
-Required in `infra/compose/.env`:
-
+**LLM Providers** (one required):
 ```bash
-# Embedding Service
-EMBEDDING_DEFAULT_PROVIDER=openai  # Currently only option
+# OpenAI
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o  # default: gpt-4o
 
-# Python Sandbox
-SANDBOX_URL=http://sandbox:8000  # Internal Docker network
-
-# LLM Configuration (reused for embeddings)
-OPENAI_API_KEY=sk-...  # Required for embeddings + chat
-OPENAI_MODEL=gpt-4  # Or gpt-4-turbo, gpt-3.5-turbo
-
-# Optional: Alternative providers
+# Anthropic
 ANTHROPIC_API_KEY=sk-ant-...
-ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
+ANTHROPIC_MODEL=claude-3-5-sonnet-20241022  # default
 
+# Azure OpenAI
 AZURE_OPENAI_API_KEY=...
-AZURE_OPENAI_ENDPOINT=https://...
-AZURE_OPENAI_DEPLOYMENT=gpt-4
+AZURE_OPENAI_ENDPOINT=https://....openai.azure.com
+AZURE_OPENAI_DEPLOYMENT=gpt-4o
 AZURE_OPENAI_API_VERSION=2024-02-15-preview
 ```
 
-**Validation:**
-- `OPENAI_API_KEY` required for embeddings (even if using Anthropic for chat)
-- `SANDBOX_URL` must be accessible from API container
-- Default provider `openai` used if `EMBEDDING_DEFAULT_PROVIDER` not set
+**Default Provider**:
+```bash
+LLM_DEFAULT_PROVIDER=openai  # openai | anthropic | azure
+```
 
----
+**Embedding Provider** (OpenAI only):
+```bash
+OPENAI_API_KEY=sk-...  # Same key used for embeddings
+```
 
-### Configuration Service
+**Neo4j**:
+```bash
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=password
+```
 
-File: `apps/api/src/config/configuration.ts`
+**Python Sandbox**:
+```bash
+SANDBOX_URL=http://sandbox:5000  # Docker service name
+```
 
-```typescript
-export default () => ({
-  embedding: {
-    defaultProvider: process.env.EMBEDDING_DEFAULT_PROVIDER || 'openai',
-  },
-  sandbox: {
-    url: process.env.SANDBOX_URL || 'http://sandbox:8000',
-  },
-  llm: {
-    defaultProvider: process.env.LLM_DEFAULT_PROVIDER || 'openai',
-    openai: {
-      apiKey: process.env.OPENAI_API_KEY,
-      model: process.env.OPENAI_MODEL || 'gpt-4',
-    },
-    anthropic: {
-      apiKey: process.env.ANTHROPIC_API_KEY,
-      model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022',
-    },
-    azure: {
-      apiKey: process.env.AZURE_OPENAI_API_KEY,
-      endpoint: process.env.AZURE_OPENAI_ENDPOINT,
-      deployment: process.env.AZURE_OPENAI_DEPLOYMENT,
-      apiVersion: process.env.AZURE_OPENAI_API_VERSION || '2024-02-15-preview',
-    },
-  },
-});
+### Optional Configuration
+
+```bash
+# Query execution limits
+SQL_QUERY_TIMEOUT_MS=30000  # 30s
+SQL_MAX_ROWS=1000
+
+# Python sandbox limits
+PYTHON_TIMEOUT_MS=30000  # 30s
+PYTHON_MEMORY_LIMIT_MB=512
+
+# Vector search
+VECTOR_SEARCH_TOP_K=10  # Number of relevant datasets
+
+# Conversation context
+CONVERSATION_HISTORY_LIMIT=10  # Last N messages for context
 ```
 
 ---
 
 ## File Inventory
 
-### Backend Files (New)
+### New Backend Files
 
-```
-apps/api/
-├── prisma/
-│   ├── schema.prisma                                     # DataChat + DataChatMessage models
-│   └── migrations/
-│       └── YYYYMMDDHHMMSS_add_data_agent/
-│           └── migration.sql                             # SQL migration
-├── src/
-│   ├── common/
-│   │   └── constants/
-│   │       └── roles.constants.ts                        # DATA_AGENT permissions added
-│   ├── embedding/
-│   │   ├── embedding.module.ts                           # Global module
-│   │   ├── embedding.service.ts                          # Facade service
-│   │   └── providers/
-│   │       ├── embedding-provider.interface.ts           # Interface
-│   │       ├── openai-embedding.provider.ts              # OpenAI implementation
-│   │       └── index.ts                                  # Exports
-│   ├── neo-graph/
-│   │   ├── neo-graph.module.ts                           # Export NeoVectorService (modified)
-│   │   └── neo-vector.service.ts                         # Vector search service
-│   ├── sandbox/
-│   │   ├── sandbox.module.ts                             # Global module
-│   │   └── sandbox.service.ts                            # Python execution client
-│   ├── data-agent/
-│   │   ├── data-agent.module.ts                          # Main module
-│   │   ├── data-agent.service.ts                         # CRUD operations
-│   │   ├── data-agent.service.spec.ts                    # CRUD unit tests
-│   │   ├── data-agent.controller.ts                      # REST API
-│   │   ├── agent-stream.controller.ts                    # SSE streaming
-│   │   ├── agent/
-│   │   │   ├── agent.service.ts                          # ReAct agent creation + execution
-│   │   │   ├── agent.service.spec.ts                     # Agent orchestration unit tests
-│   │   │   ├── prompts.ts                                # System prompt builder
-│   │   │   ├── prompts.spec.ts                           # Prompt builder unit tests
-│   │   │   └── tools/
-│   │   │       ├── query-database.tool.ts                # SQL execution tool
-│   │   │       ├── get-dataset-details.tool.ts           # Dataset YAML tool
-│   │   │       ├── get-sample-data.tool.ts               # Sample rows tool
-│   │   │       ├── run-python.tool.ts                    # Python sandbox tool
-│   │   │       ├── list-datasets.tool.ts                 # Dataset discovery tool
-│   │   │       ├── list-datasets.tool.spec.ts            # Discovery tool unit tests
-│   │   │       └── index.ts                              # Tool factory exports
-│   │   └── dto/
-│   │       ├── create-chat.dto.ts                        # Create validation (Zod)
-│   │       ├── update-chat.dto.ts                        # Update validation (Zod)
-│   │       ├── chat-query.dto.ts                         # List query validation (Zod)
-│   │       └── send-message.dto.ts                       # Message validation (Zod)
-│   └── ontologies/
-│       ├── neo-ontology.service.ts                       # Embedding generation + lightweight queries
-│       └── neo-ontology.service.spec.ts                  # Lightweight query unit tests
-└── test/
-    └── data-agent.integration.spec.ts                    # Integration tests
-```
+| File | Purpose |
+|------|---------|
+| `apps/api/src/data-agent/agent/types.ts` | TypeScript interfaces for all phase artifacts |
+| `apps/api/src/data-agent/agent/state.ts` | LangGraph state definition with Annotation |
+| `apps/api/src/data-agent/agent/graph.ts` | StateGraph builder with 6 nodes + conditional routing |
+| `apps/api/src/data-agent/agent/nodes/planner.node.ts` | Planner phase: sub-task decomposition |
+| `apps/api/src/data-agent/agent/nodes/navigator.node.ts` | Navigator phase: dataset + join path discovery |
+| `apps/api/src/data-agent/agent/nodes/sql-builder.node.ts` | SQL Builder phase: per-step SQL generation |
+| `apps/api/src/data-agent/agent/nodes/executor.node.ts` | Executor phase: progressive SQL + Python execution |
+| `apps/api/src/data-agent/agent/nodes/verifier.node.ts` | Verifier phase: Python validation + revision routing |
+| `apps/api/src/data-agent/agent/nodes/explainer.node.ts` | Explainer phase: narrative + lineage synthesis |
+| `apps/api/src/data-agent/agent/nodes/index.ts` | Barrel export for nodes |
+| `apps/api/src/data-agent/agent/prompts/planner.prompt.ts` | Planner system prompt |
+| `apps/api/src/data-agent/agent/prompts/navigator.prompt.ts` | Navigator system prompt |
+| `apps/api/src/data-agent/agent/prompts/sql-builder.prompt.ts` | SQL Builder system prompt |
+| `apps/api/src/data-agent/agent/prompts/executor.prompt.ts` | Executor repair prompt |
+| `apps/api/src/data-agent/agent/prompts/verifier.prompt.ts` | Verifier system prompt |
+| `apps/api/src/data-agent/agent/prompts/explainer.prompt.ts` | Explainer system prompt |
+| `apps/api/src/data-agent/agent/prompts/index.ts` | Barrel export for prompts |
+| `apps/api/src/data-agent/agent/tools/query-database.tool.ts` | Rebuilt: SQL execution |
+| `apps/api/src/data-agent/agent/tools/get-dataset-details.tool.ts` | Rebuilt: YAML schema lookup |
+| `apps/api/src/data-agent/agent/tools/get-sample-data.tool.ts` | Rebuilt: Sample rows |
+| `apps/api/src/data-agent/agent/tools/run-python.tool.ts` | Rebuilt: Python sandbox execution |
+| `apps/api/src/data-agent/agent/tools/list-datasets.tool.ts` | Rebuilt: Dataset discovery |
+| `apps/api/src/data-agent/agent/tools/get-relationships.tool.ts` | NEW: wraps `getAllRelationships()` |
+| `apps/api/src/data-agent/agent/tools/index.ts` | Rebuilt: barrel export for 6 tools |
 
----
+### Modified Backend Files
 
-### Backend Files (Modified)
+| File | Change |
+|------|--------|
+| `apps/api/src/ontologies/neo-ontology.service.ts` | Add `getAllRelationships()` and `findJoinPaths()` methods |
+| `apps/api/src/ontologies/neo-ontology.service.spec.ts` | Add tests for new methods |
+| `apps/api/src/data-agent/agent/agent.service.ts` | Rewrite: replace `createReactAgent` with `buildDataAgentGraph()` |
+| `apps/api/src/data-agent/agent/agent.service.spec.ts` | Rewrite tests for StateGraph-based agent |
 
-```
-apps/api/
-├── src/
-│   ├── config/
-│   │   └── configuration.ts                              # Embedding + sandbox config
-│   ├── app.module.ts                                     # Register modules
-│   ├── common/
-│   │   └── constants/
-│   │       └── roles.constants.ts                        # DATA_AGENT permissions
-│   ├── neo-graph/
-│   │   └── neo-graph.module.ts                           # Export NeoVectorService
-│   └── ontologies/
-│       └── neo-ontology.service.ts                       # Embedding generation
-├── prisma/
-│   ├── schema.prisma                                     # New models
-│   └── seed.ts                                           # Seed permissions
-└── package.json                                          # No new packages (reuse existing)
-```
+### New Frontend Files
 
----
+| File | Purpose |
+|------|---------|
+| `apps/web/src/components/data-agent/PhaseIndicator.tsx` | MUI Stepper showing phase progress |
 
-### Frontend Files (New)
+### Modified Frontend Files
 
-```
-apps/web/
-└── src/
-    ├── components/
-    │   └── data-agent/
-    │       ├── ChatSidebar.tsx                           # Left sidebar with chat list
-    │       ├── ChatView.tsx                              # Main chat area
-    │       ├── ChatMessage.tsx                           # Message bubble
-    │       ├── ToolCallAccordion.tsx                     # Tool execution display
-    │       ├── ChatInput.tsx                             # Bottom input
-    │       ├── WelcomeScreen.tsx                         # Empty state
-    │       └── NewChatDialog.tsx                         # Chat creation modal
-    ├── hooks/
-    │   ├── useDataAgent.ts                               # Chat list state
-    │   └── useDataChat.ts                                # Single chat + SSE streaming
-    ├── pages/
-    │   └── DataAgentPage.tsx                             # Full-page layout
-    ├── services/
-    │   └── api.ts                                        # API functions (modified)
-    ├── types/
-    │   └── index.ts                                      # TypeScript types (modified)
-    └── __tests__/
-        └── components/
-            └── data-agent/
-                ├── ChatSidebar.test.tsx                  # Component tests
-                └── ChatMessage.test.tsx                  # Component tests
-```
+| File | Change |
+|------|--------|
+| `apps/web/src/types/index.ts` | Extend `DataAgentStreamEvent` with phase/step events; extend metadata types |
+| `apps/web/src/hooks/useDataChat.ts` | Handle new SSE event types in parser |
+| `apps/web/src/components/data-agent/ChatView.tsx` | Integrate PhaseIndicator above message list |
+| `apps/web/src/components/data-agent/ToolCallAccordion.tsx` | Group tool calls by phase + stepId |
+| `apps/web/src/components/data-agent/ChatMessage.tsx` | Show verification badge + data lineage footer |
 
----
+### Deleted Files
 
-### Frontend Files (Modified)
+All existing agent implementation files deleted and rebuilt from scratch:
 
-```
-apps/web/
-└── src/
-    ├── App.tsx                                           # Routes /agent and /agent/:chatId
-    ├── components/
-    │   └── navigation/
-    │       └── Sidebar.tsx                               # Data Agent menu item
-    ├── services/
-    │   └── api.ts                                        # Data agent API functions
-    └── types/
-        └── index.ts                                      # DataChat, DataChatMessage types
-```
-
----
-
-### Infrastructure Files (New)
-
-```
-infra/
-├── sandbox/
-│   ├── Dockerfile                                        # Python sandbox container
-│   ├── requirements.txt                                  # Python dependencies
-│   └── executor.py                                       # Flask execution server
-└── compose/
-    ├── base.compose.yml                                  # Sandbox service (modified)
-    └── .env.example                                      # New env vars (modified)
-```
+| File | Action |
+|------|--------|
+| `apps/api/src/data-agent/agent/agent.service.ts` | DELETE (replaced by new StateGraph version) |
+| `apps/api/src/data-agent/agent/agent.service.spec.ts` | DELETE (replaced by new tests) |
+| `apps/api/src/data-agent/agent/prompts.ts` | DELETE (replaced by per-phase prompts/) |
+| `apps/api/src/data-agent/agent/prompts.spec.ts` | DELETE (replaced by per-phase prompt tests) |
+| All existing tool files | DELETE (rebuilt fresh) |
 
 ---
 
@@ -3051,289 +1950,206 @@ infra/
 
 ### Backend Tests
 
-#### Integration Tests: Data Agent API
+#### Unit Tests
 
-File: `apps/api/test/data-agent.integration.spec.ts`
+Each phase node tested in isolation:
 
-**Coverage:**
+```typescript
+// planner.node.spec.ts
+describe('PlannerNode', () => {
+  it('should decompose complex question into sub-tasks', async () => {
+    const state = { userQuestion: 'Why is Houston underperforming?', ... };
+    const result = await plannerNode(state);
+    expect(result.plan.steps.length).toBeGreaterThan(1);
+    expect(result.plan.complexity).toBe('analytical');
+  });
+});
 
-**GET /api/data-agent/chats**
-- ✅ 401 if not authenticated
-- ✅ 403 for viewer (no permission)
-- ✅ Empty list when no chats
-- ✅ Paginated results
-- ✅ Filter by ownerId (isolation)
-- ✅ Search by name
-- ✅ Filter by ontologyId
-- ✅ Sort by updatedAt, createdAt, name
-
-**GET /api/data-agent/chats/:id**
-- ✅ 401 if not authenticated
-- ✅ 200 with chat + messages
-- ✅ 404 for non-existent
-- ✅ 404 for other user's chat
-
-**POST /api/data-agent/chats**
-- ✅ 401 if not authenticated
-- ✅ 403 for viewer
-- ✅ 201 with created chat
-- ✅ Validation errors (400)
-- ✅ 404 for non-existent ontology
-- ✅ 400 if ontology not "ready"
-
-**PATCH /api/data-agent/chats/:id**
-- ✅ 401 if not authenticated
-- ✅ 200 with updated chat
-- ✅ 404 for non-existent
-- ✅ Validation errors (400)
-
-**DELETE /api/data-agent/chats/:id**
-- ✅ 401 if not authenticated
-- ✅ 403 for viewer
-- ✅ 204 on success
-- ✅ 404 for non-existent
-- ✅ Cascades message deletion
-
-**POST /api/data-agent/chats/:id/messages**
-- ✅ 401 if not authenticated
-- ✅ 403 for viewer
-- ✅ 201 with message pair (user + assistant placeholder)
-- ✅ Validation errors (400)
-- ✅ 404 for non-existent chat
-
-**POST /api/data-agent/chats/:chatId/messages/:messageId/stream**
-- ✅ 401 if not authenticated
-- ✅ SSE stream starts
-- ✅ Emits message_start event
-- ✅ Emits message_complete event
-- ✅ 404 for non-existent chat/message
-- ✅ 409 if message already claimed
-
-**Run:**
-```bash
-cd apps/api && npm test -- data-agent.integration
+// navigator.node.spec.ts
+describe('NavigatorNode', () => {
+  it('should find join paths between datasets', async () => {
+    const state = { plan: {...}, ontologyId: '...' };
+    const result = await navigatorNode(state);
+    expect(result.joinPlan.joinPaths.length).toBeGreaterThan(0);
+  });
+});
 ```
 
----
+#### Integration Tests
 
-#### Unit Tests: Embedding Service
+Full graph execution with mocked LLM + services:
 
-File: `apps/api/test/embedding.service.spec.ts`
+```typescript
+// agent.service.spec.ts
+describe('DataAgentAgentService (StateGraph)', () => {
+  it('should execute full pipeline for analytical question', async () => {
+    const result = await agentService.executeAgent({
+      userQuestion: 'What are the top products?',
+      chatId: '...',
+      messageId: '...',
+      ontologyId: '...',
+    });
 
-**Coverage:**
-- ✅ Generate single embedding
-- ✅ Generate batch embeddings
-- ✅ Returns correct dimensions (1536)
-- ✅ Handles API errors
-
-**Run:**
-```bash
-cd apps/api && npm test -- embedding.service
+    expect(result.plan).toBeDefined();
+    expect(result.joinPlan).toBeDefined();
+    expect(result.querySpecs).toBeDefined();
+    expect(result.stepResults).toBeDefined();
+    expect(result.verificationReport?.passed).toBe(true);
+    expect(result.explainerOutput).toBeDefined();
+  });
+});
 ```
 
----
+#### Neo4j Tests
 
-#### Unit Tests: Sandbox Service
+Test new relationship navigation methods:
 
-File: `apps/api/test/sandbox.service.spec.ts`
+```typescript
+// neo-ontology.service.spec.ts
+describe('NeoOntologyService', () => {
+  it('should return all RELATES_TO edges', async () => {
+    const edges = await service.getAllRelationships(ontologyId);
+    expect(edges.length).toBeGreaterThan(0);
+    expect(edges[0]).toHaveProperty('fromDataset');
+    expect(edges[0]).toHaveProperty('toDataset');
+  });
 
-**Coverage:**
-- ✅ Execute Python code successfully
-- ✅ Return stdout and stderr
-- ✅ Return base64 charts
-- ✅ Handle execution timeout
-- ✅ Handle code errors
-- ✅ Health check passes
-- ✅ Health check fails when sandbox down
-
-**Run:**
-```bash
-cd apps/api && npm test -- sandbox.service
+  it('should find shortest join path', async () => {
+    const paths = await service.findJoinPaths(ontologyId, 'orders', 'customers');
+    expect(paths.length).toBeGreaterThan(0);
+    expect(paths[0].datasets).toContain('orders');
+    expect(paths[0].datasets).toContain('customers');
+  });
+});
 ```
-
----
-
-#### Unit Tests: Agent Service
-
-File: `apps/api/src/data-agent/agent/agent.service.spec.ts`
-
-**Coverage:**
-- ✅ Vector search uses top-K of 10
-- ✅ Falls back to listDatasets when vector search returns empty
-- ✅ Fails gracefully when ontology has no datasets at all
-- ✅ Sets recursionLimit to 30 on agent stream
-- ✅ Creates 5 tools including list_datasets
-- ✅ Fetches relationships for relevant datasets
-- ✅ Matches tool results by tool_call_id (handles parallel calls)
-- ✅ Persists tool call results in metadata
-- ✅ Includes conversation history with tool context
-- ✅ Emits message_start, tool_call, tool_result, text, token_update, message_complete events
-- ✅ Handles agent errors gracefully (message_error event)
-- ✅ Throws NotFoundException for missing chat/ontology/semantic model
-- ✅ Skips relationships when no relevant datasets found
-- ✅ Truncates tool results to 2000 characters
-- ✅ Handles multiple parallel tool calls correctly
-- ✅ Provides default response when agent produces no content
-
-**Run:**
-```bash
-cd apps/api && npm test -- agent.service
-```
-
----
-
-#### Unit Tests: Prompt Builder
-
-File: `apps/api/src/data-agent/agent/prompts.spec.ts`
-
-**Coverage:**
-- ✅ Includes dataset YAML in prompt
-- ✅ Includes relationship join hints when relationships provided
-- ✅ Omits relationships section when empty
-- ✅ Shows discovery guidance when no datasets match
-- ✅ Includes enhanced instructions (error recovery, COALESCE, DATE_TRUNC)
-- ✅ Includes conversation context
-- ✅ Shows default when no conversation history
-
-**Run:**
-```bash
-cd apps/api && npm test -- prompts.spec
-```
-
----
-
-#### Unit Tests: list_datasets Tool
-
-File: `apps/api/src/data-agent/agent/tools/list-datasets.tool.spec.ts`
-
-**Coverage:**
-- ✅ Returns formatted list of datasets
-- ✅ Returns message when no datasets found
-- ✅ Handles errors gracefully (returns string, doesn't throw)
-
-**Run:**
-```bash
-cd apps/api && npm test -- list-datasets.tool
-```
-
----
-
-#### Unit Tests: NeoOntologyService Lightweight Queries
-
-File: `apps/api/src/ontologies/neo-ontology.service.spec.ts`
-
-**Coverage:**
-
-**listDatasets:**
-- ✅ Returns correct structure (name, description, source)
-- ✅ Returns empty array when no datasets found
-- ✅ Handles null description/source with defaults
-- ✅ Calls readTransaction with correct parameters
-
-**getDatasetsByNames:**
-- ✅ Returns matching datasets with all fields including YAML
-- ✅ Returns empty array when no names match
-- ✅ Handles subset of names matching
-- ✅ Handles null/undefined fields with defaults
-
-**getDatasetRelationships:**
-- ✅ Returns relationships with parsed columns
-- ✅ Returns empty array when no relationships exist
-- ✅ Returns relationships where either from or to matches
-- ✅ Handles empty fromColumns/toColumns with default '[]'
-
-**Run:**
-```bash
-cd apps/api && npm test -- neo-ontology.service
-```
-
----
 
 ### Frontend Tests
 
-File: `apps/web/src/__tests__/components/data-agent/ChatSidebar.test.tsx`
+#### Component Tests
 
-**Coverage:**
+Test PhaseIndicator rendering:
 
-**ChatSidebar**
-- ✅ Renders New Chat button
-- ✅ Renders search input
-- ✅ Renders chat list grouped by date
-- ✅ Highlights active chat
-- ✅ Calls onSelectChat on click
-- ✅ Shows rename/delete actions on hover
-- ✅ Shows empty state when no chats
+```typescript
+// PhaseIndicator.spec.tsx
+describe('PhaseIndicator', () => {
+  it('should show active phase', () => {
+    render(<PhaseIndicator currentPhase="navigator" completedPhases={['planner']} />);
+    expect(screen.getByText('Navigator')).toBeInTheDocument();
+  });
 
-**ChatMessage**
-- ✅ Renders user message (right-aligned, primary color)
-- ✅ Renders assistant message (left-aligned, markdown)
-- ✅ Renders tool calls in accordions
-- ✅ Renders syntax-highlighted code
-- ✅ Renders tables
-- ✅ Renders base64 images
-- ✅ Shows loading indicator for generating status
-
-**Run:**
-```bash
-cd apps/web && npm test -- data-agent
+  it('should mark completed phases', () => {
+    render(<PhaseIndicator currentPhase="executor" completedPhases={['planner', 'navigator']} />);
+    const plannerStep = screen.getByText('Planner').closest('.MuiStepLabel-root');
+    expect(plannerStep).toHaveClass('Mui-completed');
+  });
+});
 ```
+
+Test ChatMessage with verification badge:
+
+```typescript
+// ChatMessage.spec.tsx
+describe('ChatMessage', () => {
+  it('should show verification badge when passed', () => {
+    const metadata = {
+      verificationReport: { passed: true, checks: [...] },
+    };
+    render(<ChatMessage role="assistant" content="..." metadata={metadata} />);
+    expect(screen.getByText('Verified')).toBeInTheDocument();
+  });
+
+  it('should show data lineage', () => {
+    const metadata = {
+      dataLineage: {
+        datasets: ['orders', 'products'],
+        grain: 'order-line',
+        rowCount: 1000,
+      },
+    };
+    render(<ChatMessage role="assistant" content="..." metadata={metadata} />);
+    expect(screen.getByText(/orders, products/)).toBeInTheDocument();
+    expect(screen.getByText(/1,000/)).toBeInTheDocument();
+  });
+});
+```
+
+#### Hook Tests
+
+Test SSE event handling:
+
+```typescript
+// useDataChat.spec.ts
+describe('useDataChat', () => {
+  it('should update phase progress on phase_start event', () => {
+    const { result } = renderHook(() => useDataChat());
+    act(() => {
+      result.current.handleEvent({ type: 'phase_start', phase: 'navigator' });
+    });
+    expect(result.current.phaseProgress.current).toBe('navigator');
+  });
+});
+```
+
+### Manual E2E Testing
+
+1. Create ontology with PostgreSQL + Neo4j
+2. Start new chat, ask complex question: "Why is Houston underperforming?"
+3. Verify:
+   - PhaseIndicator shows all 6 phases
+   - ToolCallAccordion groups tools by phase + step
+   - Verification badge shows checkmark
+   - Data lineage appears in message footer
+   - Follow-up question uses metadata context
 
 ---
 
 ## Packages
 
-### No New NPM Packages
+### Backend Dependencies
 
-All required packages already installed from previous features:
+```json
+{
+  "@langchain/langgraph": "^0.2.31",
+  "@langchain/core": "^0.3.28",
+  "@langchain/openai": "^0.3.24",
+  "@langchain/anthropic": "^0.3.24"
+}
+```
 
-**Backend:**
-- `@langchain/langgraph` - ReAct agent framework
-- `@langchain/core` - LangChain core utilities
-- `@langchain/openai` - OpenAI chat + embeddings
-- `@langchain/anthropic` - Anthropic chat models
-- `neo4j-driver` - Neo4j client
-- `js-yaml` - YAML parsing
-- `nestjs-zod` - Zod DTO validation
-- `openai` - OpenAI SDK (for embeddings)
+### Frontend Dependencies
 
-**Frontend:**
-- `react-markdown` - Markdown rendering
-- `react-syntax-highlighter` - Code syntax highlighting
-- `@mui/material` - Material UI components
-- `@mui/icons-material` - Material icons
-
-**Python Sandbox:**
-- `flask` - Web server
-- `gunicorn` - WSGI server
-- `pandas` - Data manipulation
-- `numpy` - Numerical computing
-- `matplotlib` - Chart generation
-- `seaborn` - Statistical visualization
-- `scipy` - Scientific computing
-- `openpyxl` - Excel file support
-
-**Note:** All packages reused from Semantic Models and Ontology features.
+No new dependencies (PhaseIndicator uses existing MUI components).
 
 ---
 
-## Summary
+## Appendix: Architecture Evolution
 
-The Data Agent feature demonstrates:
+### Previous Architecture (ReAct Agent)
 
-- **ReAct Pattern Implementation**: Iterative tool-calling with 5 specialized tools and recursion guard
-- **Intelligent Dataset Discovery**: Vector similarity search (top-10) with fallback to full dataset listing
-- **Relationship-Aware Querying**: Automatic join hint injection from ontology graph relationships
-- **Rich Conversation Context**: Tool call summaries preserved across turns for multi-step analysis
-- **Error Recovery Strategies**: Guided self-correction for empty results, missing columns, and syntax errors
-- **Multi-Provider LLM Architecture**: Pluggable chat + embedding providers
-- **Read-Only Security**: Safe SQL execution with strict validation
-- **Sandboxed Python Execution**: Docker-isolated code execution with resource limits
-- **SSE Streaming**: Real-time agent reasoning display via Server-Sent Events
-- **ChatGPT-Style UI**: Modern chat interface with markdown, code, and charts
-- **Conversation Persistence**: Full chat history with metadata tracking
-- **RBAC Enforcement**: Permission-based access control
-- **Namespace Isolation**: Multi-tenancy across PostgreSQL and Neo4j
-- **Atomic State Management**: Message claiming prevents duplicate execution
-- **Type Safety**: End-to-end TypeScript + Zod validation
+- Single flat `createReactAgent` with 5 tools
+- No structured decomposition
+- No join path validation
+- No result verification
+- Limited observability (tool calls only)
 
-This specification serves as comprehensive documentation for the Data Agent feature and demonstrates integration of LLMs, graph databases, and containerized execution environments.
+### New Architecture (Multi-Phase StateGraph)
+
+- 6 specialized phase nodes with structured artifacts
+- Sub-task decomposition with dependency management
+- Graph-based join path discovery
+- Mandatory Python verification with revision loops
+- Rich observability (phase/step/tool events + metadata)
+- Progressive SQL execution (pilot → full)
+- Data lineage tracking
+
+### Migration Impact
+
+- **No API changes**: Endpoints, permissions, and database schema unchanged
+- **Backward compatible SSE events**: New events are additive
+- **Enhanced metadata**: Existing metadata fields extended but not breaking
+- **Improved accuracy**: Verification gate catches grain issues, bad joins, and incorrect aggregations
+- **Better debugging**: Full execution trace available in metadata
+
+---
+
+**End of Specification**
