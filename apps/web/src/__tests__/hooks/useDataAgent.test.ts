@@ -153,11 +153,13 @@ describe('useDataAgent', () => {
       };
 
       vi.mocked(api.createDataChat).mockResolvedValue(newChat);
-      vi.mocked(api.getDataChats).mockResolvedValue({
-        ...mockResponse,
-        items: [...mockChats, newChat],
-        total: 3,
-      });
+      vi.mocked(api.getDataChats)
+        .mockResolvedValueOnce(mockResponse) // Initial fetch returns 2
+        .mockResolvedValueOnce({             // Refresh after create returns 3
+          ...mockResponse,
+          items: [...mockChats, newChat],
+          total: 3,
+        });
 
       const { result } = renderHook(() => useDataAgent());
 

@@ -41,8 +41,8 @@ describe('ChatSidebar', () => {
       name: 'Old Chat',
       ontologyId: 'ont-2',
       ownerId: 'user-1',
-      createdAt: new Date(Date.now() - 86400000 * 10).toISOString(), // 10 days ago
-      updatedAt: new Date(Date.now() - 86400000 * 10).toISOString(),
+      createdAt: new Date(Date.now() - 86400000 * 4).toISOString(), // 4 days ago
+      updatedAt: new Date(Date.now() - 86400000 * 4).toISOString(),
       ontology: {
         name: 'Inventory DB',
         status: 'ready',

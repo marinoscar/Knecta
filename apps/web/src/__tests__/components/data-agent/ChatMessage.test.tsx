@@ -161,9 +161,13 @@ describe('ChatMessage', () => {
 
       const { container } = render(<ChatMessage message={message} />);
 
-      // Should render animated dots (typing indicator)
-      const dots = container.querySelectorAll('[style*="animation"]');
-      expect(dots.length).toBeGreaterThan(0);
+      // Should render typing indicator (3 animated dots using MUI Box with sx)
+      // MUI sx props generate class-based styles, not inline styles
+      const typingContainer = container.querySelector('.MuiBox-root');
+      expect(typingContainer).toBeInTheDocument();
+      // The TypingIndicator renders 3 dot boxes inside a flex container
+      const dots = typingContainer?.querySelectorAll('.MuiBox-root');
+      expect(dots!.length).toBeGreaterThanOrEqual(3);
     });
 
     it('should not show typing indicator when content exists', () => {

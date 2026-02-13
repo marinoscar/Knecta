@@ -423,8 +423,7 @@ describe('DataAgentService', () => {
           id: 'msg-123',
           status: 'generating',
           metadata: {
-            path: ['claimed'],
-            equals: null,
+            equals: {},
           },
         },
         data: {

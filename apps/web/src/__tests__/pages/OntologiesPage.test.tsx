@@ -64,10 +64,10 @@ describe('OntologiesPage', () => {
         expect(screen.getByText('Test Ontology')).toBeInTheDocument();
       });
 
-      // Check table headers
+      // Check table headers (use getAllByText for 'Status' since it appears in both header and filter)
       expect(screen.getByText('Name')).toBeInTheDocument();
       expect(screen.getByText('Semantic Model')).toBeInTheDocument();
-      expect(screen.getByText('Status')).toBeInTheDocument();
+      expect(screen.getAllByText('Status').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('Nodes')).toBeInTheDocument();
       expect(screen.getByText('Relationships')).toBeInTheDocument();
       expect(screen.getByText('Created')).toBeInTheDocument();
@@ -245,15 +245,6 @@ describe('OntologiesPage', () => {
 
   describe('Navigation', () => {
     it('navigates to detail page when ontology name is clicked', async () => {
-      const mockNavigate = vi.fn();
-      vi.mock('react-router-dom', async () => {
-        const actual = await vi.importActual('react-router-dom');
-        return {
-          ...actual,
-          useNavigate: () => mockNavigate,
-        };
-      });
-
       render(<OntologiesPage />);
 
       await waitFor(() => {
@@ -263,8 +254,7 @@ describe('OntologiesPage', () => {
       const nameLink = screen.getByText('Test Ontology');
       await userEvent.click(nameLink);
 
-      // Note: Due to the mock setup, we can't verify navigation in this test
-      // Navigation is tested in integration tests
+      // Navigation behavior is verified in integration tests
     });
   });
 
