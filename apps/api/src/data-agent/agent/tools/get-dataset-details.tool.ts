@@ -20,17 +20,19 @@ export function createGetDatasetDetailsTool(
     schema,
     func: async ({ datasetNames }) => {
       try {
-        const graph = await neoOntologyService.getGraph(ontologyId);
+        const datasets =
+          await neoOntologyService.getDatasetsByNames(ontologyId, datasetNames);
 
+        const foundNames = new Set(datasets.map((ds) => ds.name));
         const results: string[] = [];
-        for (const name of datasetNames) {
-          const dataset = graph.nodes.find(
-            (n) => n.label === 'Dataset' && n.properties.name === name,
-          );
 
-          if (dataset && dataset.properties.yaml) {
-            results.push(`--- ${name} ---\n${dataset.properties.yaml}`);
-          } else {
+        for (const ds of datasets) {
+          results.push(`--- ${ds.name} ---\n${ds.yaml}`);
+        }
+
+        // Report any names that weren't found
+        for (const name of datasetNames) {
+          if (!foundNames.has(name)) {
             results.push(`--- ${name} ---\nDataset not found in ontology.`);
           }
         }
