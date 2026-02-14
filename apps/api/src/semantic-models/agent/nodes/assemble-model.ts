@@ -2,6 +2,7 @@ import { AgentStateType } from '../state';
 import { SemanticModelsService } from '../../semantic-models.service';
 import { OSISemanticModel } from '../osi/types';
 import { Logger } from '@nestjs/common';
+import { injectRelationshipDataTypes } from '../utils/inject-field-data-types';
 
 const logger = new Logger('AssembleModel');
 
@@ -18,6 +19,9 @@ export function createAssembleModelNode(
       ...state.tableMetrics.flat(),
       ...state.modelMetrics,
     ];
+
+    // Enrich relationship ai_context with join column data types
+    injectRelationshipDataTypes(state.relationships, state.datasets);
 
     // Build the full OSI semantic model
     const semanticModel: OSISemanticModel = {
