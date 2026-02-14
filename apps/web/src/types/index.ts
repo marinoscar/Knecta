@@ -391,6 +391,10 @@ export interface DataChatMessage {
       rowCount: number | null;
     };
     revisionsUsed?: number;
+    durationMs?: number;
+    startedAt?: number;
+    stepResults?: Array<{ stepId: number; description: string; strategy: string; sqlResult?: { rowCount: number; columns: string[]; data: string }; pythonResult?: { stdout: string; charts: string[] }; error?: string }>;
+    joinPlan?: { relevantDatasets: Array<{ name: string; description: string; source: string; yaml?: string }>; joinPaths: Array<{ datasets: string[]; edges: Array<{ fromDataset: string; toDataset: string; fromColumns: string[]; toColumns: string[]; relationshipName: string }> }>; notes: string };
   };
   status: 'generating' | 'complete' | 'failed';
   createdAt: string;
@@ -435,4 +439,5 @@ export interface DataAgentStreamEvent {
   stepId?: number;
   strategy?: string;
   error?: string;
+  startedAt?: number;
 }
