@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Box, Alert } from '@mui/material';
+import { Box, Alert, useTheme, Drawer, useMediaQuery } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChatSidebar } from '../components/data-agent/ChatSidebar';
 import { ChatView } from '../components/data-agent/ChatView';
 import { ChatInput } from '../components/data-agent/ChatInput';
 import { WelcomeScreen } from '../components/data-agent/WelcomeScreen';
 import { NewChatDialog } from '../components/data-agent/NewChatDialog';
+import { AgentInsightsPanel } from '../components/data-agent/AgentInsightsPanel';
 import { useDataAgent } from '../hooks/useDataAgent';
 import { useDataChat } from '../hooks/useDataChat';
 
@@ -14,6 +15,10 @@ export default function DataAgentPage() {
   const navigate = useNavigate();
   const [newChatDialogOpen, setNewChatDialogOpen] = useState(false);
   const [pendingSuggestion, setPendingSuggestion] = useState<string | null>(null);
+  const [insightsPanelOpen, setInsightsPanelOpen] = useState(false);
+  const theme = useTheme();
+  const isLargeScreen = useMediaQuery(theme.breakpoints.up('lg'));
+  const isMediumScreen = useMediaQuery(theme.breakpoints.between('md', 'lg'));
 
   const {
     chats,
@@ -114,6 +119,13 @@ export default function DataAgentPage() {
     }
   }, [chatId, deleteChat, navigate]);
 
+  // Auto-open insights panel when streaming starts (large screens only)
+  useEffect(() => {
+    if (isStreaming && isLargeScreen) {
+      setInsightsPanelOpen(true);
+    }
+  }, [isStreaming, isLargeScreen]);
+
   const showWelcome = !chatId;
 
   return (
@@ -161,6 +173,8 @@ export default function DataAgentPage() {
               isStreaming={isStreaming}
               onRename={handleRenameCurrentChat}
               onDelete={handleDeleteCurrentChat}
+              insightsPanelOpen={insightsPanelOpen}
+              onToggleInsightsPanel={() => setInsightsPanelOpen((prev) => !prev)}
             />
             <ChatInput
               onSend={sendMessage}
@@ -170,6 +184,43 @@ export default function DataAgentPage() {
           </>
         )}
       </Box>
+
+      {/* Right Pane - Agent Insights */}
+      {!showWelcome && isLargeScreen && insightsPanelOpen && (
+        <Box
+          sx={{
+            width: 360,
+            flexShrink: 0,
+            borderLeft: 1,
+            borderColor: 'divider',
+            height: '100%',
+          }}
+        >
+          <AgentInsightsPanel
+            messages={messages}
+            streamEvents={streamEvents}
+            isStreaming={isStreaming}
+            onClose={() => setInsightsPanelOpen(false)}
+          />
+        </Box>
+      )}
+      {!showWelcome && !isLargeScreen && (
+        <Drawer
+          anchor="right"
+          open={insightsPanelOpen}
+          onClose={() => setInsightsPanelOpen(false)}
+          PaperProps={{
+            sx: { width: isMediumScreen ? 360 : '100vw' },
+          }}
+        >
+          <AgentInsightsPanel
+            messages={messages}
+            streamEvents={streamEvents}
+            isStreaming={isStreaming}
+            onClose={() => setInsightsPanelOpen(false)}
+          />
+        </Drawer>
+      )}
 
       {/* New Chat Dialog */}
       <NewChatDialog

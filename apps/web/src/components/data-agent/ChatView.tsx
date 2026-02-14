@@ -12,9 +12,8 @@ import {
   Button,
   useTheme,
 } from '@mui/material';
-import { Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Edit as EditIcon, Analytics as AnalyticsIcon } from '@mui/icons-material';
 import { ChatMessage } from './ChatMessage';
-import { ToolCallAccordion } from './ToolCallAccordion';
 import { PhaseIndicator } from './PhaseIndicator';
 import type { DataChat, DataChatMessage, DataAgentStreamEvent } from '../../types';
 
@@ -25,6 +24,8 @@ interface ChatViewProps {
   isStreaming: boolean;
   onRename: (name: string) => Promise<void>;
   onDelete: () => Promise<void>;
+  insightsPanelOpen: boolean;
+  onToggleInsightsPanel: () => void;
 }
 
 export function ChatView({
@@ -34,6 +35,8 @@ export function ChatView({
   isStreaming,
   onRename,
   onDelete,
+  insightsPanelOpen,
+  onToggleInsightsPanel,
 }: ChatViewProps) {
   const theme = useTheme();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -132,9 +135,19 @@ export function ChatView({
             />
           )}
         </Box>
-        <IconButton onClick={() => setDeleteConfirmOpen(true)} color="error">
-          <DeleteIcon />
-        </IconButton>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <IconButton
+            onClick={onToggleInsightsPanel}
+            color={insightsPanelOpen ? 'primary' : 'default'}
+            title={insightsPanelOpen ? 'Hide insights' : 'Show insights'}
+            size="small"
+          >
+            <AnalyticsIcon />
+          </IconButton>
+          <IconButton onClick={() => setDeleteConfirmOpen(true)} color="error">
+            <DeleteIcon />
+          </IconButton>
+        </Box>
       </Box>
 
       {/* Messages */}
@@ -166,15 +179,12 @@ export function ChatView({
             {messages.map((message, index) => (
               <Box key={message.id}>
                 <ChatMessage message={message} />
-                {/* Show phase indicator and tool calls above the current streaming assistant message */}
+                {/* Show phase indicator for the current streaming assistant message */}
                 {message.role === 'assistant' &&
                   message.status === 'generating' &&
                   index === messages.length - 1 &&
                   streamEvents.length > 0 && (
-                    <>
-                      <PhaseIndicator events={streamEvents} isStreaming={isStreaming} />
-                      <ToolCallAccordion events={streamEvents} isStreaming={isStreaming} />
-                    </>
+                    <PhaseIndicator events={streamEvents} isStreaming={isStreaming} />
                   )}
               </Box>
             ))}
