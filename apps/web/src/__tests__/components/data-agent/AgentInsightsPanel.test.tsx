@@ -1,8 +1,17 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen } from '@testing-library/react';
 import { render } from '../../utils/test-utils';
 import { AgentInsightsPanel } from '../../../components/data-agent/AgentInsightsPanel';
 import type { DataChatMessage, DataAgentStreamEvent } from '../../../types';
+
+// Mock the useElapsedTimer hook
+vi.mock('../../../hooks/useElapsedTimer', () => ({
+  useElapsedTimer: vi.fn((startedAt: number | null, isActive: boolean) => {
+    if (!startedAt || !isActive) return '--';
+    // Return a fixed formatted time for testing
+    return '0:05';
+  }),
+}));
 
 // Helper function to create test messages
 function makeAssistantMessage(overrides: Partial<DataChatMessage> = {}): DataChatMessage {
@@ -592,6 +601,97 @@ describe('AgentInsightsPanel', () => {
 
       expect(screen.queryByText('Verification')).not.toBeInTheDocument();
       expect(screen.queryByText('Data Lineage')).not.toBeInTheDocument();
+    });
+
+    it('should read startedAt from message_start stream event for live timer', async () => {
+      const { useElapsedTimer } = await import('../../../hooks/useElapsedTimer');
+      const mockUseElapsedTimer = vi.mocked(useElapsedTimer);
+      mockUseElapsedTimer.mockClear();
+
+      const streamStartedAt = Date.now() - 5000; // 5 seconds ago
+      const message = makeAssistantMessage({
+        status: 'generating',
+        metadata: {
+          // No startedAt in metadata during live mode
+        },
+      });
+
+      const events: DataAgentStreamEvent[] = [
+        { type: 'message_start', startedAt: streamStartedAt },
+        { type: 'phase_start', phase: 'planner' },
+      ];
+
+      render(
+        <AgentInsightsPanel
+          messages={[message]}
+          streamEvents={events}
+          isStreaming={true}
+          onClose={() => {}}
+        />
+      );
+
+      // Verify that useElapsedTimer was called with the startedAt from message_start event
+      expect(mockUseElapsedTimer).toHaveBeenCalledWith(streamStartedAt, true);
+    });
+
+    it('should display live token counts from token_update events', () => {
+      const message = makeAssistantMessage({
+        status: 'generating',
+        metadata: {
+          startedAt: Date.now(),
+        },
+      });
+
+      const events: DataAgentStreamEvent[] = [
+        { type: 'message_start', startedAt: Date.now() },
+        { type: 'phase_start', phase: 'planner' },
+        { type: 'token_update', phase: 'planner', tokensUsed: { prompt: 1000, completion: 500, total: 1500 } },
+        { type: 'phase_complete', phase: 'planner' },
+        { type: 'phase_start', phase: 'navigator' },
+        { type: 'token_update', phase: 'navigator', tokensUsed: { prompt: 2000, completion: 1000, total: 3000 } },
+      ];
+
+      render(
+        <AgentInsightsPanel
+          messages={[message]}
+          streamEvents={events}
+          isStreaming={true}
+          onClose={() => {}}
+        />
+      );
+
+      // Should show accumulated tokens from both phases
+      expect(screen.getByText('3,000')).toBeInTheDocument(); // prompt: 1000 + 2000
+      expect(screen.getByText('1,500')).toBeInTheDocument(); // completion: 500 + 1000
+      expect(screen.getByText('4,500')).toBeInTheDocument(); // total: 1500 + 3000
+    });
+
+    it('should show "--" for tokens when no token_update events in live mode', () => {
+      const message = makeAssistantMessage({
+        status: 'generating',
+        metadata: {
+          startedAt: Date.now(),
+        },
+      });
+
+      const events: DataAgentStreamEvent[] = [
+        { type: 'message_start', startedAt: Date.now() },
+        { type: 'phase_start', phase: 'planner' },
+        // No token_update events
+      ];
+
+      render(
+        <AgentInsightsPanel
+          messages={[message]}
+          streamEvents={events}
+          isStreaming={true}
+          onClose={() => {}}
+        />
+      );
+
+      // All token fields should show "--"
+      const dashDashes = screen.getAllByText('--');
+      expect(dashDashes.length).toBeGreaterThanOrEqual(3);
     });
   });
 

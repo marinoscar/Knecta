@@ -3,6 +3,7 @@ import {
   extractPlan,
   extractStepStatuses,
   extractPhaseDetails,
+  extractLiveTokens,
   formatDuration,
   formatTokenCount,
 } from '../../../components/data-agent/insightsUtils';
@@ -480,6 +481,54 @@ describe('insightsUtils', () => {
 
       // All phases should still be pending since unknown phase is filtered
       expect(result.every((p) => p.status === 'pending')).toBe(true);
+    });
+  });
+
+  describe('extractLiveTokens', () => {
+    it('should return null when no token_update events exist', () => {
+      const events: DataAgentStreamEvent[] = [
+        { type: 'phase_start', phase: 'planner' },
+        { type: 'phase_complete', phase: 'planner' },
+      ];
+      expect(extractLiveTokens(events)).toBeNull();
+    });
+
+    it('should return null for empty events array', () => {
+      expect(extractLiveTokens([])).toBeNull();
+    });
+
+    it('should extract tokens from a single token_update event', () => {
+      const events: DataAgentStreamEvent[] = [
+        { type: 'token_update', phase: 'planner', tokensUsed: { prompt: 100, completion: 50, total: 150 } },
+      ];
+      expect(extractLiveTokens(events)).toEqual({ prompt: 100, completion: 50, total: 150 });
+    });
+
+    it('should accumulate tokens from multiple token_update events', () => {
+      const events: DataAgentStreamEvent[] = [
+        { type: 'phase_start', phase: 'planner' },
+        { type: 'token_update', phase: 'planner', tokensUsed: { prompt: 100, completion: 50, total: 150 } },
+        { type: 'phase_complete', phase: 'planner' },
+        { type: 'phase_start', phase: 'navigator' },
+        { type: 'token_update', phase: 'navigator', tokensUsed: { prompt: 200, completion: 80, total: 280 } },
+        { type: 'phase_complete', phase: 'navigator' },
+      ];
+      expect(extractLiveTokens(events)).toEqual({ prompt: 300, completion: 130, total: 430 });
+    });
+
+    it('should handle token_update events with missing tokensUsed', () => {
+      const events: DataAgentStreamEvent[] = [
+        { type: 'token_update', phase: 'planner' } as any, // no tokensUsed field
+      ];
+      expect(extractLiveTokens(events)).toEqual({ prompt: 0, completion: 0, total: 0 });
+    });
+
+    it('should handle token_update events with partial tokensUsed fields', () => {
+      const events: DataAgentStreamEvent[] = [
+        { type: 'token_update', phase: 'planner', tokensUsed: { prompt: 100 } as any },
+        { type: 'token_update', phase: 'navigator', tokensUsed: { completion: 50 } as any },
+      ];
+      expect(extractLiveTokens(events)).toEqual({ prompt: 100, completion: 50, total: 0 });
     });
   });
 });
