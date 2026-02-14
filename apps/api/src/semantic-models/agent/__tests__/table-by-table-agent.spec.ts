@@ -447,6 +447,7 @@ describe('createAssembleModelNode', () => {
       semanticModel: null,
       tokensUsed: { prompt: 0, completion: 0, total: 0 },
       semanticModelId: null,
+      osiSpecText: '',
       error: null,
     };
 
@@ -481,6 +482,7 @@ describe('createAssembleModelNode', () => {
       semanticModel: null,
       tokensUsed: { prompt: 0, completion: 0, total: 0 },
       semanticModelId: null,
+      osiSpecText: '',
       error: null,
     };
 
@@ -515,6 +517,7 @@ describe('createAssembleModelNode', () => {
       semanticModel: null,
       tokensUsed: { prompt: 0, completion: 0, total: 0 },
       semanticModelId: null,
+      osiSpecText: '',
       error: null,
     };
 
@@ -550,6 +553,7 @@ describe('createAssembleModelNode', () => {
       semanticModel: null,
       tokensUsed: { prompt: 100, completion: 50, total: 150 },
       semanticModelId: null,
+      osiSpecText: '',
       error: null,
     };
 
@@ -590,6 +594,7 @@ describe('createAssembleModelNode', () => {
       semanticModel: null,
       tokensUsed: { prompt: 0, completion: 0, total: 0 },
       semanticModelId: null,
+      osiSpecText: '',
       error: null,
     };
 

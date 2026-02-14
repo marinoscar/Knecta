@@ -1,9 +1,8 @@
 import { injectFieldDataTypes, injectRelationshipDataTypes } from '../inject-field-data-types';
-import { OSIDataset, OSIDialect, OSIAIContext, OSIRelationship } from '../../osi/types';
-import { ColumnInfo } from '../../../../connections/drivers/driver.interface';
+import { OSIDialect, OSIAIContext } from '../../osi/types';
 
 // Test Data Helpers
-function createTestColumns(): ColumnInfo[] {
+function createTestColumns() {
   return [
     { name: 'id', dataType: 'integer', nativeType: 'int4', isNullable: false, isPrimaryKey: true },
     { name: 'name', dataType: 'varchar', nativeType: 'varchar(255)', isNullable: true, isPrimaryKey: false },
@@ -12,7 +11,7 @@ function createTestColumns(): ColumnInfo[] {
   ];
 }
 
-function createTestDataset(): OSIDataset {
+function createTestDataset() {
   return {
     name: 'orders',
     source: 'mydb.public.orders',
@@ -157,7 +156,7 @@ describe('injectFieldDataTypes', () => {
 
   it('should handle empty columns array gracefully', () => {
     const dataset = createTestDataset();
-    const columns: ColumnInfo[] = [];
+    const columns: any[] = [];
 
     injectFieldDataTypes(dataset, columns);
 
@@ -170,7 +169,7 @@ describe('injectFieldDataTypes', () => {
 });
 
 describe('injectRelationshipDataTypes', () => {
-  function createTestDatasets(): OSIDataset[] {
+  function createTestDatasets() {
     return [
       {
         name: 'orders',
@@ -216,7 +215,7 @@ describe('injectRelationshipDataTypes', () => {
     ];
   }
 
-  function createTestRelationships(): OSIRelationship[] {
+  function createTestRelationships() {
     return [
       {
         name: 'orders_to_customers',
@@ -236,15 +235,15 @@ describe('injectRelationshipDataTypes', () => {
     injectRelationshipDataTypes(relationships, datasets);
 
     const rel = relationships[0];
-    const ctx = rel.ai_context as OSIAIContext;
+    const ctx = rel.ai_context as any;
     expect(ctx.column_types).toBeDefined();
-    expect(ctx.column_types!.from_columns).toBeDefined();
-    expect(ctx.column_types!.from_columns!.customer_id).toEqual({
+    expect(ctx.column_types.from_columns).toBeDefined();
+    expect(ctx.column_types.from_columns.customer_id).toEqual({
       data_type: 'integer',
       native_type: 'int4',
     });
-    expect(ctx.column_types!.to_columns).toBeDefined();
-    expect(ctx.column_types!.to_columns!.id).toEqual({
+    expect(ctx.column_types.to_columns).toBeDefined();
+    expect(ctx.column_types.to_columns.id).toEqual({
       data_type: 'integer',
       native_type: 'int4',
     });
@@ -252,7 +251,7 @@ describe('injectRelationshipDataTypes', () => {
 
   it('should handle from_columns and to_columns correctly', () => {
     const datasets = createTestDatasets();
-    const relationships: OSIRelationship[] = [
+    const relationships = [
       {
         name: 'multi_column_rel',
         from: 'orders',
@@ -266,23 +265,23 @@ describe('injectRelationshipDataTypes', () => {
     injectRelationshipDataTypes(relationships, datasets);
 
     const rel = relationships[0];
-    const ctx = rel.ai_context as OSIAIContext;
-    expect(ctx.column_types!.from_columns!.customer_id).toBeDefined();
-    expect(ctx.column_types!.from_columns!.id).toBeDefined();
-    expect(ctx.column_types!.to_columns!.id).toBeDefined();
+    const ctx = rel.ai_context as any;
+    expect(ctx.column_types.from_columns.customer_id).toBeDefined();
+    expect(ctx.column_types.from_columns.id).toBeDefined();
+    expect(ctx.column_types.to_columns.id).toBeDefined();
   });
 
   it('should preserve existing ai_context properties', () => {
     const datasets = createTestDatasets();
     const relationships = createTestRelationships();
-    (relationships[0].ai_context as OSIAIContext).notes = 'Important relationship';
-    (relationships[0].ai_context as OSIAIContext).confidence = 'high';
+    (relationships[0].ai_context as any).notes = 'Important relationship';
+    (relationships[0].ai_context as any).confidence = 'high';
 
     injectRelationshipDataTypes(relationships, datasets);
 
-    const ctx = relationships[0].ai_context as OSIAIContext;
+    const ctx = relationships[0].ai_context as any;
     expect(ctx.notes).toBe('Important relationship');
-    expect((ctx as any).confidence).toBe('high');
+    expect(ctx.confidence).toBe('high');
     expect(ctx.column_types).toBeDefined();
   });
 
@@ -293,7 +292,7 @@ describe('injectRelationshipDataTypes', () => {
 
     injectRelationshipDataTypes(relationships, datasets);
 
-    const ctx = relationships[0].ai_context as OSIAIContext;
+    const ctx = relationships[0].ai_context as any;
     expect(typeof ctx).toBe('object');
     expect(ctx.notes).toBe('String context');
     expect(ctx.column_types).toBeDefined();
@@ -301,7 +300,7 @@ describe('injectRelationshipDataTypes', () => {
 
   it('should handle relationships referencing non-existent datasets', () => {
     const datasets = createTestDatasets();
-    const relationships: OSIRelationship[] = [
+    const relationships = [
       {
         name: 'bad_rel',
         from: 'nonexistent',
@@ -316,7 +315,7 @@ describe('injectRelationshipDataTypes', () => {
     expect(() => injectRelationshipDataTypes(relationships, datasets)).not.toThrow();
 
     // Should inject to_columns but not from_columns
-    const ctx = relationships[0].ai_context as OSIAIContext;
+    const ctx = relationships[0].ai_context as any;
     expect(ctx.column_types).toBeDefined();
     expect(ctx.column_types?.from_columns).toBeUndefined();
     expect(ctx.column_types?.to_columns).toBeDefined();
@@ -328,7 +327,7 @@ describe('injectRelationshipDataTypes', () => {
 
   it('should handle empty relationships array gracefully', () => {
     const datasets = createTestDatasets();
-    const relationships: OSIRelationship[] = [];
+    const relationships: any[] = [];
 
     // Should not throw
     expect(() => injectRelationshipDataTypes(relationships, datasets)).not.toThrow();
@@ -337,10 +336,10 @@ describe('injectRelationshipDataTypes', () => {
   it('should handle fields without data_type in ai_context', () => {
     const datasets = createTestDatasets();
     // Remove data_type from one field
-    delete (datasets[0].fields![0].ai_context as OSIAIContext).data_type;
-    delete (datasets[0].fields![0].ai_context as OSIAIContext).native_type;
+    delete (datasets[0].fields![0].ai_context as any).data_type;
+    delete (datasets[0].fields![0].ai_context as any).native_type;
 
-    const relationships: OSIRelationship[] = [
+    const relationships = [
       {
         name: 'test_rel',
         from: 'orders',
@@ -354,7 +353,7 @@ describe('injectRelationshipDataTypes', () => {
     // Should not throw
     expect(() => injectRelationshipDataTypes(relationships, datasets)).not.toThrow();
 
-    const ctx = relationships[0].ai_context as OSIAIContext;
+    const ctx = relationships[0].ai_context as any;
     // from_columns.id should not be in column_types because it lacks data_type
     expect(ctx.column_types?.from_columns?.id).toBeUndefined();
     // But to_columns.id should still be there
