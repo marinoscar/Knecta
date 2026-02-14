@@ -51,8 +51,10 @@ export function AgentInsightsPanel({
   const stepStatuses = extractStepStatuses(plan, streamEvents, metadata, isLiveMode);
   const phaseDetails = extractPhaseDetails(streamEvents, metadata, isLiveMode);
 
-  // Live timer
-  const startedAt = isLiveMode ? lastAssistantMessage?.metadata?.startedAt || null : null;
+  // Live timer — read startedAt from the message_start stream event (not from metadata, which isn't set until completion)
+  const startedAt = isLiveMode
+    ? streamEvents.find((e) => e.type === 'message_start')?.startedAt || null
+    : lastAssistantMessage?.metadata?.startedAt || null;
   const liveElapsed = useElapsedTimer(startedAt, isLiveMode);
 
   // Compute duration
