@@ -39,6 +39,7 @@ export function createGenerateRelationshipsNode(
       datasetSummaries,
       foreignKeys: state.foreignKeys,
       instructions: state.instructions || undefined,
+      osiSpecText: state.osiSpecText || undefined,
     });
 
     const response = await llm.invoke([new HumanMessage(prompt)]);

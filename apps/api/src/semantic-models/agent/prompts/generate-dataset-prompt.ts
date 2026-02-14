@@ -9,6 +9,7 @@ export interface GenerateDatasetPromptParams {
   columnStats: Map<string, ColumnStatsResult>;
   modelName: string;
   instructions?: string;
+  osiSpecText?: string;
 }
 
 export function buildGenerateDatasetPrompt(params: GenerateDatasetPromptParams): string {
@@ -19,7 +20,13 @@ export function buildGenerateDatasetPrompt(params: GenerateDatasetPromptParams):
   }
 
   return `You are generating an OSI (Open Semantic Interchange) dataset definition for a single database table.
+${params.osiSpecText ? `
+## OSI Specification Reference
 
+Follow this specification EXACTLY for structure and field naming:
+
+${params.osiSpecText}
+` : ''}
 ## Table: ${params.tableName}
 Database: ${params.databaseName}
 Model: ${params.modelName}

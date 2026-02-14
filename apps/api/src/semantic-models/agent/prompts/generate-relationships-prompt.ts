@@ -11,6 +11,7 @@ export interface GenerateRelationshipsPromptParams {
   }>;
   foreignKeys: ForeignKeyInfo[];
   instructions?: string;
+  osiSpecText?: string;
 }
 
 export function buildGenerateRelationshipsPrompt(params: GenerateRelationshipsPromptParams): string {
@@ -21,7 +22,13 @@ export function buildGenerateRelationshipsPrompt(params: GenerateRelationshipsPr
   );
 
   return `You are finalizing an OSI semantic model by generating relationships and model-level metadata.
+${params.osiSpecText ? `
+## OSI Specification Reference
 
+Follow this specification EXACTLY for structure and field naming:
+
+${params.osiSpecText}
+` : ''}
 ## Model: ${params.modelName}
 Database: ${params.databaseName}
 

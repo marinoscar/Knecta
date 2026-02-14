@@ -20,6 +20,10 @@ export const AgentState = Annotation.Root({
     reducer: (_, next) => next,
     default: () => null,
   }),
+  osiSpecText: Annotation<string>({
+    reducer: (_, next) => next,
+    default: () => '',
+  }),
 
   // Per-table discovery results (accumulated by discover_and_generate)
   datasets: Annotation<OSIDataset[]>({

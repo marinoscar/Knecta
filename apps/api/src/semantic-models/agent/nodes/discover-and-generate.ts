@@ -183,6 +183,7 @@ export function createDiscoverAndGenerateNode(
           columnStats,
           modelName,
           instructions: state.instructions || undefined,
+          osiSpecText: state.osiSpecText || undefined,
         });
 
         const response = await llm.invoke([new HumanMessage(prompt)]);

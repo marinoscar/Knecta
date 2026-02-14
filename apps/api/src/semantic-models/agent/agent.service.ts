@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { LlmService } from '../../llm/llm.service';
 import { SemanticModelsService } from '../semantic-models.service';
 import { buildAgentGraph } from './graph';
+import { OsiSpecService } from './osi/osi-spec.service';
 
 @Injectable()
 export class AgentService {
@@ -11,6 +12,7 @@ export class AgentService {
     private readonly discoveryService: DiscoveryService,
     private readonly prisma: PrismaService,
     private readonly llmService: LlmService,
+    private readonly osiSpecService: OsiSpecService,
   ) {}
 
   async createAgentGraph(
@@ -27,6 +29,9 @@ export class AgentService {
     instructions?: string,
   ) {
     const llm = this.llmService.getChatModel(llmProvider);
+
+    // Fetch OSI spec text before building graph
+    const osiSpecText = await this.osiSpecService.getSpecText();
 
     const graph = buildAgentGraph(
       llm,
@@ -51,6 +56,7 @@ export class AgentService {
       runId,
       modelName: modelName || null,
       instructions: instructions || null,
+      osiSpecText,
       datasets: [],
       foreignKeys: [],
       tableMetrics: [],
