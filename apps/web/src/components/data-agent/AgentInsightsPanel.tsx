@@ -25,8 +25,6 @@ import {
   extractPhaseDetails,
   formatDuration,
   formatTokenCount,
-  PHASE_ORDER,
-  type PlanData,
 } from './insightsUtils';
 import { useElapsedTimer } from '../../hooks/useElapsedTimer';
 

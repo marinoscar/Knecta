@@ -62,7 +62,7 @@ export function extractPlan(
       (e) => e.type === 'phase_artifact' && e.phase === 'planner'
     );
     if (!plannerArtifact?.artifact) return null;
-    return plannerArtifact.artifact as PlanData;
+    return plannerArtifact.artifact as unknown as PlanData;
   } else {
     return metadata?.plan || null;
   }
