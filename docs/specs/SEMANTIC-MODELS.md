@@ -89,6 +89,27 @@ The feature follows a sophisticated agent-based architecture with human-in-the-l
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### Dynamic OSI Specification Fetching
+
+The agent dynamically fetches the latest OSI specification from GitHub before each run to ensure compliance with the current standard:
+
+**OsiSpecService** (`apps/api/src/semantic-models/agent/osi/osi-spec.service.ts`):
+- Fetches OSI spec YAML and JSON schema from GitHub:
+  - Spec YAML: `https://raw.githubusercontent.com/open-semantic-interchange/OSI/refs/heads/main/core-spec/spec.yaml`
+  - JSON Schema: `https://raw.githubusercontent.com/open-semantic-interchange/OSI/refs/heads/main/core-spec/osi-schema.json`
+- **In-memory caching**: 1-hour TTL to minimize GitHub API calls
+- **Fetch timeout**: 10 seconds (AbortController) to prevent blocking
+- **Graceful fallback**: Uses bundled static spec if fetch fails
+- **Prompt injection**: Spec YAML is injected into all LLM prompts as "OSI Specification Reference"
+- **Schema caching**: JSON schema is cached for future programmatic validation but not injected into prompts
+
+**Benefits:**
+- Always uses the latest OSI specification
+- No need to manually update bundled spec files
+- Minimal latency impact due to caching
+- Resilient to network failures with fallback
+- Provides LLM with authoritative reference for field naming, structure, and semantics
+
 ### Layer Responsibilities
 
 #### Frontend
@@ -938,6 +959,50 @@ The agent follows a linear pipeline with programmatic discovery and focused LLM 
 - Real-time progress tracking (per-table status)
 - Partial recovery (failed tables don't block others)
 
+### Field Data Type Injection
+
+To ensure 100% accuracy of database field metadata, the agent uses a hybrid approach combining LLM-generated descriptions with programmatic data type injection:
+
+**Approach:**
+1. **LLM Phase**: Generate semantic field names and business descriptions
+2. **Programmatic Enrichment**: Inject precise technical metadata from database discovery
+
+**Two-Stage Injection Process:**
+
+#### Stage 1: Field-Level Data Types
+`injectFieldDataTypes()` utility (`apps/api/src/semantic-models/agent/utils/inject-field-data-types.ts`):
+- Runs after each table's LLM generation in `discover-and-generate` node
+- Matches each field to discovered `ColumnInfo` (case-insensitive)
+- Injects into field's `ai_context` object:
+  - `data_type` — Generic type (e.g., "integer", "varchar", "timestamp")
+  - `native_type` — Database-specific type (e.g., "int4", "timestamptz", "varchar(255)")
+  - `is_nullable` — Boolean from schema
+  - `is_primary_key` — Boolean from schema
+- Handles string → object conversion, null creation, preserves existing properties
+- Skips calculated/expression fields that don't match columns
+
+#### Stage 2: Relationship Column Types
+`injectRelationshipDataTypes()` utility (same file):
+- Runs in `assemble-model` node after model assembly
+- Enriches each relationship's `ai_context` with join column types
+- Uses already-enriched field metadata as source
+- Creates `column_types` structure:
+  ```yaml
+  ai_context:
+    column_types:
+      from_columns:
+        customer_id: { data_type: "integer", native_type: "int4" }
+      to_columns:
+        id: { data_type: "integer", native_type: "int4" }
+  ```
+
+**Benefits:**
+- **Zero LLM hallucination** on data types
+- **Zero additional tokens** (programmatic)
+- **100% accuracy** from database system catalogs
+- **Preserves LLM-generated** semantic context
+- **Downstream SQL correctness** (Data Agent sees accurate types)
+
 ### LangGraph State Graph
 
 ```typescript
@@ -965,12 +1030,15 @@ const graph = new StateGraph<AgentState>()
 - For each selected table:
   1. Call DiscoveryService to get columns, FKs, sample data, stats (programmatic)
   2. Make ONE focused LLM call to generate dataset metadata (name, description, field descriptions)
-  3. Persist progress to `semantic_model_runs.progress` after each table
-  4. Emit SSE progress events (table_complete, table_error)
+     - Prompt includes dynamically-fetched OSI spec text
+  3. Parse LLM response into OSIDataset JSON
+  4. **Inject field data types** via `injectFieldDataTypes()` — adds `data_type`, `native_type`, `is_nullable`, `is_primary_key` to each field's `ai_context`
+  5. Persist progress to `semantic_model_runs.progress` after each table
+  6. Emit SSE progress events (table_complete, table_error)
 
 **LLM Calls:** 1 per table (total: N tables)
 
-**Output:** Array of datasets with rich metadata, FK data, metrics
+**Output:** Array of datasets with rich metadata, FK data, metrics, and accurate field data types
 
 ---
 
@@ -984,6 +1052,7 @@ const graph = new StateGraph<AgentState>()
   - Relationship descriptions
   - Relationship types (one-to-one, one-to-many, many-to-many)
   - Model-level description and metadata
+  - Prompt includes dynamically-fetched OSI spec text
 
 **LLM Calls:** 1 total
 
@@ -997,12 +1066,13 @@ const graph = new StateGraph<AgentState>()
 
 **Actions:**
 - Combine datasets + relationships + metrics into OSI JSON structure
+- **Inject relationship column types** via `injectRelationshipDataTypes()` — enriches relationship `ai_context` with join column data types
 - Calculate statistics (table count, field count, relationship count, metric count)
 - No LLM calls
 
 **LLM Calls:** 0
 
-**Output:** Complete OSI-compliant JSON model
+**Output:** Complete OSI-compliant JSON model with enriched field and relationship metadata
 
 ---
 
@@ -1013,11 +1083,12 @@ const graph = new StateGraph<AgentState>()
 **Actions:**
 - Validate JSON structure against OSI schema (programmatic)
 - Check for required fields, valid types, referential integrity
+- **Warning for missing data_type**: Emits non-fatal warning if field's `ai_context` lacks `data_type` (catches calculated/expression fields not mapped to columns)
 - Optional: LLM quality review for business logic errors
 
 **LLM Calls:** 0-1 (optional quality review)
 
-**Output:** Validated model or error list
+**Output:** Validated model or error list (with warnings)
 
 ---
 
@@ -1035,6 +1106,104 @@ const graph = new StateGraph<AgentState>()
 **LLM Calls:** 0
 
 **Output:** Persisted model ID
+
+---
+
+### Complete Data Flow (OSI Spec + Field Data Types)
+
+This diagram shows the full pipeline from agent run start to downstream consumption:
+
+```
+1. Agent Run Start
+   ├─ OsiSpecService.getSpecText()
+   │  ├─ Fetch YAML from GitHub (cache 1hr)
+   │  ├─ Fetch JSON schema from GitHub (cache 1hr)
+   │  └─ Fallback to bundled static spec if fetch fails
+   │
+   ├─ Set initial AgentState:
+   │  └─ osiSpecText: string (for LLM prompts)
+   │
+   └─ Build and compile LangGraph
+
+2. discover_and_generate Node (per table)
+   ├─ Programmatic Discovery:
+   │  ├─ DiscoveryService.listColumns() → ColumnInfo[]
+   │  ├─ DiscoveryService.getForeignKeys() → ForeignKeyInfo[]
+   │  ├─ DiscoveryService.getSampleData() → rows[]
+   │  └─ DiscoveryService.getColumnStats() → stats
+   │
+   ├─ LLM Generation (1 call):
+   │  ├─ Prompt includes: osiSpecText + columns + sample data
+   │  └─ LLM outputs: { name, description, fields[{name, description}] }
+   │
+   ├─ Parse JSON → OSIDataset
+   │
+   ├─ injectFieldDataTypes(dataset, columns):
+   │  └─ For each field matching a column:
+   │     └─ field.ai_context = {
+   │        data_type: "integer",
+   │        native_type: "int4",
+   │        is_nullable: false,
+   │        is_primary_key: true
+   │     }
+   │
+   └─ Emit SSE progress + persist partial model
+
+3. generate_relationships Node (once)
+   ├─ LLM Generation (1 call):
+   │  ├─ Prompt includes: osiSpecText + all datasets + FKs
+   │  └─ LLM outputs: relationships[] + model description
+   │
+   └─ Return relationships array
+
+4. assemble_model Node
+   ├─ Combine datasets + relationships + metrics → OSI JSON
+   │
+   ├─ injectRelationshipDataTypes(relationships, datasets):
+   │  └─ For each relationship:
+   │     └─ relationship.ai_context.column_types = {
+   │        from_columns: { customer_id: { data_type, native_type } },
+   │        to_columns: { id: { data_type, native_type } }
+   │     }
+   │
+   └─ Calculate stats (table count, field count, etc.)
+
+5. validate_model Node
+   ├─ Structural validation (programmatic)
+   ├─ Warn if field.ai_context.data_type missing
+   └─ Optional: LLM quality review
+
+6. persist_model Node
+   ├─ Save SemanticModel to PostgreSQL
+   │  └─ model column (JSONB) contains enriched OSI JSON
+   │
+   └─ Update SemanticModelRun status to "completed"
+
+7. Ontology Creation (downstream)
+   ├─ yaml.dump(model) → YAML with ai_context
+   ├─ Create Neo4j Dataset nodes:
+   │  └─ dataset.yaml contains field data_type + native_type
+   │
+   └─ Create Neo4j Field nodes:
+      └─ field.yaml contains ai_context with types
+
+8. Data Agent Consumption (downstream)
+   ├─ get_dataset_details tool
+   │  └─ Fetches Dataset.yaml from Neo4j
+   │
+   ├─ SQL Builder receives YAML with accurate field types:
+   │  └─ Knows customer_id is int4, created_at is timestamptz
+   │
+   └─ Generates correct SQL:
+      └─ No type casting errors, proper date/time functions
+```
+
+**Key Points:**
+- **OSI spec flows through entire LLM generation** (discover_and_generate, generate_relationships)
+- **Data types injected programmatically** (zero LLM hallucination)
+- **Enriched metadata persists** to PostgreSQL, then Neo4j, then Data Agent
+- **No duplication** — types injected once per table, reused downstream
+- **Graceful degradation** — missing types emit warnings (not errors)
 
 ---
 
@@ -1961,7 +2130,18 @@ apps/api/
 │   │       │   ├── get-column-stats.tool.ts
 │   │       │   └── run-query.tool.ts
 │   │       ├── prompts/
-│   │       │   └── system-prompt.ts            # Agent system prompt
+│   │       │   ├── system-prompt.ts            # Agent system prompt
+│   │       │   ├── generate-dataset-prompt.ts  # Per-table dataset generation (includes OSI spec)
+│   │       │   └── generate-relationships-prompt.ts  # Relationships generation (includes OSI spec)
+│   │       ├── osi/
+│   │       │   ├── osi-spec.service.ts         # Dynamic OSI spec fetcher
+│   │       │   ├── spec.ts                     # Static fallback spec
+│   │       │   └── __tests__/
+│   │       │       └── osi-spec.service.spec.ts  # 10 tests for spec service
+│   │       ├── utils/
+│   │       │   ├── inject-field-data-types.ts  # Programmatic data type injection
+│   │       │   └── __tests__/
+│   │       │       └── inject-field-data-types.spec.ts  # 16 tests for injection utils
 │   │       └── types/
 │   │           └── osi.types.ts                # OSI model TypeScript types
 │   ├── discovery/
@@ -2153,6 +2333,97 @@ cd apps/api && npm test -- discovery.integration
 
 ---
 
+#### Unit Tests: OSI Spec Service
+
+File: `apps/api/src/semantic-models/agent/osi/__tests__/osi-spec.service.spec.ts`
+
+**Coverage (10 tests):**
+
+**Spec Fetching**
+- ✅ Fetches spec YAML from GitHub on first call
+- ✅ Fetches JSON schema from GitHub on first call
+- ✅ Uses cached spec YAML on subsequent calls (within 1hr TTL)
+- ✅ Uses cached JSON schema on subsequent calls
+- ✅ Respects cache expiration after 1 hour
+
+**Error Handling**
+- ✅ Falls back to static spec YAML if GitHub fetch fails
+- ✅ Falls back to static JSON schema if GitHub fetch fails
+- ✅ Handles fetch timeout (10 seconds)
+
+**Cache Management**
+- ✅ clearCache() invalidates cached spec and schema
+- ✅ getSchemaJson() returns parsed JSON schema
+
+**Run:**
+```bash
+cd apps/api && npm test -- osi-spec.service
+```
+
+---
+
+#### Unit Tests: Field Data Type Injection
+
+File: `apps/api/src/semantic-models/agent/utils/__tests__/inject-field-data-types.spec.ts`
+
+**Coverage (16 tests):**
+
+**injectFieldDataTypes() (9 tests)**
+- ✅ Injects data_type, native_type, is_nullable, is_primary_key into field ai_context
+- ✅ Converts string ai_context to object before injection
+- ✅ Creates ai_context object if null or undefined
+- ✅ Preserves existing ai_context properties
+- ✅ Matches fields case-insensitively
+- ✅ Skips fields that don't match any column (calculated fields)
+- ✅ Handles fields with no ai_context initially
+- ✅ Does not mutate original dataset
+- ✅ Works with multiple fields per dataset
+
+**injectRelationshipDataTypes() (7 tests)**
+- ✅ Injects column_types into relationship ai_context
+- ✅ Creates ai_context object if it doesn't exist
+- ✅ Creates column_types with from_columns and to_columns
+- ✅ Uses data_type and native_type from enriched fields
+- ✅ Preserves existing ai_context properties
+- ✅ Skips relationships where field not found in dataset
+- ✅ Handles multi-column join keys
+
+**Run:**
+```bash
+cd apps/api && npm test -- inject-field-data-types
+```
+
+---
+
+#### Integration Tests: Table-by-Table Agent
+
+File: `apps/api/src/semantic-models/agent/__tests__/table-by-table-agent.spec.ts`
+
+**New Coverage (6 additional tests):**
+
+**OSI Spec Integration**
+- ✅ osiSpecText is set in initial agent state
+- ✅ osiSpecText is passed to discover-and-generate node
+- ✅ OSI spec YAML is included in dataset generation prompt
+- ✅ OSI spec YAML is included in relationships generation prompt
+
+**Field Data Type Validation**
+- ✅ Validator emits warning if field ai_context lacks data_type
+- ✅ osiSpecText is available in assemble model state
+
+**Existing tests (coverage for full agent pipeline):**
+- ✅ Complete agent run generates valid semantic model
+- ✅ Per-table progress tracking works correctly
+- ✅ Failed tables don't block overall completion
+- ✅ Partial models saved on error
+
+**Run:**
+```bash
+cd apps/api && npm test -- table-by-table-agent
+```
+
+---
+
 ### Frontend Tests
 
 File: `apps/web/src/__tests__/pages/SemanticModelsPage.test.tsx`
@@ -2326,15 +2597,25 @@ This creates:
 
 The Semantic Models feature provides an AI-powered, interactive way to generate semantic models from database connections. It demonstrates:
 
-- **Advanced agent architecture** using LangGraph with ReAct pattern
+- **Advanced agent architecture** using LangGraph with table-by-table pipeline
 - **Human-in-the-loop** interaction via CopilotKit
 - **Multi-provider LLM support** with pluggable architecture
-- **OSI specification compliance** for standardized semantic models
+- **Dynamic OSI specification fetching** for always-current compliance
+- **Hybrid metadata enrichment** combining LLM descriptions with programmatic data type injection
+- **Zero hallucination on technical metadata** through programmatic field data type injection
 - **Intelligent relationship inference** beyond explicit foreign keys
 - **Comprehensive discovery** for PostgreSQL databases (extensible to other DBs)
 - **Security and safety** with read-only queries, timeouts, and row limits
 - **RBAC enforcement** at API and UI levels
 - **Type safety** with TypeScript and Zod validation
-- **Testability** with comprehensive unit and integration tests
+- **Testability** with comprehensive unit and integration tests (80+ tests)
+- **Downstream correctness** enabling accurate SQL generation in Data Agent
 
-This specification serves as both documentation and a blueprint for building AI-powered features with agent-based workflows.
+**Key Innovations:**
+
+1. **Dynamic Spec Fetching**: Always uses latest OSI spec from GitHub with graceful fallback
+2. **Programmatic Type Injection**: Zero LLM hallucination on data types by injecting from database system catalogs
+3. **Table-by-Table Pipeline**: ~80% token reduction vs ReAct while improving quality
+4. **Enriched ai_context**: Field and relationship metadata flows to Neo4j ontology and Data Agent for correct SQL generation
+
+This specification serves as both documentation and a blueprint for building AI-powered features with agent-based workflows that balance LLM creativity with programmatic precision.
