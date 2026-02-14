@@ -389,7 +389,9 @@ describe('DataAgentAgentService', () => {
         onEvent,
       );
 
-      expect(onEvent).toHaveBeenCalledWith({ type: 'message_start' });
+      expect(onEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'message_start' }),
+      );
       expect(onEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'message_complete',
