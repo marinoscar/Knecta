@@ -26,7 +26,7 @@ The Semantic Models feature enables users to automatically generate semantic mod
 
 - **AI-Powered Discovery**: LangGraph-based agent explores database schemas, tables, columns, and relationships
 - **Intelligent Relationship Inference**: Discovers both explicit foreign keys and implicit relationships using column name matching, value overlap analysis, and validation queries
-- **Human-in-the-Loop**: CopilotKit provides interactive UI with chat interface
+- **Real-Time Progress**: Direct SSE streaming provides log-style progress view with per-table status
 - **Multi-Provider LLM Support**: Pluggable architecture supports OpenAI, Anthropic, and Azure OpenAI
 - **OSI Compliance**: Generated models follow the Open Semantic Interface specification
 - **YAML Export**: Models can be exported in standard YAML format
@@ -49,16 +49,16 @@ The Semantic Models feature enables users to automatically generate semantic mod
 
 ## Architecture
 
-The feature follows a sophisticated agent-based architecture with human-in-the-loop interaction:
+The feature follows a sophisticated agent-based architecture with real-time SSE streaming:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                       Frontend Layer                        │
-│  React + Material UI + CopilotKit                           │
+│  React + Material UI                                        │
 │                                                               │
 │  NewSemanticModelPage (4-step wizard)                       │
 │         ↓                                                    │
-│  AgentSidebar (CopilotKit chat + progress)                 │
+│  AgentLog (log-style progress view)                         │
 │         ↓                                                    │
 │  SemanticModelDetailPage (5-tab viewer)                     │
 └────────────────────────────┬────────────────────────────────┘
@@ -68,10 +68,10 @@ The feature follows a sophisticated agent-based architecture with human-in-the-l
 │                       Backend Layer                         │
 │  NestJS + Fastify + TypeScript                              │
 │                                                               │
-│  CopilotKit Runtime (SSE streaming)                         │
+│  AgentStreamController (SSE via Fastify hijack)             │
 │         ↓                                                    │
-│  LangGraph Agent (ReAct pattern)                            │
-│    ├─ 7 Agent Tools (list_schemas, run_query, etc.)        │
+│  LangGraph StateGraph (linear pipeline, 5 nodes)            │
+│    ├─ Programmatic Discovery (DiscoveryService)            │
 │    └─ OSI Model Generation                                  │
 │         ↓                                                    │
 │  Discovery Service (schema introspection)                   │
@@ -114,17 +114,17 @@ The agent dynamically fetches the latest OSI specification from GitHub before ea
 
 #### Frontend
 - **NewSemanticModelPage**: 4-step wizard (Select Connection → Select Database → Select Tables → Generate with AI)
-- **AgentSidebar**: CopilotKit-powered chat interface with real-time progress updates
+- **AgentLog**: Log-style progress view with per-table status, markdown rendering, and elapsed timer
 - **SemanticModelDetailPage**: 5-tab view (Overview, Datasets, Relationships, Metrics, YAML)
 - **ModelViewer**: Visualize generated semantic model structure
 - **YamlPreview**: Syntax-highlighted YAML export preview
 - **Hooks**: `useSemanticModels`, `useDiscovery` for state management
 
 #### Backend
-- **CopilotKitController**: SSE streaming endpoint implementing AG-UI protocol
+- **AgentStreamController**: SSE streaming endpoint via Fastify hijack (POST /api/semantic-models/runs/:runId/stream)
 - **SemanticModelsController**: CRUD operations for semantic models
 - **DiscoveryController**: Schema introspection endpoints (databases, schemas, tables, columns)
-- **LangGraph Agent**: ReAct-based agent with tool-calling loop
+- **LangGraph Agent**: Linear StateGraph with 5 nodes (no tool-calling loop)
 - **LLM Service**: Multi-provider LLM abstraction (OpenAI, Anthropic, Azure)
 - **Discovery Service**: Database schema metadata extraction
 
@@ -493,7 +493,7 @@ POST /api/semantic-models/runs
 
 **Side Effects:**
 - Creates `SemanticModelRun` record with status "pending"
-- Agent execution happens asynchronously via CopilotKit runtime
+- Agent execution happens asynchronously via SSE streaming endpoint
 
 ---
 
@@ -746,43 +746,52 @@ GET /api/llm/providers
 
 ---
 
-### CopilotKit Runtime
+### Agent SSE Streaming
 
-#### 15. CopilotKit Runtime Endpoint
+#### 15. Agent SSE Streaming Endpoint
 
 ```http
-POST /api/copilotkit
+POST /api/semantic-models/runs/:runId/stream
 ```
 
 **Permission:** `semantic_models:generate`
 
-**Request Body:** AG-UI protocol messages (binary/JSON)
+**Parameters:**
+- `runId` (UUID, path) - Run ID from POST /api/semantic-models/runs
 
-**Response:** Server-Sent Events (SSE) stream with agent updates
+**Mechanism:**
+- SSE streaming via Fastify `res.hijack()` (prevents automatic res.end())
+- Atomic `claimRun()` prevents duplicate concurrent execution of same run
+- Keep-alive heartbeat every 30 seconds
+- Uses `BaseCallbackHandler` for step tracking via LLM invocations
+- Uses `streamMode: 'updates'` for graph state updates
+- LLM `streaming: false` (full text emitted via `text` events after node completion)
+
+**Response:** Server-Sent Events (SSE) stream
 
 **Content-Type:** `text/event-stream`
-
-**Event Types:**
-- `agent_state_update` - Agent progress updates
-- `tool_call` - Tool execution notifications
-- `model_generated` - Semantic model generation complete
-- `error` - Agent error occurred
 
 **SSE Event Types:**
 
 | Event | Payload | Description |
 |-------|---------|-------------|
-| `run_start` | `{ runId, totalTables, startTime }` | Agent execution started |
+| `run_start` | `{}` | Agent execution started |
+| `step_start` | `{ step, label }` | Node execution started |
+| `step_end` | `{ step }` | Node execution completed |
 | `progress` | `{ currentTable, totalTables, tableName, phase, percentComplete }` | Per-table progress update |
 | `table_complete` | `{ tableName, tableIndex, totalTables, datasetName }` | Table processing completed |
 | `table_error` | `{ tableName, error }` | Table processing failed |
-| `step_start` | `{ step, description }` | Node execution started |
-| `step_end` | `{ step }` | Node execution completed |
-| `text` | `{ text }` | LLM-generated text for current step |
-| `run_complete` | `{ modelId, failedTables, duration }` | Agent execution completed |
-| `run_error` | `{ error }` | Agent execution failed |
+| `text` | `{ content }` | Step description or LLM-generated text |
+| `token_update` | `{ tokensUsed: { prompt, completion, total } }` | Cumulative token usage update |
+| `run_complete` | `{ semanticModelId, tokensUsed, failedTables, duration }` | Agent execution completed successfully |
+| `run_error` | `{ message }` | Agent execution failed |
 
-**Note:** No `tool_start` or `tool_result` events (discovery is programmatic, not LLM-driven).
+**Error Responses:**
+- **409 Conflict** - Run already executing (claimRun failed)
+- **404 Not Found** - Run not found or not owned by user
+- **500 Internal Server Error** - Stream setup failed
+
+**Note:** No `tool_start` or `tool_result` events — discovery is programmatic via DiscoveryService methods, not LLM-driven tool calls.
 
 ---
 
@@ -800,11 +809,12 @@ Semantic models contain database metadata (table/column names, relationships) bu
 
 The agent has read-only access to databases with multiple safety layers:
 
-1. **Read-Only Queries**: `run_query` tool blocks write keywords (INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CREATE)
+1. **Read-Only Queries**: DiscoveryService methods only execute SELECT queries; write keywords are blocked
 2. **Query Timeout**: 30-second timeout prevents long-running queries
 3. **Row Limit**: 100 row limit on sample data queries
 4. **Connection Validation**: Agent can only access user's own connections
-5. **Error Handling**: All tool errors are caught and logged without exposing sensitive info
+5. **Error Handling**: All discovery errors are caught and logged without exposing sensitive info
+6. **Atomic Run Claiming**: `claimRun()` prevents duplicate concurrent execution of the same run
 
 ### LLM API Key Security
 
@@ -816,13 +826,14 @@ LLM provider API keys are stored as environment variables:
 
 Keys are **never** exposed to frontend or logged.
 
-### Human-in-the-Loop Protection
+### Autonomous Execution with Safety Guardrails
 
-The agent executes with read-only access and safety guardrails:
+The agent executes autonomously with read-only access and safety guardrails:
 
-1. Agent generates discovery plan
-2. Execution proceeds automatically with read-only queries
-3. All queries subject to timeouts, row limits, and keyword blocking
+1. User selects connection, database, and tables via 4-step wizard
+2. Agent executes table-by-table discovery and generation automatically
+3. All queries are read-only with timeouts, row limits, and keyword blocking
+4. Real-time progress is streamed via SSE to the AgentLog component
 
 This prevents unexpected database modifications while allowing autonomous discovery.
 
@@ -1761,49 +1772,124 @@ for await (const update of stream) {
 
 ---
 
-### 2. Integrating CopilotKit for Human-in-the-Loop
+### 2. SSE Streaming with Fastify Hijack
 
-**Pattern:** Server-side runtime + client-side hooks
+**Pattern:** Direct SSE streaming via Fastify hijack + fetch() + ReadableStream
 
 **Backend Setup:**
 
 ```typescript
-import { CopilotRuntime } from '@copilotkit/runtime';
+import { FastifyRequest, FastifyReply } from 'fastify';
 
-@Post('copilotkit')
+@Post('runs/:runId/stream')
 @Auth({ permissions: [PERMISSIONS.SEMANTIC_MODELS_GENERATE] })
-async copilotkit(@Req() req: FastifyRequest, @Res() res: FastifyReply) {
-  const runtime = new CopilotRuntime({
-    agent: myLangGraphAgent,
+async streamAgentRun(
+  @Param('runId') runId: string,
+  @CurrentUser('id') userId: string,
+  @Res() res: FastifyReply,
+) {
+  // CRITICAL: hijack() prevents Fastify from calling res.end()
+  res.hijack();
+  const raw = res.raw;
+
+  // Write SSE headers
+  raw.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
   });
 
-  return runtime.handleRequest(req.raw, res.raw);
+  // Emit helper
+  const emit = (event: object) => {
+    if (!raw.writableEnded) {
+      raw.write(`data: ${JSON.stringify(event)}\n\n`);
+    }
+  };
+
+  // Keep-alive heartbeat every 30s
+  const keepAlive = setInterval(() => {
+    if (!raw.writableEnded) {
+      raw.write(': keep-alive\n\n');
+    }
+  }, 30_000);
+
+  // Stream graph execution
+  const stream = await graph.stream(initialState, {
+    streamMode: 'updates',
+    callbacks: [sseHandler],
+  });
+
+  for await (const data of stream) {
+    // Process updates and emit events
+  }
+
+  clearInterval(keepAlive);
+  raw.end();
 }
 ```
 
 **Frontend Setup:**
 
-```tsx
-import { CopilotKit, useCopilotAction, useCopilotChat } from '@copilotkit/react-core';
-import { CopilotSidebar } from '@copilotkit/react-ui';
+```typescript
+import { useEffect, useState } from 'react';
+import { api } from '../../services/api';
 
-function MyComponent() {
-  useCopilotAction({
-    name: 'approvePlan',
-    handler: async ({ approved }) => {
-      // Handle user action
-    },
-  });
+function AgentLog({ runId }: { runId: string }) {
+  useEffect(() => {
+    const abortController = new AbortController();
 
-  return (
-    <CopilotKit runtimeUrl="/api/copilotkit">
-      <CopilotSidebar>
-        {/* Your UI */}
-      </CopilotSidebar>
-    </CopilotKit>
-  );
+    const connectToStream = async () => {
+      // 100ms delay for React StrictMode — cleanup aborts before fetch starts
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      if (abortController.signal.aborted) return;
+
+      const token = api.getAccessToken();
+      const response = await fetch(`/api/semantic-models/runs/${runId}/stream`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        signal: abortController.signal,
+      });
+
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse data: <json>\n\n format manually
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || '';
+
+        for (const part of parts) {
+          if (part.startsWith('data: ')) {
+            const event = JSON.parse(part.slice(6));
+            handleEvent(event);
+          }
+        }
+      }
+    };
+
+    connectToStream();
+
+    return () => {
+      abortController.abort();
+    };
+  }, [runId]);
+
+  // Render log entries
 }
 ```
+
+**Key Points:**
+- `res.hijack()` is **mandatory** for Fastify — prevents automatic `res.end()` when controller returns
+- 100ms delay before fetch handles React StrictMode double-firing (cleanup aborts before request starts)
+- Keep-alive heartbeat every 30s prevents proxy/CDN timeouts
+- Use `fetch()` + `ReadableStream` (not EventSource) for POST method + auth headers
 
 ---
 
@@ -2107,30 +2193,25 @@ apps/api/
 │   │   ├── semantic-models.module.ts           # NestJS module
 │   │   ├── semantic-models.controller.ts       # CRUD endpoints
 │   │   ├── semantic-models.service.ts          # Business logic
-│   │   ├── copilotkit.controller.ts            # CopilotKit runtime endpoint
+│   │   ├── agent-stream.controller.ts          # SSE streaming endpoint (Fastify hijack)
 │   │   ├── dto/
 │   │   │   ├── create-run.dto.ts               # Create run validation (Zod)
 │   │   │   ├── update-semantic-model.dto.ts    # Update validation (Zod)
 │   │   │   └── semantic-model-query.dto.ts     # List query validation (Zod)
 │   │   └── agent/
-│   │       ├── graph.ts                        # LangGraph state graph
-│   │       ├── state.ts                        # Agent state interface
-│   │       ├── nodes/                          # Graph nodes
-│   │       │   ├── plan-discovery.node.ts
-│   │       │   ├── agent-loop.node.ts
-│   │       │   ├── tool-execution.node.ts
-│   │       │   ├── generate-model.node.ts
-│   │       │   └── persist-model.node.ts
-│   │       ├── tools/                          # Agent tools
-│   │       │   ├── list-schemas.tool.ts
-│   │       │   ├── list-tables.tool.ts
-│   │       │   ├── list-columns.tool.ts
-│   │       │   ├── get-foreign-keys.tool.ts
-│   │       │   ├── get-sample-data.tool.ts
-│   │       │   ├── get-column-stats.tool.ts
-│   │       │   └── run-query.tool.ts
+│   │       ├── agent.service.ts                # Agent orchestration and graph configuration
+│   │       ├── graph.ts                        # LangGraph StateGraph (5 linear nodes)
+│   │       ├── state.ts                        # Agent state (LangGraph Annotation.Root)
+│   │       ├── utils.ts                        # JSON extraction, token tracking utilities
+│   │       ├── nodes/                          # Graph nodes (linear pipeline)
+│   │       │   ├── discover-and-generate.ts    # Table-by-table discovery + LLM generation
+│   │       │   ├── generate-relationships.ts   # FK + implicit relationship inference (1 LLM call)
+│   │       │   ├── assemble-model.ts           # Pure programmatic JSON assembly
+│   │       │   ├── validate-model.ts           # Structural checks + optional LLM review
+│   │       │   └── persist-model.ts            # Save model + stats to database
+│   │       ├── validation/
+│   │       │   └── structural-validator.ts     # Programmatic OSI model validation
 │   │       ├── prompts/
-│   │       │   ├── system-prompt.ts            # Agent system prompt
 │   │       │   ├── generate-dataset-prompt.ts  # Per-table dataset generation (includes OSI spec)
 │   │       │   └── generate-relationships-prompt.ts  # Relationships generation (includes OSI spec)
 │   │       ├── osi/
@@ -2177,7 +2258,7 @@ apps/web/
 └── src/
     ├── components/
     │   └── semantic-models/
-    │       ├── AgentSidebar.tsx                # CopilotKit agent UI
+    │       ├── AgentLog.tsx                    # Log-style SSE progress viewer
     │       ├── ModelViewer.tsx                 # Model visualization
     │       └── YamlPreview.tsx                 # YAML syntax highlighting
     ├── hooks/
@@ -2529,7 +2610,6 @@ Added to `apps/api/package.json`:
 ```json
 {
   "dependencies": {
-    "@copilotkit/runtime": "^1.0.0",
     "@langchain/langgraph": "^0.0.20",
     "@langchain/core": "^0.1.30",
     "@langchain/openai": "^0.0.20",
@@ -2547,8 +2627,11 @@ Added to `apps/web/package.json`:
 ```json
 {
   "dependencies": {
-    "@copilotkit/react-core": "^1.0.0",
-    "@copilotkit/react-ui": "^1.0.0"
+    "react-markdown": "^9.0.0",
+    "react-syntax-highlighter": "^15.5.0"
+  },
+  "devDependencies": {
+    "@types/react-syntax-highlighter": "^15.5.0"
   }
 }
 ```
@@ -2595,10 +2678,10 @@ This creates:
 
 ## Summary
 
-The Semantic Models feature provides an AI-powered, interactive way to generate semantic models from database connections. It demonstrates:
+The Semantic Models feature provides an AI-powered, autonomous way to generate semantic models from database connections. It demonstrates:
 
 - **Advanced agent architecture** using LangGraph with table-by-table pipeline
-- **Human-in-the-loop** interaction via CopilotKit
+- **Real-time progress streaming** via direct SSE with Fastify hijack
 - **Multi-provider LLM support** with pluggable architecture
 - **Dynamic OSI specification fetching** for always-current compliance
 - **Hybrid metadata enrichment** combining LLM descriptions with programmatic data type injection
