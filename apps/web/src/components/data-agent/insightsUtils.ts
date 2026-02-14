@@ -244,6 +244,25 @@ export function formatDuration(ms: number): string {
 }
 
 /**
+ * Extract cumulative token usage from live stream events.
+ * Sums up all token_update events emitted by agent phases.
+ */
+export function extractLiveTokens(
+  streamEvents: DataAgentStreamEvent[],
+): { prompt: number; completion: number; total: number } | null {
+  const tokenEvents = streamEvents.filter((e) => e.type === 'token_update');
+  if (tokenEvents.length === 0) return null;
+  return tokenEvents.reduce(
+    (acc, e) => ({
+      prompt: acc.prompt + (e.tokensUsed?.prompt || 0),
+      completion: acc.completion + (e.tokensUsed?.completion || 0),
+      total: acc.total + (e.tokensUsed?.total || 0),
+    }),
+    { prompt: 0, completion: 0, total: 0 },
+  );
+}
+
+/**
  * Format token count with commas
  */
 export function formatTokenCount(n: number): string {

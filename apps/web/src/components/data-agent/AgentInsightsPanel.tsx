@@ -23,6 +23,7 @@ import {
   extractPlan,
   extractStepStatuses,
   extractPhaseDetails,
+  extractLiveTokens,
   formatDuration,
   formatTokenCount,
 } from './insightsUtils';
@@ -64,15 +65,17 @@ export function AgentInsightsPanel({
       ? formatDuration(metadata.durationMs)
       : '--';
 
-  // Token stats
-  const inputTokens = metadata?.tokensUsed?.prompt
-    ? formatTokenCount(metadata.tokensUsed.prompt)
+  // Token stats — read from stream events during live mode, from metadata in history mode
+  const liveTokens = isLiveMode ? extractLiveTokens(streamEvents) : null;
+  const tokenSource = isLiveMode ? liveTokens : metadata?.tokensUsed;
+  const inputTokens = tokenSource?.prompt
+    ? formatTokenCount(tokenSource.prompt)
     : '--';
-  const outputTokens = metadata?.tokensUsed?.completion
-    ? formatTokenCount(metadata.tokensUsed.completion)
+  const outputTokens = tokenSource?.completion
+    ? formatTokenCount(tokenSource.completion)
     : '--';
-  const totalTokens = metadata?.tokensUsed?.total
-    ? formatTokenCount(metadata.tokensUsed.total)
+  const totalTokens = tokenSource?.total
+    ? formatTokenCount(tokenSource.total)
     : '--';
 
   // Filter phases for display
