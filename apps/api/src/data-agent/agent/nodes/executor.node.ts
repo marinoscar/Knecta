@@ -5,6 +5,7 @@ import { EmitFn } from '../graph';
 import { buildExecutorRepairPrompt, buildPythonGenerationPrompt } from '../prompts/executor.prompt';
 import { DiscoveryService } from '../../../discovery/discovery.service';
 import { SandboxService } from '../../../sandbox/sandbox.service';
+import { extractTokenUsage, mergeTokenUsage } from '../utils/token-tracker';
 
 export function createExecutorNode(
   llm: any,
@@ -19,6 +20,7 @@ export function createExecutorNode(
     const stepResults: StepResult[] = [];
     const trackedToolCalls: TrackedToolCall[] = [];
     const plan = state.plan!;
+    let nodeTokens = { prompt: 0, completion: 0, total: 0 };
 
     // Build schema reference string from joinPlan YAML for repair/python prompts
     const joinPlan = state.joinPlan;
@@ -68,6 +70,7 @@ export function createExecutorNode(
               try {
                 const repairPrompt = buildExecutorRepairPrompt(step.description, querySpec.pilotSql, errMsg, state.databaseType, datasetSchemas);
                 const repairResponse = await llm.invoke([new SystemMessage(repairPrompt)]);
+                nodeTokens = mergeTokenUsage(nodeTokens, extractTokenUsage(repairResponse));
                 const repairedSql = typeof repairResponse.content === 'string' ? repairResponse.content.trim() : '';
                 if (repairedSql) {
                   fullSql = repairedSql;
@@ -122,6 +125,7 @@ export function createExecutorNode(
               new SystemMessage('You are a Python code generator. Output ONLY executable Python code. No markdown fences, no explanation.'),
               new HumanMessage(prompt),
             ]);
+            nodeTokens = mergeTokenUsage(nodeTokens, extractTokenUsage(codeResponse));
 
             let code = typeof codeResponse.content === 'string' ? codeResponse.content : '';
             // Strip markdown fences if present
@@ -158,12 +162,14 @@ export function createExecutorNode(
       }
 
       emit({ type: 'phase_artifact', phase: 'executor', artifact: stepResults });
+      emit({ type: 'token_update', phase: 'executor', tokensUsed: nodeTokens });
       emit({ type: 'phase_complete', phase: 'executor' });
 
       return {
         stepResults,
         currentPhase: 'executor',
         toolCalls: trackedToolCalls,
+        tokensUsed: nodeTokens,
       };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -172,6 +178,7 @@ export function createExecutorNode(
         stepResults,
         currentPhase: 'executor',
         error: `Executor error: ${msg}`,
+        tokensUsed: nodeTokens,
       };
     }
   };

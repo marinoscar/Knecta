@@ -4,6 +4,7 @@ import { ExplainerOutput, DataLineage } from '../types';
 import { EmitFn } from '../graph';
 import { buildExplainerPrompt } from '../prompts/explainer.prompt';
 import { SandboxService } from '../../../sandbox/sandbox.service';
+import { extractTokenUsage } from '../utils/token-tracker';
 
 export function createExplainerNode(llm: any, sandboxService: SandboxService, emit: EmitFn) {
   return async (state: DataAgentStateType): Promise<Partial<DataAgentStateType>> => {
@@ -28,6 +29,7 @@ export function createExplainerNode(llm: any, sandboxService: SandboxService, em
         new SystemMessage(prompt),
         new HumanMessage('Provide the answer.'),
       ]);
+      const nodeTokens = extractTokenUsage(response);
 
       const narrative = typeof response.content === 'string' ? response.content : '';
 
@@ -94,11 +96,13 @@ export function createExplainerNode(llm: any, sandboxService: SandboxService, em
 
       emit({ type: 'phase_artifact', phase: 'explainer', artifact: explainerOutput });
       emit({ type: 'text', content: narrative });
+      emit({ type: 'token_update', phase: 'explainer', tokensUsed: nodeTokens });
       emit({ type: 'phase_complete', phase: 'explainer' });
 
       return {
         explainerOutput,
         currentPhase: 'explainer',
+        tokensUsed: nodeTokens,
       };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -110,7 +114,11 @@ export function createExplainerNode(llm: any, sandboxService: SandboxService, em
       };
       emit({ type: 'text', content: fallbackOutput.narrative });
       emit({ type: 'phase_complete', phase: 'explainer' });
-      return { explainerOutput: fallbackOutput, currentPhase: 'explainer' };
+      return {
+        explainerOutput: fallbackOutput,
+        currentPhase: 'explainer',
+        tokensUsed: { prompt: 0, completion: 0, total: 0 },
+      };
     }
   };
 }

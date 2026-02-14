@@ -7,6 +7,7 @@ import { createListDatasetsTool } from '../tools/list-datasets.tool';
 import { createGetDatasetDetailsTool } from '../tools/get-dataset-details.tool';
 import { createGetRelationshipsTool } from '../tools/get-relationships.tool';
 import { NeoOntologyService } from '../../../ontologies/neo-ontology.service';
+import { extractTokenUsage, mergeTokenUsage } from '../utils/token-tracker';
 
 const MAX_NAVIGATOR_ITERATIONS = 8;
 
@@ -43,11 +44,13 @@ export function createNavigatorNode(
       ];
 
       // Mini-ReAct loop
+      let nodeTokens = { prompt: 0, completion: 0, total: 0 };
       let iterations = 0;
       while (iterations < MAX_NAVIGATOR_ITERATIONS) {
         iterations++;
 
         const response = await llmWithTools.invoke(messages);
+        nodeTokens = mergeTokenUsage(nodeTokens, extractTokenUsage(response));
         messages.push(response);
 
         // Check if the LLM wants to call tools
@@ -141,11 +144,13 @@ export function createNavigatorNode(
       };
 
       emit({ type: 'phase_artifact', phase: 'navigator', artifact: joinPlan });
+      emit({ type: 'token_update', phase: 'navigator', tokensUsed: nodeTokens });
       emit({ type: 'phase_complete', phase: 'navigator' });
 
       return {
         joinPlan,
         currentPhase: 'navigator',
+        tokensUsed: nodeTokens,
       };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -154,6 +159,7 @@ export function createNavigatorNode(
         joinPlan: { relevantDatasets: [], joinPaths: [], notes: `Navigator error: ${msg}` },
         currentPhase: 'navigator',
         error: `Navigator error: ${msg}`,
+        tokensUsed: { prompt: 0, completion: 0, total: 0 },
       };
     }
   };

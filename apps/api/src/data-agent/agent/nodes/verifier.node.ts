@@ -4,6 +4,7 @@ import { VerificationReport, VerificationCheck } from '../types';
 import { EmitFn } from '../graph';
 import { buildVerifierPrompt } from '../prompts/verifier.prompt';
 import { SandboxService } from '../../../sandbox/sandbox.service';
+import { extractTokenUsage } from '../utils/token-tracker';
 
 export function createVerifierNode(llm: any, sandboxService: SandboxService, emit: EmitFn) {
   return async (state: DataAgentStateType): Promise<Partial<DataAgentStateType>> => {
@@ -23,7 +24,11 @@ export function createVerifierNode(llm: any, sandboxService: SandboxService, emi
         };
         emit({ type: 'phase_artifact', phase: 'verifier', artifact: passReport });
         emit({ type: 'phase_complete', phase: 'verifier' });
-        return { verificationReport: passReport, currentPhase: 'verifier' };
+        return {
+          verificationReport: passReport,
+          currentPhase: 'verifier',
+          tokensUsed: { prompt: 0, completion: 0, total: 0 },
+        };
       }
 
       // Check if all steps errored — nothing to verify
@@ -43,6 +48,7 @@ export function createVerifierNode(llm: any, sandboxService: SandboxService, emi
           revisionCount: state.revisionCount + 1,
           revisionDiagnosis: failReport.diagnosis,
           revisionTarget: 'sql_builder',
+          tokensUsed: { prompt: 0, completion: 0, total: 0 },
         };
       }
 
@@ -52,6 +58,7 @@ export function createVerifierNode(llm: any, sandboxService: SandboxService, emi
         new SystemMessage('You are a Python code generator. Output ONLY executable Python code. No markdown fences. The code must print a JSON object as its last output line.'),
         new HumanMessage(prompt),
       ]);
+      const nodeTokens = extractTokenUsage(codeResponse);
 
       let code = typeof codeResponse.content === 'string' ? codeResponse.content : '';
       code = code.replace(/^```(?:python)?\n?/m, '').replace(/\n?```\s*$/m, '').trim();
@@ -103,11 +110,13 @@ export function createVerifierNode(llm: any, sandboxService: SandboxService, emi
       }
 
       emit({ type: 'phase_artifact', phase: 'verifier', artifact: report });
+      emit({ type: 'token_update', phase: 'verifier', tokensUsed: nodeTokens });
       emit({ type: 'phase_complete', phase: 'verifier' });
 
       const stateUpdate: Partial<DataAgentStateType> = {
         verificationReport: report,
         currentPhase: 'verifier',
+        tokensUsed: nodeTokens,
       };
 
       if (!report.passed) {
@@ -128,7 +137,11 @@ export function createVerifierNode(llm: any, sandboxService: SandboxService, emi
       };
       emit({ type: 'phase_artifact', phase: 'verifier', artifact: passReport });
       emit({ type: 'phase_complete', phase: 'verifier' });
-      return { verificationReport: passReport, currentPhase: 'verifier' };
+      return {
+        verificationReport: passReport,
+        currentPhase: 'verifier',
+        tokensUsed: { prompt: 0, completion: 0, total: 0 },
+      };
     }
   };
 }

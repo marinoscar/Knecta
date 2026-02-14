@@ -85,7 +85,11 @@ export const DataAgentState = Annotation.Root({
     default: () => [],
   }),
   tokensUsed: Annotation<{ prompt: number; completion: number; total: number }>({
-    reducer: (_, next) => next,
+    reducer: (prev, next) => ({
+      prompt: prev.prompt + next.prompt,
+      completion: prev.completion + next.completion,
+      total: prev.total + next.total,
+    }),
     default: () => ({ prompt: 0, completion: 0, total: 0 }),
   }),
   error: Annotation<string | null>({

@@ -5,6 +5,7 @@ import { PlanArtifact } from '../types';
 import { EmitFn } from '../graph';
 import { buildPlannerPrompt } from '../prompts/planner.prompt';
 import { z } from 'zod';
+import { extractTokenUsage } from '../utils/token-tracker';
 
 const PlanStepSchema = z.object({
   id: z.number().describe('Step number (1, 2, 3, ...)'),
@@ -44,19 +45,25 @@ export function createPlannerNode(llm: any, emit: EmitFn) {
 
       const structuredLlm = llm.withStructuredOutput(PlanArtifactSchema, {
         name: 'create_plan',
+        includeRaw: true,
       });
 
-      const result = await structuredLlm.invoke([
+      const response = await structuredLlm.invoke([
         new SystemMessage(systemPrompt),
         new HumanMessage(state.userQuestion),
-      ]) as PlanArtifact;
+      ]);
+
+      const result = response.parsed as PlanArtifact;
+      const nodeTokens = extractTokenUsage(response.raw);
 
       emit({ type: 'phase_artifact', phase: 'planner', artifact: result });
+      emit({ type: 'token_update', phase: 'planner', tokensUsed: nodeTokens });
       emit({ type: 'phase_complete', phase: 'planner' });
 
       return {
         plan: result,
         currentPhase: 'planner',
+        tokensUsed: nodeTokens,
       };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -83,6 +90,7 @@ export function createPlannerNode(llm: any, emit: EmitFn) {
         },
         currentPhase: 'planner',
         error: `Planner fallback: ${msg}`,
+        tokensUsed: { prompt: 0, completion: 0, total: 0 },
       };
     }
   };

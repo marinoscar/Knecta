@@ -5,6 +5,7 @@ import { QuerySpec } from '../types';
 import { EmitFn } from '../graph';
 import { buildSqlBuilderPrompt } from '../prompts/sql-builder.prompt';
 import { NeoOntologyService } from '../../../ontologies/neo-ontology.service';
+import { extractTokenUsage } from '../utils/token-tracker';
 
 const QuerySpecSchema = z.object({
   queries: z.array(z.object({
@@ -57,24 +58,28 @@ export function createSqlBuilderNode(
 
       const structuredLlm = llm.withStructuredOutput(QuerySpecSchema, {
         name: 'generate_queries',
+        includeRaw: true,
       });
 
-      const result = await structuredLlm.invoke([
+      const response = await structuredLlm.invoke([
         new SystemMessage(systemPrompt),
         new HumanMessage(
           `Generate SQL queries for the plan. User question: "${state.userQuestion}"`,
         ),
       ]);
 
-      const querySpecs: QuerySpec[] = result.queries;
+      const querySpecs: QuerySpec[] = response.parsed.queries;
+      const nodeTokens = extractTokenUsage(response.raw);
 
       emit({ type: 'phase_artifact', phase: 'sql_builder', artifact: querySpecs });
+      emit({ type: 'token_update', phase: 'sql_builder', tokensUsed: nodeTokens });
       emit({ type: 'phase_complete', phase: 'sql_builder' });
 
       return {
         querySpecs,
         currentPhase: 'sql_builder',
         error: undefined,
+        tokensUsed: nodeTokens,
       };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -83,6 +88,7 @@ export function createSqlBuilderNode(
         querySpecs: [],
         currentPhase: 'sql_builder',
         error: `SQL Builder error: ${msg}`,
+        tokensUsed: { prompt: 0, completion: 0, total: 0 },
       };
     }
   };
