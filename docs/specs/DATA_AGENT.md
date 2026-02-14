@@ -596,6 +596,107 @@ The `narrative` field becomes the message `content` (markdown). The full `Explai
 
 ---
 
+## Token Usage Tracking
+
+All 6 agent phase nodes capture LLM token usage and emit it via SSE for real-time monitoring and historical analysis.
+
+### Backend Token Tracking
+
+**Token Tracker Utility**: `apps/api/src/data-agent/agent/utils/token-tracker.ts`
+
+Two utility functions for token tracking:
+
+1. **`extractTokenUsage(response: AIMessage): TokenUsage`**
+   - Extracts token counts from LangChain AIMessage
+   - Supports OpenAI format: `response_metadata.usage.{prompt_tokens, completion_tokens}`
+   - Supports Anthropic format: `usage_metadata.{input_tokens, output_tokens}`
+   - Returns: `{ prompt: number, completion: number, total: number }`
+
+2. **`mergeTokenUsage(a: TokenUsage, b: TokenUsage): TokenUsage`**
+   - Sums two token usage objects
+   - Used for accumulating tokens across multiple LLM calls (e.g., Navigator mini-ReAct loop)
+
+**State Reducer**: The `tokensUsed` field in state uses an **accumulating reducer** instead of a replace reducer:
+
+```typescript
+tokensUsed: Annotation<{ prompt: number; completion: number; total: number }>({
+  reducer: (prev, next) => ({
+    prompt: prev.prompt + next.prompt,
+    completion: prev.completion + next.completion,
+    total: prev.total + next.total,
+  }),
+  default: () => ({ prompt: 0, completion: 0, total: 0 }),
+}),
+```
+
+This ensures each node's token contribution is automatically summed without manual accumulation logic.
+
+### Node-Level Token Tracking
+
+Each phase node captures tokens from every `llm.invoke()` call:
+
+1. **Planner**:
+   - Uses `includeRaw: true` on `withStructuredOutput` to get raw AIMessage
+   - Extracts tokens from structured output response
+   - Emits `token_update` SSE event with phase='planner'
+
+2. **Navigator**:
+   - Accumulates tokens across all mini-ReAct iterations
+   - Uses `mergeTokenUsage` to sum tokens from multiple LLM calls
+   - Emits single `token_update` with total after completion
+
+3. **SQL Builder**:
+   - Uses `includeRaw: true` on `withStructuredOutput`
+   - Extracts tokens from structured SQL generation response
+   - Emits `token_update` with phase='sql_builder'
+
+4. **Executor**:
+   - Accumulates tokens from:
+     - SQL repair LLM calls (when pilot query fails)
+     - Python code generation calls (for python/sql_then_python strategies)
+   - Emits `token_update` with phase='executor'
+
+5. **Verifier**:
+   - Extracts tokens from single LLM verification code generation call
+   - Emits `token_update` with phase='verifier'
+
+6. **Explainer**:
+   - Extracts tokens from single LLM narrative generation call
+   - Emits `token_update` with phase='explainer'
+
+**SSE Event Format**:
+```typescript
+{
+  type: 'token_update',
+  phase: 'planner' | 'navigator' | 'sql_builder' | 'executor' | 'verifier' | 'explainer',
+  tokensUsed: {
+    prompt: number,
+    completion: number,
+    total: number,
+  },
+}
+```
+
+### Frontend Live Token Display
+
+The `AgentInsightsPanel` component displays token usage in both live and history modes:
+
+**Live Mode** (during streaming):
+- `extractLiveTokens(streamEvents)` sums all `token_update` events
+- Updates in real-time as each phase completes
+- Shows cumulative totals across all phases
+
+**History Mode** (after completion):
+- Reads `metadata.tokensUsed` from completed message
+- Displays final token counts
+
+**Duration Tracking**:
+- Live mode: Reads `startedAt` from `message_start` stream event
+- History mode: Reads `metadata.startedAt` and `metadata.durationMs`
+- `useElapsedTimer` hook provides live-ticking timer during streaming
+
+---
+
 ## Sub-Task Decomposition
 
 The Planner phase ALWAYS decomposes questions into ordered sub-tasks. This enables:
@@ -797,7 +898,11 @@ export const DataAgentState = Annotation.Root({
     default: () => [],
   }),
   tokensUsed: Annotation<{ prompt: number; completion: number; total: number }>({
-    reducer: (_, next) => next,
+    reducer: (prev, next) => ({
+      prompt: prev.prompt + next.prompt,
+      completion: prev.completion + next.completion,
+      total: prev.total + next.total,
+    }),
     default: () => ({ prompt: 0, completion: 0, total: 0 }),
   }),
   error: Annotation<string | null>({
@@ -1024,6 +1129,7 @@ The agent streams execution progress via Server-Sent Events (SSE) using the same
 | `tool_start` | `{ phase: string, stepId?: number, name: string, args: object }` | All phases | Tool call started |
 | `tool_end` | `{ phase: string, stepId?: number, name: string, result: string }` | All phases | Tool call complete |
 | `tool_error` | `{ phase: string, stepId?: number, name: string, error: string }` | All phases | Tool call failed |
+| `token_update` | `{ phase: string, tokensUsed: { prompt: number, completion: number, total: number } }` | All phase nodes | Per-phase token usage report |
 
 ### SSE Event Examples
 
@@ -1142,6 +1248,10 @@ interface DataAgentMessageMetadata {
     completion: number;
     total: number;
   };
+
+  // Timing
+  startedAt?: number;   // Timestamp (ms) when generation started
+  durationMs?: number;  // Total elapsed time in milliseconds
 
   // Dataset references
   datasetsUsed: string[];
@@ -1709,6 +1819,56 @@ MUI Stepper component showing 6-phase progress.
 
 ---
 
+### AgentInsightsPanel (NEW)
+
+Right-side panel showing real-time and historical agent execution details.
+
+**Location**: `apps/web/src/components/data-agent/AgentInsightsPanel.tsx`
+
+**Props**:
+```typescript
+interface AgentInsightsPanelProps {
+  messages: DataChatMessage[];
+  streamEvents: DataAgentStreamEvent[];
+  isStreaming: boolean;
+  onClose: () => void;
+}
+```
+
+**Features**:
+- **Dual-mode rendering**: Live mode (during streaming, reads from `streamEvents[]`) and History mode (after completion, reads from message `metadata`)
+- **Stats Row**: Duration (live-ticking timer), Input tokens, Output tokens, Total tokens — displayed as 2x2 grid cards
+- **Execution Plan**: Shows planner's sub-task list with real-time status icons (pending: gray circle, running: spinning loop, complete: green check, failed: red error)
+- **Phase Details**: Collapsible accordion per phase (Planner, Navigator, SQL Builder, Executor, Verifier, Explainer) with status dot (pulsing blue for active, green for complete), tool calls listed inside
+- **Verification Summary**: Shows pass/fail badge and individual check results (only in history mode from metadata)
+- **Data Lineage**: Datasets as chips, grain, row count (only in history mode from metadata)
+
+**Layout Integration** (in `DataAgentPage.tsx`):
+- Desktop (lg+): Fixed 360px right pane, opens automatically when streaming starts
+- Tablet (md-lg): Drawer from right, 360px
+- Mobile: Full-screen drawer
+- Toggle via Analytics icon button in ChatView header
+
+**Utility Functions** (`insightsUtils.ts`):
+
+**Location**: `apps/web/src/components/data-agent/insightsUtils.ts`
+
+Helper functions for the insights panel:
+- `extractPlan()`: Gets plan from stream events (live) or metadata (history)
+- `extractStepStatuses()`: Gets per-step status (pending/running/complete/failed) with result summaries
+- `extractPhaseDetails()`: Gets per-phase status + tool call lists from events or metadata
+- `extractLiveTokens()`: Sums `token_update` stream events to get cumulative token counts during streaming
+- `formatDuration()`: Formats ms as `m:ss`
+- `formatTokenCount()`: Formats number with locale commas
+
+**Custom Hook** (`useElapsedTimer.ts`):
+
+**Location**: `apps/web/src/hooks/useElapsedTimer.ts`
+
+Custom hook that provides a live elapsed timer string. Takes `startedAt` (timestamp ms) and `isActive` (boolean). Updates every 1 second via `setInterval` when active. Returns formatted duration string.
+
+---
+
 ### ChatMessage (UPDATED)
 
 Message bubble component with verification badge and data lineage.
@@ -1925,6 +2085,7 @@ CONVERSATION_HISTORY_LIMIT=10  # Last N messages for context
 | `apps/api/src/data-agent/agent/tools/list-datasets.tool.ts` | Rebuilt: Dataset discovery |
 | `apps/api/src/data-agent/agent/tools/get-relationships.tool.ts` | NEW: wraps `getAllRelationships()` |
 | `apps/api/src/data-agent/agent/tools/index.ts` | Rebuilt: barrel export for 6 tools |
+| `apps/api/src/data-agent/agent/utils/token-tracker.ts` | Token usage extraction from LangChain responses |
 
 ### Modified Backend Files
 
@@ -1940,6 +2101,9 @@ CONVERSATION_HISTORY_LIMIT=10  # Last N messages for context
 | File | Purpose |
 |------|---------|
 | `apps/web/src/components/data-agent/PhaseIndicator.tsx` | MUI Stepper showing phase progress |
+| `apps/web/src/components/data-agent/AgentInsightsPanel.tsx` | Agent insights right-side panel |
+| `apps/web/src/components/data-agent/insightsUtils.ts` | Utility functions for insights data extraction |
+| `apps/web/src/hooks/useElapsedTimer.ts` | Live elapsed timer hook |
 
 ### Modified Frontend Files
 
@@ -1947,7 +2111,8 @@ CONVERSATION_HISTORY_LIMIT=10  # Last N messages for context
 |------|--------|
 | `apps/web/src/types/index.ts` | Extend `DataAgentStreamEvent` with phase/step events; extend metadata types |
 | `apps/web/src/hooks/useDataChat.ts` | Handle new SSE event types in parser |
-| `apps/web/src/components/data-agent/ChatView.tsx` | Integrate PhaseIndicator above message list |
+| `apps/web/src/pages/DataAgentPage.tsx` | Integrate AgentInsightsPanel with responsive layout |
+| `apps/web/src/components/data-agent/ChatView.tsx` | Integrate PhaseIndicator above message list, add insights panel toggle button (Analytics icon) |
 | `apps/web/src/components/data-agent/ToolCallAccordion.tsx` | Group tool calls by phase + stepId |
 | `apps/web/src/components/data-agent/ChatMessage.tsx` | Show verification badge + data lineage footer |
 
@@ -1990,6 +2155,37 @@ describe('NavigatorNode', () => {
     const state = { plan: {...}, ontologyId: '...' };
     const result = await navigatorNode(state);
     expect(result.joinPlan.joinPaths.length).toBeGreaterThan(0);
+  });
+});
+```
+
+#### Token Tracker Tests
+
+14 tests for `token-tracker.ts` covering:
+- `extractTokenUsage()`: Extracts token counts from LangChain AIMessage (OpenAI and Anthropic formats)
+- `mergeTokenUsage()`: Sums two token usage objects
+- Handles missing/undefined usage metadata gracefully
+
+```typescript
+// token-tracker.spec.ts
+describe('TokenTracker', () => {
+  it('should extract OpenAI token usage', () => {
+    const message = { response_metadata: { usage: { prompt_tokens: 100, completion_tokens: 50 } } };
+    const tokens = extractTokenUsage(message);
+    expect(tokens).toEqual({ prompt: 100, completion: 50, total: 150 });
+  });
+
+  it('should extract Anthropic token usage', () => {
+    const message = { usage_metadata: { input_tokens: 100, output_tokens: 50 } };
+    const tokens = extractTokenUsage(message);
+    expect(tokens).toEqual({ prompt: 100, completion: 50, total: 150 });
+  });
+
+  it('should merge token usage objects', () => {
+    const a = { prompt: 100, completion: 50, total: 150 };
+    const b = { prompt: 200, completion: 75, total: 275 };
+    const merged = mergeTokenUsage(a, b);
+    expect(merged).toEqual({ prompt: 300, completion: 125, total: 425 });
   });
 });
 ```
@@ -2064,6 +2260,67 @@ describe('PhaseIndicator', () => {
 });
 ```
 
+Test AgentInsightsPanel (9 tests):
+
+```typescript
+// AgentInsightsPanel.spec.tsx
+describe('AgentInsightsPanel', () => {
+  it('should display live duration timer during streaming', () => {
+    const events = [{ type: 'message_start', startedAt: Date.now() - 5000 }];
+    render(<AgentInsightsPanel streamEvents={events} isStreaming={true} />);
+    expect(screen.getByText(/0:0[5-6]/)).toBeInTheDocument(); // 5-6 seconds
+  });
+
+  it('should display token counts from stream events', () => {
+    const events = [
+      { type: 'token_update', phase: 'planner', tokensUsed: { prompt: 100, completion: 50, total: 150 } },
+      { type: 'token_update', phase: 'executor', tokensUsed: { prompt: 200, completion: 75, total: 275 } },
+    ];
+    render(<AgentInsightsPanel streamEvents={events} isStreaming={true} />);
+    expect(screen.getByText('300')).toBeInTheDocument(); // prompt tokens
+    expect(screen.getByText('125')).toBeInTheDocument(); // completion tokens
+  });
+
+  it('should fall back to metadata in history mode', () => {
+    const messages = [{
+      role: 'assistant',
+      metadata: {
+        startedAt: Date.now() - 30000,
+        durationMs: 28500,
+        tokensUsed: { prompt: 500, completion: 200, total: 700 },
+      },
+    }];
+    render(<AgentInsightsPanel messages={messages} isStreaming={false} />);
+    expect(screen.getByText('0:28')).toBeInTheDocument(); // duration
+    expect(screen.getByText('500')).toBeInTheDocument(); // prompt tokens
+  });
+});
+```
+
+Test insightsUtils:
+
+```typescript
+// insightsUtils.spec.ts
+describe('insightsUtils', () => {
+  it('should extract live tokens from stream events', () => {
+    const events = [
+      { type: 'token_update', tokensUsed: { prompt: 100, completion: 50, total: 150 } },
+      { type: 'token_update', tokensUsed: { prompt: 200, completion: 75, total: 275 } },
+    ];
+    const tokens = extractLiveTokens(events);
+    expect(tokens).toEqual({ prompt: 300, completion: 125, total: 425 });
+  });
+
+  it('should extract plan from stream events', () => {
+    const events = [
+      { type: 'phase_artifact', phase: 'planner', artifact: { steps: [...] } },
+    ];
+    const plan = extractPlan(events, []);
+    expect(plan?.steps).toBeDefined();
+  });
+});
+```
+
 Test ChatMessage with verification badge:
 
 ```typescript
@@ -2105,6 +2362,25 @@ describe('useDataChat', () => {
       result.current.handleEvent({ type: 'phase_start', phase: 'navigator' });
     });
     expect(result.current.phaseProgress.current).toBe('navigator');
+  });
+});
+```
+
+Test useElapsedTimer hook:
+
+```typescript
+// useElapsedTimer.spec.ts
+describe('useElapsedTimer', () => {
+  it('should update timer every second when active', () => {
+    const startedAt = Date.now() - 5000;
+    const { result } = renderHook(() => useElapsedTimer(startedAt, true));
+    expect(result.current).toMatch(/0:0[5-6]/);
+  });
+
+  it('should stop updating when inactive', () => {
+    const startedAt = Date.now() - 5000;
+    const { result } = renderHook(() => useElapsedTimer(startedAt, false));
+    expect(result.current).toBe('0:05');
   });
 });
 ```
