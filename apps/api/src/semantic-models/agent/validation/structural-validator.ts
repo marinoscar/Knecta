@@ -123,6 +123,13 @@ export function validateAndFixModel(model: Record<string, unknown>): ValidationR
           fixedIssues.push(`${fieldLabel}: added missing ai_context.synonyms`);
         }
       }
+
+      // Check for data_type in ai_context (quality warning, not fatal)
+      if (field.ai_context && typeof field.ai_context === 'object' && !Array.isArray(field.ai_context)) {
+        if (!(field.ai_context as any).data_type) {
+          warnings.push(`${fieldLabel}: ai_context missing "data_type" — SQL generation may be less accurate`);
+        }
+      }
     }
   }
 
