@@ -158,6 +158,25 @@ describe('validateAndFixModel', () => {
     expect(result.isValid).toBe(false);
     expect(result.fatalIssues.some(i => i.includes('expression'))).toBe(true);
   });
+
+  it('should warn when field ai_context lacks data_type', () => {
+    const model = createValidModel();
+    // createValidField creates a field with ai_context: { synonyms: [...] } but no data_type
+    const result = validateAndFixModel(model);
+    expect(result.isValid).toBe(true); // It's just a warning, not fatal
+    expect(result.warnings.some(w => w.includes('data_type'))).toBe(true);
+  });
+
+  it('should not warn when field ai_context has data_type', () => {
+    const model = createValidModel();
+    (model.semantic_model[0].datasets[0].fields![0].ai_context as any) = {
+      synonyms: ['identifier'],
+      data_type: 'integer',
+      native_type: 'int4',
+    };
+    const result = validateAndFixModel(model);
+    expect(result.warnings.some(w => w.includes('data_type'))).toBe(false);
+  });
 });
 
 // Utility Function Tests
@@ -275,6 +294,21 @@ describe('buildGenerateDatasetPrompt', () => {
     expect(prompt).toContain('public.orders.amount');
     expect(prompt).toContain('NOT `SUM(amount)`');
   });
+
+  it('should include OSI spec when osiSpecText is provided', () => {
+    const params = {
+      ...baseParams,
+      osiSpecText: 'OSI Spec content here',
+    };
+    const prompt = buildGenerateDatasetPrompt(params);
+    expect(prompt).toContain('OSI Specification Reference');
+    expect(prompt).toContain('OSI Spec content here');
+  });
+
+  it('should not include OSI spec section when osiSpecText is not provided', () => {
+    const prompt = buildGenerateDatasetPrompt(baseParams);
+    expect(prompt).not.toContain('OSI Specification Reference');
+  });
 });
 
 describe('buildGenerateRelationshipsPrompt', () => {
@@ -361,6 +395,21 @@ describe('buildGenerateRelationshipsPrompt', () => {
     const prompt = buildGenerateRelationshipsPrompt(baseParams);
     expect(prompt).toContain('schema.table.column');
     expect(prompt).toContain('NOT `SUM(total_amount)`');
+  });
+
+  it('should include OSI spec when osiSpecText is provided', () => {
+    const params = {
+      ...baseParams,
+      osiSpecText: 'OSI Spec content here',
+    };
+    const prompt = buildGenerateRelationshipsPrompt(params);
+    expect(prompt).toContain('OSI Specification Reference');
+    expect(prompt).toContain('OSI Spec content here');
+  });
+
+  it('should not include OSI spec section when osiSpecText is not provided', () => {
+    const prompt = buildGenerateRelationshipsPrompt(baseParams);
+    expect(prompt).not.toContain('OSI Specification Reference');
   });
 });
 
