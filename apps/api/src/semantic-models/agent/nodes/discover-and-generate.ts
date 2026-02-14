@@ -7,6 +7,7 @@ import { ColumnInfo, ForeignKeyInfo, ColumnStatsResult } from '../../../connecti
 import { OSIDataset, OSIMetric } from '../osi/types';
 import { buildGenerateDatasetPrompt } from '../prompts/generate-dataset-prompt';
 import { extractJson, extractTokenUsage } from '../utils';
+import { injectFieldDataTypes } from '../utils/inject-field-data-types';
 import { Logger } from '@nestjs/common';
 
 const logger = new Logger('DiscoverAndGenerate');
@@ -212,6 +213,9 @@ export function createDiscoverAndGenerateNode(
 
         const dataset = parsed.dataset as OSIDataset;
         const metrics = (parsed.metrics || []) as OSIMetric[];
+
+        // Programmatically inject data types from discovery (source of truth)
+        injectFieldDataTypes(dataset, columns);
 
         datasets.push(dataset);
         allMetrics.push(metrics);
