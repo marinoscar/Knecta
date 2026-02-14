@@ -77,7 +77,8 @@ export class DataAgentAgentService {
     const databaseType = semanticModel.connection.dbType;
     if (!connectionId) throw new Error('No connection associated with this semantic model');
 
-    onEvent({ type: 'message_start' });
+    const startedAt = Date.now();
+    onEvent({ type: 'message_start', startedAt });
 
     // ── Step 2: Generate embedding for user question ──
     this.logger.log('Generating embedding for user question');
@@ -193,6 +194,8 @@ export class DataAgentAgentService {
           : undefined,
         dataLineage: explainerOutput?.dataLineage || undefined,
         revisionsUsed: finalState.revisionCount || 0,
+        durationMs: Date.now() - startedAt,
+        startedAt,
       };
 
       await this.dataAgentService.updateAssistantMessage(

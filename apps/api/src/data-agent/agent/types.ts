@@ -158,4 +158,6 @@ export interface DataAgentMessageMetadata {
   verificationReport?: { passed: boolean; checks: VerificationCheck[] };
   dataLineage?: DataLineage;
   revisionsUsed: number;
+  durationMs?: number;
+  startedAt?: number;
 }
