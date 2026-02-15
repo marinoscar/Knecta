@@ -9,6 +9,7 @@ import { CreateChatDto } from './dto/create-chat.dto';
 import { UpdateChatDto } from './dto/update-chat.dto';
 import { ChatQueryDto } from './dto/chat-query.dto';
 import { DataChat, DataChatMessage } from '@prisma/client';
+import { CollectedTrace } from './agent/types';
 
 @Injectable()
 export class DataAgentService {
@@ -328,6 +329,59 @@ export class DataAgentService {
     return this.prisma.dataChatMessage.findMany({
       where: { chatId },
       orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /**
+   * Persist LLM traces for a message (batch write)
+   */
+  async persistTraces(messageId: string, traces: CollectedTrace[]): Promise<void> {
+    if (traces.length === 0) return;
+
+    await this.prisma.llmTrace.createMany({
+      data: traces.map((trace) => ({
+        messageId,
+        phase: trace.phase,
+        callIndex: trace.callIndex,
+        stepId: trace.stepId ?? null,
+        purpose: trace.purpose,
+        provider: trace.provider,
+        model: trace.model,
+        temperature: trace.temperature ?? null,
+        structuredOutput: trace.structuredOutput,
+        promptMessages: trace.promptMessages,
+        responseContent: trace.responseContent,
+        toolCalls: trace.toolCalls ?? undefined,
+        promptTokens: trace.promptTokens,
+        completionTokens: trace.completionTokens,
+        totalTokens: trace.totalTokens,
+        startedAt: new Date(trace.startedAt),
+        completedAt: new Date(trace.completedAt),
+        durationMs: trace.durationMs,
+        error: trace.error ?? null,
+      })),
+    });
+  }
+
+  /**
+   * Get LLM traces for a message (ownership verified via chat)
+   */
+  async getMessageTraces(messageId: string, chatId: string, userId: string) {
+    // Verify ownership through the chat
+    const chat = await this.prisma.dataChat.findFirst({
+      where: { id: chatId, ownerId: userId },
+    });
+    if (!chat) throw new NotFoundException('Chat not found');
+
+    // Verify message belongs to chat
+    const message = await this.prisma.dataChatMessage.findFirst({
+      where: { id: messageId, chatId },
+    });
+    if (!message) throw new NotFoundException('Message not found');
+
+    return this.prisma.llmTrace.findMany({
+      where: { messageId },
+      orderBy: { callIndex: 'asc' },
     });
   }
 }

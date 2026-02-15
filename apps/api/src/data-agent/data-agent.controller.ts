@@ -63,6 +63,22 @@ export class DataAgentController {
     return this.dataAgentService.findChats(query, userId);
   }
 
+  @Get('chats/:chatId/messages/:messageId/traces')
+  @Auth({ permissions: [PERMISSIONS.DATA_AGENT_READ] })
+  @ApiOperation({ summary: 'Get LLM traces for a message' })
+  @ApiParam({ name: 'chatId', type: String, format: 'uuid' })
+  @ApiParam({ name: 'messageId', type: String, format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'LLM traces returned' })
+  @ApiResponse({ status: 404, description: 'Chat or message not found' })
+  async getMessageTraces(
+    @Param('chatId', ParseUUIDPipe) chatId: string,
+    @Param('messageId', ParseUUIDPipe) messageId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    const traces = await this.dataAgentService.getMessageTraces(messageId, chatId, userId);
+    return { data: traces };
+  }
+
   @Get('chats/:id')
   @Auth({ permissions: [PERMISSIONS.DATA_AGENT_READ] })
   @ApiOperation({ summary: 'Get data agent chat with messages' })
