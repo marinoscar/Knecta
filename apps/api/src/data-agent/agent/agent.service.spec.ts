@@ -892,8 +892,8 @@ describe('DataAgentAgentService', () => {
 
       // Mock getChatModel to return distinct instances
       mockLlmService.getChatModel
-        .mockReturnValueOnce(mockRegularLlm)
-        .mockReturnValueOnce(mockStructuredLlm);
+        .mockReturnValueOnce(mockRegularLlm as any)
+        .mockReturnValueOnce(mockStructuredLlm as any);
 
       const onEvent = jest.fn();
 
