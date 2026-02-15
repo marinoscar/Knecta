@@ -33,6 +33,7 @@ import {
 } from './insightsUtils';
 import { useElapsedTimer } from '../../hooks/useElapsedTimer';
 import { JoinGraphDialog } from './JoinGraphDialog';
+import { LlmTracesSection } from './LlmTracesSection';
 
 interface AgentInsightsPanelProps {
   messages: DataChatMessage[];
@@ -416,6 +417,17 @@ export function AgentInsightsPanel({
           </Box>
         </>
       )}
+
+      {/* LLM Traces Section */}
+      <Divider />
+      <Box sx={{ p: 2 }}>
+        <LlmTracesSection
+          streamEvents={streamEvents}
+          isLiveMode={isLiveMode}
+          chatId={lastAssistantMessage?.chatId}
+          messageId={lastAssistantMessage?.id}
+        />
+      </Box>
 
       {/* Join Graph Section */}
       {joinPlan && joinPlan.relevantDatasets.length > 0 && (

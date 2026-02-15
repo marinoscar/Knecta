@@ -1,0 +1,322 @@
+import { useState, useEffect } from 'react';
+import {
+  Box,
+  Typography,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Chip,
+  Button,
+} from '@mui/material';
+import {
+  ExpandMore as ExpandMoreIcon,
+  Loop as LoopIcon,
+} from '@mui/icons-material';
+import type { DataAgentStreamEvent, LlmTraceRecord } from '../../types';
+import { extractLiveLlmTraces, formatDuration, formatTokenCount, PHASE_LABELS } from './insightsUtils';
+import { getMessageTraces } from '../../services/api';
+import { LlmTraceDialog } from './LlmTraceDialog';
+
+interface LlmTracesSectionProps {
+  streamEvents: DataAgentStreamEvent[];
+  isLiveMode: boolean;
+  chatId?: string;
+  messageId?: string;
+}
+
+// Phase color mapping (matches PhaseIndicator)
+const PHASE_COLORS: Record<string, 'info' | 'secondary' | 'primary' | 'warning' | 'success' | 'default'> = {
+  planner: 'info',
+  navigator: 'secondary',
+  sql_builder: 'primary',
+  executor: 'warning',
+  verifier: 'success',
+  explainer: 'default',
+};
+
+export function LlmTracesSection({
+  streamEvents,
+  isLiveMode,
+  chatId,
+  messageId,
+}: LlmTracesSectionProps) {
+  const [historyTraces, setHistoryTraces] = useState<LlmTraceRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedTrace, setSelectedTrace] = useState<LlmTraceRecord | null>(null);
+
+  // Fetch traces in history mode
+  useEffect(() => {
+    if (!isLiveMode && chatId && messageId) {
+      setIsLoading(true);
+      getMessageTraces(chatId, messageId)
+        .then((traces) => setHistoryTraces(traces))
+        .catch((err) => console.error('Failed to load LLM traces:', err))
+        .finally(() => setIsLoading(false));
+    }
+  }, [isLiveMode, chatId, messageId]);
+
+  // Extract live traces from stream events
+  const liveTraces = isLiveMode ? extractLiveLlmTraces(streamEvents) : [];
+
+  // Display traces (live or history)
+  const traces = isLiveMode ? liveTraces : historyTraces;
+
+  if (isLoading) {
+    return (
+      <Box>
+        <Typography variant="subtitle2" fontWeight={600} mb={1}>
+          LLM Traces
+        </Typography>
+        <Typography variant="body2" color="text.secondary" fontStyle="italic">
+          Loading traces...
+        </Typography>
+      </Box>
+    );
+  }
+
+  if (traces.length === 0) {
+    return (
+      <Box>
+        <Typography variant="subtitle2" fontWeight={600} mb={1}>
+          LLM Traces
+        </Typography>
+        <Typography variant="body2" color="text.secondary" fontStyle="italic">
+          No LLM calls recorded
+        </Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Box>
+      {/* Section Header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+        <Typography variant="subtitle2" fontWeight={600}>
+          LLM Traces
+        </Typography>
+        <Chip size="small" label={`${traces.length} calls`} variant="outlined" />
+      </Box>
+
+      {/* Trace Cards */}
+      {isLiveMode ? (
+        // Live mode - simple cards
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {liveTraces.map((trace) => {
+            const phaseColor = PHASE_COLORS[trace.phase] || 'default';
+            const phaseLabel = PHASE_LABELS[trace.phase] || trace.phase;
+
+            return (
+              <Accordion
+                key={trace.callIndex}
+                disableGutters
+                elevation={0}
+                sx={{
+                  '&:before': { display: 'none' },
+                  bgcolor: 'transparent',
+                }}
+              >
+                <AccordionSummary
+                  expandIcon={<ExpandMoreIcon />}
+                  sx={{
+                    px: 1,
+                    minHeight: 48,
+                    '&.Mui-expanded': { minHeight: 48 },
+                    '& .MuiAccordionSummary-content': { my: 1 },
+                  }}
+                >
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      width: '100%',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    {/* Phase Chip */}
+                    <Chip
+                      size="small"
+                      label={phaseLabel}
+                      color={phaseColor}
+                      sx={{ fontSize: '0.7rem', height: 22 }}
+                    />
+
+                    {/* Running indicator */}
+                    {trace.status === 'running' && (
+                      <LoopIcon
+                        sx={{
+                          fontSize: 16,
+                          color: 'primary.main',
+                          '@keyframes spin': {
+                            '0%': { transform: 'rotate(0deg)' },
+                            '100%': { transform: 'rotate(360deg)' },
+                          },
+                          animation: 'spin 1s linear infinite',
+                        }}
+                      />
+                    )}
+
+                    {/* Purpose */}
+                    <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
+                      {trace.purpose}
+                    </Typography>
+
+                    {/* Provider/Model */}
+                    <Typography variant="caption" color="text.secondary">
+                      {trace.provider}/{trace.model}
+                    </Typography>
+
+                    {/* Duration and tokens */}
+                    {trace.status === 'complete' && trace.durationMs !== undefined && (
+                      <>
+                        <Typography variant="caption" color="text.secondary">
+                          {formatDuration(trace.durationMs)}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {formatTokenCount(trace.promptTokens || 0)} in /{' '}
+                          {formatTokenCount(trace.completionTokens || 0)} out
+                        </Typography>
+                      </>
+                    )}
+
+                    {trace.status === 'running' && (
+                      <Typography variant="caption" color="text.secondary">
+                        running...
+                      </Typography>
+                    )}
+                  </Box>
+                </AccordionSummary>
+
+                {/* Expandable Details */}
+                <AccordionDetails sx={{ px: 2, py: 1 }}>
+                  {trace.responsePreview ? (
+                    <Typography
+                      variant="caption"
+                      component="div"
+                      sx={{
+                        fontFamily: 'monospace',
+                        whiteSpace: 'pre-wrap',
+                        bgcolor: 'action.hover',
+                        p: 1,
+                        borderRadius: 1,
+                      }}
+                    >
+                      {trace.responsePreview}
+                    </Typography>
+                  ) : (
+                    <Typography variant="caption" color="text.secondary" fontStyle="italic">
+                      Response pending...
+                    </Typography>
+                  )}
+                </AccordionDetails>
+              </Accordion>
+            );
+          })}
+        </Box>
+      ) : (
+        // History mode - cards with "View Full" button
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {historyTraces.map((trace) => {
+            const phaseColor = PHASE_COLORS[trace.phase] || 'default';
+            const phaseLabel = PHASE_LABELS[trace.phase] || trace.phase;
+
+            return (
+              <Accordion
+                key={trace.id}
+                disableGutters
+                elevation={0}
+                sx={{
+                  '&:before': { display: 'none' },
+                  bgcolor: 'transparent',
+                }}
+              >
+                <AccordionSummary
+                  expandIcon={<ExpandMoreIcon />}
+                  sx={{
+                    px: 1,
+                    minHeight: 48,
+                    '&.Mui-expanded': { minHeight: 48 },
+                    '& .MuiAccordionSummary-content': { my: 1 },
+                  }}
+                >
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      width: '100%',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    {/* Phase Chip */}
+                    <Chip
+                      size="small"
+                      label={phaseLabel}
+                      color={phaseColor}
+                      sx={{ fontSize: '0.7rem', height: 22 }}
+                    />
+
+                    {/* Purpose */}
+                    <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
+                      {trace.purpose}
+                    </Typography>
+
+                    {/* Provider/Model */}
+                    <Typography variant="caption" color="text.secondary">
+                      {trace.provider}/{trace.model}
+                    </Typography>
+
+                    {/* Duration and tokens */}
+                    <Typography variant="caption" color="text.secondary">
+                      {formatDuration(trace.durationMs)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {formatTokenCount(trace.promptTokens)} in /{' '}
+                      {formatTokenCount(trace.completionTokens)} out
+                    </Typography>
+                  </Box>
+                </AccordionSummary>
+
+                {/* Expandable Details */}
+                <AccordionDetails sx={{ px: 2, py: 1 }}>
+                  <Typography
+                    variant="caption"
+                    component="div"
+                    sx={{
+                      fontFamily: 'monospace',
+                      whiteSpace: 'pre-wrap',
+                      bgcolor: 'action.hover',
+                      p: 1,
+                      borderRadius: 1,
+                      mb: 1,
+                    }}
+                  >
+                    {trace.responseContent.length > 200
+                      ? `${trace.responseContent.slice(0, 200)}...`
+                      : trace.responseContent}
+                  </Typography>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => setSelectedTrace(trace)}
+                  >
+                    View Full
+                  </Button>
+                </AccordionDetails>
+              </Accordion>
+            );
+          })}
+        </Box>
+      )}
+
+      {/* Detail Dialog (history mode only) */}
+      {selectedTrace && (
+        <LlmTraceDialog
+          trace={selectedTrace}
+          open={!!selectedTrace}
+          onClose={() => setSelectedTrace(null)}
+        />
+      )}
+    </Box>
+  );
+}
