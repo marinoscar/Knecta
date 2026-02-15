@@ -54,6 +54,7 @@ export class DataAgentService {
         name: data.name,
         ontologyId: data.ontologyId,
         ownerId: userId,
+        llmProvider: data.llmProvider || null,
       },
     });
 
@@ -163,16 +164,26 @@ export class DataAgentService {
       throw new NotFoundException(`Chat with ID ${id} not found`);
     }
 
+    // Build update data
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
+
+    if (data.name !== undefined) {
+      updateData.name = data.name;
+    }
+
+    if (data.llmProvider !== undefined) {
+      updateData.llmProvider = data.llmProvider;
+    }
+
     // Update chat
     const chat = await this.prisma.dataChat.update({
       where: { id },
-      data: {
-        name: data.name,
-        updatedAt: new Date(),
-      },
+      data: updateData,
     });
 
-    this.logger.log(`Chat ${id} renamed to ${data.name} by user ${userId}`);
+    this.logger.log(`Chat ${id} updated by user ${userId}`);
     return chat;
   }
 

@@ -14,6 +14,8 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { PERMISSIONS } from '../common/constants/roles.constants';
 import { DataAgentService } from './data-agent.service';
 import { DataAgentAgentService } from './agent/agent.service';
+import { SystemSettingsService } from '../settings/system-settings.service';
+import { LlmModelConfig } from '../llm/llm.service';
 
 /**
  * Agent Stream Controller
@@ -37,6 +39,7 @@ export class AgentStreamController {
   constructor(
     private readonly dataAgentService: DataAgentService,
     private readonly agentService: DataAgentAgentService,
+    private readonly systemSettingsService: SystemSettingsService,
   ) {}
 
   @Post('chats/:chatId/messages/:messageId/stream')
@@ -114,6 +117,17 @@ export class AgentStreamController {
         return;
       }
 
+      // Resolve the provider: chat-level > system default
+      const chatProvider = chat.llmProvider || null;
+
+      // Fetch system settings for provider config
+      let providerConfig: LlmModelConfig | undefined;
+      if (chatProvider) {
+        const systemSettings = await this.systemSettingsService.getSettings();
+        const providerKey = chatProvider as 'openai' | 'anthropic' | 'azure';
+        providerConfig = systemSettings.dataAgent?.[providerKey] || undefined;
+      }
+
       // Execute the agent with streaming
       await this.agentService.executeAgent(
         chatId,
@@ -121,6 +135,8 @@ export class AgentStreamController {
         userMessage.content,
         userId,
         emit,
+        chatProvider || undefined,
+        providerConfig,
       );
 
     } catch (error) {

@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { LlmService } from '../../llm/llm.service';
+import { LlmService, LlmModelConfig } from '../../llm/llm.service';
 import { EmbeddingService } from '../../embedding/embedding.service';
 import { NeoVectorService } from '../../neo-graph/neo-vector.service';
 import { NeoOntologyService } from '../../ontologies/neo-ontology.service';
@@ -40,6 +40,8 @@ export class DataAgentAgentService {
     userQuestion: string,
     userId: string,
     onEvent: (event: AgentStreamEvent) => void,
+    provider?: string,
+    providerConfig?: LlmModelConfig,
   ): Promise<void> {
     // ── Step 1: Load the chat and related data ──
     const chat = await this.prisma.dataChat.findFirst({
@@ -151,7 +153,7 @@ export class DataAgentAgentService {
       .join('\n\n');
 
     // ── Step 5: Build and invoke multi-phase graph ──
-    const llm = this.llmService.getChatModel();
+    const llm = this.llmService.getChatModel(provider, providerConfig);
 
     const graph = buildDataAgentGraph({
       llm,

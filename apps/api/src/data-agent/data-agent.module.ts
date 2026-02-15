@@ -6,6 +6,7 @@ import { NeoGraphModule } from '../neo-graph/neo-graph.module';
 import { OntologiesModule } from '../ontologies/ontologies.module';
 import { DiscoveryModule } from '../discovery/discovery.module';
 import { SandboxModule } from '../sandbox/sandbox.module';
+import { SettingsModule } from '../settings/settings.module';
 import { DataAgentController } from './data-agent.controller';
 import { AgentStreamController } from './agent-stream.controller';
 import { DataAgentService } from './data-agent.service';
@@ -20,6 +21,7 @@ import { DataAgentAgentService } from './agent/agent.service';
     OntologiesModule,
     DiscoveryModule,
     SandboxModule,
+    SettingsModule,
   ],
   controllers: [DataAgentController, AgentStreamController],
   providers: [DataAgentService, DataAgentAgentService],
