@@ -214,7 +214,6 @@ describe('LlmService', () => {
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-openai-key',
           modelName: 'o1',
-          temperature: 0,
           modelKwargs: {
             reasoning_effort: 'high',
           },
@@ -233,7 +232,6 @@ describe('LlmService', () => {
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-openai-key',
           modelName: 'o1',
-          temperature: 0,
           modelKwargs: {
             reasoning_effort: 'medium',
           },
@@ -254,7 +252,6 @@ describe('LlmService', () => {
         expect(ChatAnthropic).toHaveBeenCalledWith({
           anthropicApiKey: 'test-anthropic-key',
           modelName: 'claude-opus-4-6',
-          temperature: 0,
           thinking: { type: 'adaptive' },
         });
       });
@@ -273,7 +270,6 @@ describe('LlmService', () => {
         expect(ChatAnthropic).toHaveBeenCalledWith({
           anthropicApiKey: 'test-anthropic-key',
           modelName: 'claude-opus-4-6',
-          temperature: 0,
           thinking: { type: 'enabled', budget_tokens: 10000 },
         });
       });
@@ -306,7 +302,6 @@ describe('LlmService', () => {
         expect(ChatAnthropic).toHaveBeenCalledWith({
           anthropicApiKey: 'test-anthropic-key',
           modelName: 'claude-opus-4-6',
-          temperature: 0,
           thinking: { type: 'enabled', budget_tokens: 1024 },
         });
       });
