@@ -16,6 +16,7 @@ export type EmitFn = (event: { type: string; [key: string]: any }) => void;
 // ─── Dependencies injected into the graph builder ───
 export interface DataAgentGraphDeps {
   llm: any;
+  structuredLlm: any;
   neoOntologyService: any;
   discoveryService: any;
   sandboxService: any;
@@ -59,12 +60,12 @@ function routeAfterVerification(
 
 // ─── Graph builder ───
 export function buildDataAgentGraph(deps: DataAgentGraphDeps) {
-  const { llm, neoOntologyService, discoveryService, sandboxService, ontologyId, connectionId, databaseType, emit, tracer } = deps;
+  const { llm, structuredLlm, neoOntologyService, discoveryService, sandboxService, ontologyId, connectionId, databaseType, emit, tracer } = deps;
 
   const workflow = new StateGraph(DataAgentState)
-    .addNode('planner', createPlannerNode(llm, emit, tracer))
+    .addNode('planner', createPlannerNode(structuredLlm, emit, tracer))
     .addNode('navigator', createNavigatorNode(llm, neoOntologyService, ontologyId, emit, tracer))
-    .addNode('sql_builder', createSqlBuilderNode(llm, neoOntologyService, ontologyId, databaseType, emit, tracer))
+    .addNode('sql_builder', createSqlBuilderNode(structuredLlm, neoOntologyService, ontologyId, databaseType, emit, tracer))
     .addNode('executor', createExecutorNode(llm, discoveryService, sandboxService, connectionId, emit, tracer))
     .addNode('verifier', createVerifierNode(llm, sandboxService, emit, tracer))
     .addNode('explainer', createExplainerNode(llm, sandboxService, emit, tracer))

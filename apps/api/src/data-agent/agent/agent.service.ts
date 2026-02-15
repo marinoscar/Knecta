@@ -156,6 +156,14 @@ export class DataAgentAgentService {
     // ── Step 5: Build and invoke multi-phase graph ──
     const llm = this.llmService.getChatModel(provider, providerConfig);
 
+    // Create a version without reasoning for structured output phases
+    // (Anthropic thinking mode is incompatible with withStructuredOutput/forced tool calling)
+    const structuredLlm = this.llmService.getChatModel(provider, {
+      temperature: providerConfig?.temperature,
+      model: providerConfig?.model,
+      // Explicitly no reasoningLevel
+    });
+
     // Create tracer for LLM interaction diagnostics
     const providerName = provider || 'default';
     const modelName = providerConfig?.model || '';
@@ -163,6 +171,7 @@ export class DataAgentAgentService {
 
     const graph = buildDataAgentGraph({
       llm,
+      structuredLlm,
       neoOntologyService: this.neoOntologyService,
       discoveryService: this.discoveryService,
       sandboxService: this.sandboxService,
