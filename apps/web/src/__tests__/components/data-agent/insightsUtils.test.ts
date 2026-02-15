@@ -8,6 +8,7 @@ import {
   formatTokenCount,
   extractJoinPlan,
   joinPlanToGraph,
+  extractLiveLlmTraces,
 } from '../../../components/data-agent/insightsUtils';
 import type { DataAgentStreamEvent } from '../../../types';
 
@@ -780,6 +781,221 @@ describe('insightsUtils', () => {
         description: 'Customer orders',
         yaml: 'name: orders\nfields: []',
       });
+    });
+  });
+
+  describe('extractLiveLlmTraces', () => {
+    it('returns empty array when no trace events exist', () => {
+      const events: DataAgentStreamEvent[] = [
+        { type: 'phase_start', phase: 'planner' },
+        { type: 'phase_complete', phase: 'planner' },
+      ];
+
+      const result = extractLiveLlmTraces(events);
+
+      expect(result).toEqual([]);
+    });
+
+    it('pairs start and end events by callIndex', () => {
+      const events: DataAgentStreamEvent[] = [
+        {
+          type: 'llm_call_start',
+          callIndex: 0,
+          phase: 'planner',
+          stepId: 1,
+          purpose: 'Generate plan',
+          provider: 'openai',
+          model: 'gpt-4',
+          structuredOutput: false,
+          promptSummary: { messageCount: 2, totalChars: 500 },
+        },
+        {
+          type: 'llm_call_end',
+          callIndex: 0,
+          phase: 'planner',
+          stepId: 1,
+          purpose: 'Generate plan',
+          durationMs: 1500,
+          promptTokens: 100,
+          completionTokens: 50,
+          totalTokens: 150,
+          responsePreview: 'Plan response',
+          toolCallCount: 0,
+        },
+      ];
+
+      const result = extractLiveLlmTraces(events);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({
+        callIndex: 0,
+        phase: 'planner',
+        stepId: 1,
+        purpose: 'Generate plan',
+        provider: 'openai',
+        model: 'gpt-4',
+        structuredOutput: false,
+        promptSummary: { messageCount: 2, totalChars: 500 },
+        status: 'complete',
+        durationMs: 1500,
+        promptTokens: 100,
+        completionTokens: 50,
+        totalTokens: 150,
+        responsePreview: 'Plan response',
+        toolCallCount: 0,
+      });
+    });
+
+    it('shows running status for started but not completed traces', () => {
+      const events: DataAgentStreamEvent[] = [
+        {
+          type: 'llm_call_start',
+          callIndex: 0,
+          phase: 'navigator',
+          purpose: 'Find datasets',
+          provider: 'anthropic',
+          model: 'claude-3-5-sonnet-20241022',
+          structuredOutput: true,
+          promptSummary: { messageCount: 1, totalChars: 300 },
+        },
+      ];
+
+      const result = extractLiveLlmTraces(events);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].status).toBe('running');
+      expect(result[0].durationMs).toBeUndefined();
+      expect(result[0].promptTokens).toBeUndefined();
+    });
+
+    it('shows error status when end event has error', () => {
+      const events: DataAgentStreamEvent[] = [
+        {
+          type: 'llm_call_start',
+          callIndex: 0,
+          phase: 'executor',
+          purpose: 'Run query',
+          provider: 'openai',
+          model: 'gpt-4',
+          structuredOutput: false,
+          promptSummary: { messageCount: 1, totalChars: 200 },
+        },
+        {
+          type: 'llm_call_end',
+          callIndex: 0,
+          phase: 'executor',
+          purpose: 'Run query',
+          durationMs: 500,
+          error: 'Database connection failed',
+        },
+      ];
+
+      const result = extractLiveLlmTraces(events);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].status).toBe('error');
+      expect(result[0].error).toBe('Database connection failed');
+      expect(result[0].durationMs).toBe(500);
+    });
+
+    it('sorts by callIndex', () => {
+      const events: DataAgentStreamEvent[] = [
+        {
+          type: 'llm_call_start',
+          callIndex: 2,
+          phase: 'verifier',
+          purpose: 'Verify',
+          provider: 'openai',
+          model: 'gpt-4',
+          structuredOutput: false,
+        },
+        {
+          type: 'llm_call_start',
+          callIndex: 0,
+          phase: 'planner',
+          purpose: 'Plan',
+          provider: 'openai',
+          model: 'gpt-4',
+          structuredOutput: false,
+        },
+        {
+          type: 'llm_call_start',
+          callIndex: 1,
+          phase: 'navigator',
+          purpose: 'Navigate',
+          provider: 'openai',
+          model: 'gpt-4',
+          structuredOutput: false,
+        },
+      ];
+
+      const result = extractLiveLlmTraces(events);
+
+      expect(result).toHaveLength(3);
+      expect(result[0].callIndex).toBe(0);
+      expect(result[1].callIndex).toBe(1);
+      expect(result[2].callIndex).toBe(2);
+    });
+
+    it('handles multiple traces with mixed statuses', () => {
+      const events: DataAgentStreamEvent[] = [
+        {
+          type: 'llm_call_start',
+          callIndex: 0,
+          phase: 'planner',
+          purpose: 'Plan',
+          provider: 'openai',
+          model: 'gpt-4',
+          structuredOutput: true,
+        },
+        {
+          type: 'llm_call_end',
+          callIndex: 0,
+          phase: 'planner',
+          purpose: 'Plan',
+          durationMs: 1000,
+          promptTokens: 100,
+          completionTokens: 50,
+          totalTokens: 150,
+          responsePreview: 'Plan complete',
+          toolCallCount: 1,
+        },
+        {
+          type: 'llm_call_start',
+          callIndex: 1,
+          phase: 'navigator',
+          purpose: 'Navigate',
+          provider: 'openai',
+          model: 'gpt-4',
+          structuredOutput: false,
+        },
+      ];
+
+      const result = extractLiveLlmTraces(events);
+
+      expect(result).toHaveLength(2);
+      expect(result[0].status).toBe('complete');
+      expect(result[1].status).toBe('running');
+    });
+
+    it('handles end event without matching start', () => {
+      const events: DataAgentStreamEvent[] = [
+        {
+          type: 'llm_call_end',
+          callIndex: 5,
+          phase: 'planner',
+          purpose: 'Plan',
+          durationMs: 1000,
+          promptTokens: 100,
+          completionTokens: 50,
+          totalTokens: 150,
+        },
+      ];
+
+      const result = extractLiveLlmTraces(events);
+
+      // End event without start is ignored
+      expect(result).toEqual([]);
     });
   });
 });
