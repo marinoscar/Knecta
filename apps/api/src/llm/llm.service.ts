@@ -92,20 +92,36 @@ export class LlmService {
         const model = config?.model || this.configService.get<string>('llm.anthropic.model') || 'claude-sonnet-4-5-20250929';
         const temperature = config?.temperature ?? 0;
 
+        // Determine if thinking will be enabled
+        let thinkingEnabled = false;
+        if (config?.reasoningLevel) {
+          if (config.reasoningLevel === 'adaptive') {
+            thinkingEnabled = true;
+          } else {
+            const budget = parseInt(config.reasoningLevel, 10);
+            if (!isNaN(budget) && budget >= 1024) {
+              thinkingEnabled = true;
+            }
+          }
+        }
+
         const opts: any = {
           anthropicApiKey: apiKey,
           modelName: model,
-          temperature,
         };
 
-        if (config?.reasoningLevel) {
+        // Only set temperature if thinking is NOT enabled
+        if (!thinkingEnabled) {
+          opts.temperature = temperature;
+        }
+
+        // Set thinking options if enabled
+        if (thinkingEnabled) {
           if (config.reasoningLevel === 'adaptive') {
             opts.thinking = { type: 'adaptive' };
           } else {
             const budget = parseInt(config.reasoningLevel, 10);
-            if (!isNaN(budget) && budget >= 1024) {
-              opts.thinking = { type: 'enabled', budget_tokens: budget };
-            }
+            opts.thinking = { type: 'enabled', budget_tokens: budget };
           }
         }
 
