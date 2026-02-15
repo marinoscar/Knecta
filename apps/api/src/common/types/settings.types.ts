@@ -15,6 +15,15 @@ export interface UserSettingsValue {
 }
 
 /**
+ * Data agent provider configuration
+ */
+export interface DataAgentProviderConfig {
+  temperature?: number;
+  model?: string;
+  reasoningLevel?: string;
+}
+
+/**
  * System settings schema - stored in system_settings.value JSONB
  */
 export interface SystemSettingsValue {
@@ -23,6 +32,11 @@ export interface SystemSettingsValue {
   };
   features: {
     [key: string]: boolean;
+  };
+  dataAgent?: {
+    openai?: DataAgentProviderConfig;
+    anthropic?: DataAgentProviderConfig;
+    azure?: DataAgentProviderConfig;
   };
 }
 

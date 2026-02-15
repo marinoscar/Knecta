@@ -56,6 +56,7 @@ export class SystemSettingsService {
     return {
       ui: value.ui,
       features: value.features,
+      dataAgent: value.dataAgent,
       updatedAt: settings.updatedAt,
       updatedBy: settings.updatedByUser,
       version: settings.version,
@@ -100,6 +101,7 @@ export class SystemSettingsService {
     return {
       ui: value.ui,
       features: value.features,
+      dataAgent: value.dataAgent,
       updatedAt: settings.updatedAt,
       updatedBy: settings.updatedByUser,
       version: settings.version,
@@ -136,6 +138,24 @@ export class SystemSettingsService {
       },
     };
 
+    // Only include dataAgent if it exists in current or dto
+    if (current.dataAgent || dto.dataAgent) {
+      merged.dataAgent = {
+        openai: {
+          ...current.dataAgent?.openai,
+          ...dto.dataAgent?.openai,
+        },
+        anthropic: {
+          ...current.dataAgent?.anthropic,
+          ...dto.dataAgent?.anthropic,
+        },
+        azure: {
+          ...current.dataAgent?.azure,
+          ...dto.dataAgent?.azure,
+        },
+      };
+    }
+
     // Validate merged result
     const validated = systemSettingsSchema.parse(merged);
 
@@ -166,6 +186,7 @@ export class SystemSettingsService {
     return {
       ui: value.ui,
       features: value.features,
+      dataAgent: value.dataAgent,
       updatedAt: settings.updatedAt,
       updatedBy: settings.updatedByUser,
       version: settings.version,

@@ -22,11 +22,24 @@ export const userSettingsPatchSchema = userSettingsSchema.deepPartial();
 // System Settings Schema
 // =============================================================================
 
+const dataAgentProviderConfigSchema = z.object({
+  temperature: z.number().min(0).max(2).optional(),
+  model: z.string().max(100).optional(),
+  reasoningLevel: z.string().max(50).optional(),
+});
+
 export const systemSettingsSchema = z.object({
   ui: z.object({
     allowUserThemeOverride: z.boolean(),
   }),
   features: z.record(z.string(), z.boolean()),
+  dataAgent: z
+    .object({
+      openai: dataAgentProviderConfigSchema.optional(),
+      anthropic: dataAgentProviderConfigSchema.optional(),
+      azure: dataAgentProviderConfigSchema.optional(),
+    })
+    .optional(),
 });
 
 export type SystemSettingsDto = z.infer<typeof systemSettingsSchema>;
