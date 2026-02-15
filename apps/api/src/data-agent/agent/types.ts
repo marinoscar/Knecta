@@ -144,7 +144,10 @@ export type DataAgentEventType =
   | 'phase_complete'
   | 'phase_artifact'
   | 'step_start'
-  | 'step_complete';
+  | 'step_complete'
+  | 'llm_call_start'
+  | 'llm_call_end'
+  | 'token_update';
 
 // ─── Message Metadata ───
 
@@ -160,4 +163,35 @@ export interface DataAgentMessageMetadata {
   revisionsUsed: number;
   durationMs?: number;
   startedAt?: number;
+  llmCallCount?: number;
+}
+
+// ─── LLM Tracing ───
+
+export interface LlmTraceInput {
+  phase: DataAgentPhase;
+  stepId?: number;
+  purpose: string;
+  structuredOutput: boolean;
+}
+
+export interface CollectedTrace {
+  phase: DataAgentPhase;
+  callIndex: number;
+  stepId?: number;
+  purpose: string;
+  provider: string;
+  model: string;
+  temperature?: number;
+  structuredOutput: boolean;
+  promptMessages: Array<{ role: string; content: string }>;
+  responseContent: string;
+  toolCalls?: Array<{ name: string; args: Record<string, unknown> }>;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  startedAt: number;
+  completedAt: number;
+  durationMs: number;
+  error?: string;
 }
