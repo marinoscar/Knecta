@@ -8,6 +8,7 @@ import {
   createVerifierNode,
   createExplainerNode,
 } from './nodes';
+import { DataAgentTracer } from './utils/data-agent-tracer';
 
 // ─── Event emitter type ───
 export type EmitFn = (event: { type: string; [key: string]: any }) => void;
@@ -22,6 +23,7 @@ export interface DataAgentGraphDeps {
   connectionId: string;
   databaseType: string;
   emit: EmitFn;
+  tracer: DataAgentTracer;
 }
 
 // ─── Conditional routing after planner ───
@@ -57,15 +59,15 @@ function routeAfterVerification(
 
 // ─── Graph builder ───
 export function buildDataAgentGraph(deps: DataAgentGraphDeps) {
-  const { llm, neoOntologyService, discoveryService, sandboxService, ontologyId, connectionId, databaseType, emit } = deps;
+  const { llm, neoOntologyService, discoveryService, sandboxService, ontologyId, connectionId, databaseType, emit, tracer } = deps;
 
   const workflow = new StateGraph(DataAgentState)
-    .addNode('planner', createPlannerNode(llm, emit))
-    .addNode('navigator', createNavigatorNode(llm, neoOntologyService, ontologyId, emit))
-    .addNode('sql_builder', createSqlBuilderNode(llm, neoOntologyService, ontologyId, databaseType, emit))
-    .addNode('executor', createExecutorNode(llm, discoveryService, sandboxService, connectionId, emit))
-    .addNode('verifier', createVerifierNode(llm, sandboxService, emit))
-    .addNode('explainer', createExplainerNode(llm, sandboxService, emit))
+    .addNode('planner', createPlannerNode(llm, emit, tracer))
+    .addNode('navigator', createNavigatorNode(llm, neoOntologyService, ontologyId, emit, tracer))
+    .addNode('sql_builder', createSqlBuilderNode(llm, neoOntologyService, ontologyId, databaseType, emit, tracer))
+    .addNode('executor', createExecutorNode(llm, discoveryService, sandboxService, connectionId, emit, tracer))
+    .addNode('verifier', createVerifierNode(llm, sandboxService, emit, tracer))
+    .addNode('explainer', createExplainerNode(llm, sandboxService, emit, tracer))
     .addEdge(START, 'planner')
     .addConditionalEdges('planner', routeAfterPlanner, {
       navigator: 'navigator',

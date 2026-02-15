@@ -6,6 +6,7 @@ import { EmitFn } from '../graph';
 import { buildPlannerPrompt } from '../prompts/planner.prompt';
 import { z } from 'zod';
 import { extractTokenUsage } from '../utils/token-tracker';
+import { DataAgentTracer } from '../utils/data-agent-tracer';
 
 const PlanStepSchema = z.object({
   id: z.number().describe('Step number (1, 2, 3, ...)'),
@@ -32,7 +33,7 @@ const PlanArtifactSchema = z.object({
   steps: z.array(PlanStepSchema).describe('Ordered sub-tasks to execute'),
 });
 
-export function createPlannerNode(llm: any, emit: EmitFn) {
+export function createPlannerNode(llm: any, emit: EmitFn, tracer: DataAgentTracer) {
   return async (state: DataAgentStateType): Promise<Partial<DataAgentStateType>> => {
     emit({ type: 'phase_start', phase: 'planner', description: 'Analyzing question and creating execution plan' });
 
@@ -48,10 +49,16 @@ export function createPlannerNode(llm: any, emit: EmitFn) {
         includeRaw: true,
       });
 
-      const response = await structuredLlm.invoke([
+      const messages = [
         new SystemMessage(systemPrompt),
         new HumanMessage(state.userQuestion),
-      ]);
+      ];
+
+      const { response } = await tracer.trace(
+        { phase: 'planner', purpose: 'plan_generation', structuredOutput: true },
+        messages,
+        () => structuredLlm.invoke(messages),
+      );
 
       const result = response.parsed as PlanArtifact;
       const nodeTokens = extractTokenUsage(response.raw);

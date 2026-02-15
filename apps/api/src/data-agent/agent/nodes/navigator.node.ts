@@ -8,6 +8,7 @@ import { createGetDatasetDetailsTool } from '../tools/get-dataset-details.tool';
 import { createGetRelationshipsTool } from '../tools/get-relationships.tool';
 import { NeoOntologyService } from '../../../ontologies/neo-ontology.service';
 import { extractTokenUsage, mergeTokenUsage } from '../utils/token-tracker';
+import { DataAgentTracer } from '../utils/data-agent-tracer';
 
 const MAX_NAVIGATOR_ITERATIONS = 8;
 
@@ -16,6 +17,7 @@ export function createNavigatorNode(
   neoOntologyService: NeoOntologyService,
   ontologyId: string,
   emit: EmitFn,
+  tracer: DataAgentTracer,
 ) {
   return async (state: DataAgentStateType): Promise<Partial<DataAgentStateType>> => {
     emit({ type: 'phase_start', phase: 'navigator', description: 'Exploring ontology to find datasets and join paths' });
@@ -49,7 +51,11 @@ export function createNavigatorNode(
       while (iterations < MAX_NAVIGATOR_ITERATIONS) {
         iterations++;
 
-        const response = await llmWithTools.invoke(messages);
+        const { response } = await tracer.trace(
+          { phase: 'navigator', purpose: `tool_exploration_${iterations}`, structuredOutput: false },
+          messages,
+          () => llmWithTools.invoke(messages),
+        );
         nodeTokens = mergeTokenUsage(nodeTokens, extractTokenUsage(response));
         messages.push(response);
 

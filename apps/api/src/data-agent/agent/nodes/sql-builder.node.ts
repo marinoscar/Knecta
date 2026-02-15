@@ -6,6 +6,7 @@ import { EmitFn } from '../graph';
 import { buildSqlBuilderPrompt } from '../prompts/sql-builder.prompt';
 import { NeoOntologyService } from '../../../ontologies/neo-ontology.service';
 import { extractTokenUsage } from '../utils/token-tracker';
+import { DataAgentTracer } from '../utils/data-agent-tracer';
 
 const QuerySpecSchema = z.object({
   queries: z.array(z.object({
@@ -24,6 +25,7 @@ export function createSqlBuilderNode(
   ontologyId: string,
   databaseType: string,
   emit: EmitFn,
+  tracer: DataAgentTracer,
 ) {
   return async (state: DataAgentStateType): Promise<Partial<DataAgentStateType>> => {
     emit({ type: 'phase_start', phase: 'sql_builder', description: 'Generating SQL queries for each step' });
@@ -61,12 +63,18 @@ export function createSqlBuilderNode(
         includeRaw: true,
       });
 
-      const response = await structuredLlm.invoke([
+      const messages = [
         new SystemMessage(systemPrompt),
         new HumanMessage(
           `Generate SQL queries for the plan. User question: "${state.userQuestion}"`,
         ),
-      ]);
+      ];
+
+      const { response } = await tracer.trace(
+        { phase: 'sql_builder', purpose: 'query_generation', structuredOutput: true },
+        messages,
+        () => structuredLlm.invoke(messages),
+      );
 
       const querySpecs: QuerySpec[] = response.parsed.queries;
       const nodeTokens = extractTokenUsage(response.raw);

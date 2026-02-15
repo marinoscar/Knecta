@@ -6,6 +6,7 @@ import { buildExecutorRepairPrompt, buildPythonGenerationPrompt } from '../promp
 import { DiscoveryService } from '../../../discovery/discovery.service';
 import { SandboxService } from '../../../sandbox/sandbox.service';
 import { extractTokenUsage, mergeTokenUsage } from '../utils/token-tracker';
+import { DataAgentTracer } from '../utils/data-agent-tracer';
 
 export function createExecutorNode(
   llm: any,
@@ -13,6 +14,7 @@ export function createExecutorNode(
   sandboxService: SandboxService,
   connectionId: string,
   emit: EmitFn,
+  tracer: DataAgentTracer,
 ) {
   return async (state: DataAgentStateType): Promise<Partial<DataAgentStateType>> => {
     emit({ type: 'phase_start', phase: 'executor', description: 'Executing queries and analysis' });
@@ -69,7 +71,12 @@ export function createExecutorNode(
 
               try {
                 const repairPrompt = buildExecutorRepairPrompt(step.description, querySpec.pilotSql, errMsg, state.databaseType, datasetSchemas);
-                const repairResponse = await llm.invoke([new SystemMessage(repairPrompt)]);
+                const repairMessages = [new SystemMessage(repairPrompt)];
+                const { response: repairResponse } = await tracer.trace(
+                  { phase: 'executor', stepId: step.id, purpose: `sql_repair_step_${step.id}`, structuredOutput: false },
+                  repairMessages,
+                  () => llm.invoke(repairMessages),
+                );
                 nodeTokens = mergeTokenUsage(nodeTokens, extractTokenUsage(repairResponse));
                 const repairedSql = typeof repairResponse.content === 'string' ? repairResponse.content.trim() : '';
                 if (repairedSql) {
@@ -121,10 +128,15 @@ export function createExecutorNode(
               datasetSchemas,
             );
 
-            const codeResponse = await llm.invoke([
+            const codeMessages = [
               new SystemMessage('You are a Python code generator. Output ONLY executable Python code. No markdown fences, no explanation.'),
               new HumanMessage(prompt),
-            ]);
+            ];
+            const { response: codeResponse } = await tracer.trace(
+              { phase: 'executor', stepId: step.id, purpose: `python_gen_step_${step.id}`, structuredOutput: false },
+              codeMessages,
+              () => llm.invoke(codeMessages),
+            );
             nodeTokens = mergeTokenUsage(nodeTokens, extractTokenUsage(codeResponse));
 
             let code = typeof codeResponse.content === 'string' ? codeResponse.content : '';

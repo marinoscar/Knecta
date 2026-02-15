@@ -5,8 +5,9 @@ import { EmitFn } from '../graph';
 import { buildExplainerPrompt } from '../prompts/explainer.prompt';
 import { SandboxService } from '../../../sandbox/sandbox.service';
 import { extractTokenUsage } from '../utils/token-tracker';
+import { DataAgentTracer } from '../utils/data-agent-tracer';
 
-export function createExplainerNode(llm: any, sandboxService: SandboxService, emit: EmitFn) {
+export function createExplainerNode(llm: any, sandboxService: SandboxService, emit: EmitFn, tracer: DataAgentTracer) {
   return async (state: DataAgentStateType): Promise<Partial<DataAgentStateType>> => {
     emit({ type: 'phase_start', phase: 'explainer', description: 'Synthesizing answer' });
 
@@ -25,10 +26,15 @@ export function createExplainerNode(llm: any, sandboxService: SandboxService, em
       );
 
       // Get narrative from LLM
-      const response = await llm.invoke([
+      const messages = [
         new SystemMessage(prompt),
         new HumanMessage('Provide the answer.'),
-      ]);
+      ];
+      const { response } = await tracer.trace(
+        { phase: 'explainer', purpose: 'narrative', structuredOutput: false },
+        messages,
+        () => llm.invoke(messages),
+      );
       const nodeTokens = extractTokenUsage(response);
 
       const narrative = typeof response.content === 'string' ? response.content : '';

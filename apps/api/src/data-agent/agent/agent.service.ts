@@ -9,6 +9,7 @@ import { SandboxService } from '../../sandbox/sandbox.service';
 import { DataAgentService } from '../data-agent.service';
 import { buildDataAgentGraph } from './graph';
 import { DataAgentMessageMetadata } from './types';
+import { DataAgentTracer } from './utils/data-agent-tracer';
 
 export interface AgentStreamEvent {
   type: string;
@@ -155,6 +156,11 @@ export class DataAgentAgentService {
     // ── Step 5: Build and invoke multi-phase graph ──
     const llm = this.llmService.getChatModel(provider, providerConfig);
 
+    // Create tracer for LLM interaction diagnostics
+    const providerName = provider || 'default';
+    const modelName = providerConfig?.model || '';
+    const tracer = new DataAgentTracer(messageId, providerName, modelName, providerConfig?.temperature, onEvent);
+
     const graph = buildDataAgentGraph({
       llm,
       neoOntologyService: this.neoOntologyService,
@@ -164,6 +170,7 @@ export class DataAgentAgentService {
       connectionId,
       databaseType,
       emit: onEvent,
+      tracer,
     });
 
     try {
@@ -184,6 +191,13 @@ export class DataAgentAgentService {
       const explainerOutput = finalState.explainerOutput;
       const finalContent = explainerOutput?.narrative || 'I was unable to generate a response. Please try again.';
 
+      // Persist LLM traces (fire-and-forget, don't block SSE response)
+      const traces = tracer.getTraces();
+      if (traces.length > 0) {
+        this.dataAgentService.persistTraces(messageId, traces)
+          .catch((err) => this.logger.error(`Failed to persist LLM traces: ${err.message}`));
+      }
+
       const metadata: DataAgentMessageMetadata = {
         toolCalls: finalState.toolCalls || [],
         tokensUsed: finalState.tokensUsed || { prompt: 0, completion: 0, total: 0 },
@@ -198,6 +212,7 @@ export class DataAgentAgentService {
         revisionsUsed: finalState.revisionCount || 0,
         durationMs: Date.now() - startedAt,
         startedAt,
+        llmCallCount: traces.length,
       };
 
       await this.dataAgentService.updateAssistantMessage(
@@ -217,6 +232,13 @@ export class DataAgentAgentService {
       const errorMessage = error instanceof Error ? error.message : 'Agent execution failed';
       const errorStack = error instanceof Error ? error.stack : undefined;
       this.logger.error(`Agent execution failed: ${errorMessage}`, errorStack);
+
+      // Persist any traces collected before the error
+      const errorTraces = tracer.getTraces();
+      if (errorTraces.length > 0) {
+        this.dataAgentService.persistTraces(messageId, errorTraces)
+          .catch((err) => this.logger.error(`Failed to persist LLM traces: ${err.message}`));
+      }
 
       await this.dataAgentService.updateAssistantMessage(
         messageId,

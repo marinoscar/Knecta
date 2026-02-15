@@ -5,8 +5,9 @@ import { EmitFn } from '../graph';
 import { buildVerifierPrompt } from '../prompts/verifier.prompt';
 import { SandboxService } from '../../../sandbox/sandbox.service';
 import { extractTokenUsage } from '../utils/token-tracker';
+import { DataAgentTracer } from '../utils/data-agent-tracer';
 
-export function createVerifierNode(llm: any, sandboxService: SandboxService, emit: EmitFn) {
+export function createVerifierNode(llm: any, sandboxService: SandboxService, emit: EmitFn, tracer: DataAgentTracer) {
   return async (state: DataAgentStateType): Promise<Partial<DataAgentStateType>> => {
     emit({ type: 'phase_start', phase: 'verifier', description: 'Verifying results' });
 
@@ -54,10 +55,15 @@ export function createVerifierNode(llm: any, sandboxService: SandboxService, emi
 
       // Generate verification Python code
       const prompt = buildVerifierPrompt(plan, stepResults);
-      const codeResponse = await llm.invoke([
+      const messages = [
         new SystemMessage('You are a Python code generator. Output ONLY executable Python code. No markdown fences. The code must print a JSON object as its last output line.'),
         new HumanMessage(prompt),
-      ]);
+      ];
+      const { response: codeResponse } = await tracer.trace(
+        { phase: 'verifier', purpose: 'verification_code', structuredOutput: false },
+        messages,
+        () => llm.invoke(messages),
+      );
       const nodeTokens = extractTokenUsage(codeResponse);
 
       let code = typeof codeResponse.content === 'string' ? codeResponse.content : '';
