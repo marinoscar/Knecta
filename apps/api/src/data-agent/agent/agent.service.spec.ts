@@ -508,6 +508,7 @@ describe('DataAgentAgentService', () => {
 
       expect(buildDataAgentGraph).toHaveBeenCalledWith({
         llm: { model: 'mock-llm' },
+        structuredLlm: { model: 'mock-llm' }, // Second LLM instance without reasoning
         neoOntologyService: mockNeoOntologyService,
         discoveryService: mockDiscoveryService,
         sandboxService: mockSandboxService,
@@ -799,6 +800,123 @@ describe('DataAgentAgentService', () => {
           revisionsUsed: expect.any(Number),
         }),
         'complete',
+      );
+    });
+
+    it('should create two LLM instances when provider config has reasoning', async () => {
+      const onEvent = jest.fn();
+
+      await service.executeAgent(
+        mockChatId,
+        mockMessageId,
+        'What is the count?',
+        mockUserId,
+        onEvent,
+        'anthropic',
+        {
+          reasoningLevel: 'adaptive',
+          temperature: 0.5,
+          model: 'claude-sonnet-4-5-20250929',
+        },
+      );
+
+      // Should call getChatModel exactly 2 times
+      expect(mockLlmService.getChatModel).toHaveBeenCalledTimes(2);
+
+      // First call: full config with reasoning
+      expect(mockLlmService.getChatModel).toHaveBeenNthCalledWith(
+        1,
+        'anthropic',
+        {
+          reasoningLevel: 'adaptive',
+          temperature: 0.5,
+          model: 'claude-sonnet-4-5-20250929',
+        },
+      );
+
+      // Second call: WITHOUT reasoningLevel (for withStructuredOutput phases)
+      expect(mockLlmService.getChatModel).toHaveBeenNthCalledWith(
+        2,
+        'anthropic',
+        {
+          temperature: 0.5,
+          model: 'claude-sonnet-4-5-20250929',
+          // reasoningLevel should be undefined
+        },
+      );
+    });
+
+    it('should create two LLM instances even without reasoning config', async () => {
+      const onEvent = jest.fn();
+
+      await service.executeAgent(
+        mockChatId,
+        mockMessageId,
+        'What is the count?',
+        mockUserId,
+        onEvent,
+        'openai',
+        {
+          temperature: 0.7,
+          model: 'gpt-4o',
+        },
+      );
+
+      // Should call getChatModel exactly 2 times
+      expect(mockLlmService.getChatModel).toHaveBeenCalledTimes(2);
+
+      // First call: full config (no reasoning)
+      expect(mockLlmService.getChatModel).toHaveBeenNthCalledWith(
+        1,
+        'openai',
+        {
+          temperature: 0.7,
+          model: 'gpt-4o',
+        },
+      );
+
+      // Second call: same config (no reasoning to strip)
+      expect(mockLlmService.getChatModel).toHaveBeenNthCalledWith(
+        2,
+        'openai',
+        {
+          temperature: 0.7,
+          model: 'gpt-4o',
+        },
+      );
+    });
+
+    it('should pass structuredLlm to graph builder for structured output phases', async () => {
+      const mockRegularLlm = { id: 'regular', model: 'mock-llm' };
+      const mockStructuredLlm = { id: 'structured', model: 'mock-llm-no-reasoning' };
+
+      // Mock getChatModel to return distinct instances
+      mockLlmService.getChatModel
+        .mockReturnValueOnce(mockRegularLlm)
+        .mockReturnValueOnce(mockStructuredLlm);
+
+      const onEvent = jest.fn();
+
+      await service.executeAgent(
+        mockChatId,
+        mockMessageId,
+        'What is the count?',
+        mockUserId,
+        onEvent,
+        'anthropic',
+        {
+          reasoningLevel: 'adaptive',
+          temperature: 0.5,
+          model: 'claude-sonnet-4-5-20250929',
+        },
+      );
+
+      // Verify buildDataAgentGraph was called with both LLM instances
+      expect(buildDataAgentGraph).toHaveBeenCalledWith(
+        expect.objectContaining({
+          llm: mockRegularLlm,
+          structuredLlm: mockStructuredLlm,
+        }),
       );
     });
 

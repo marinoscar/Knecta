@@ -135,4 +135,103 @@ describe('extractTextContent', () => {
       expect(extractTextContent(content)).toBe('');
     });
   });
+
+  describe('OpenAI vs Anthropic response formats', () => {
+    it('should handle OpenAI response format (plain string content)', () => {
+      // OpenAI returns: response.content = "The answer is 42"
+      const openAiContent = 'The answer is 42. Here is the analysis...';
+      expect(extractTextContent(openAiContent)).toBe(openAiContent);
+    });
+
+    it('should handle Anthropic response format without thinking (plain string)', () => {
+      // Anthropic without thinking also returns plain string
+      const anthropicContent = 'Based on the data, the top operators are...';
+      expect(extractTextContent(anthropicContent)).toBe(anthropicContent);
+    });
+
+    it('should handle Anthropic response with thinking mode enabled', () => {
+      // Anthropic with thinking returns array of content blocks
+      const anthropicThinkingContent = [
+        { type: 'thinking', thinking: 'Let me analyze the query step by step...' },
+        { type: 'text', text: 'The top 5 operators by production are:' },
+      ];
+      expect(extractTextContent(anthropicThinkingContent)).toBe('The top 5 operators by production are:');
+    });
+
+    it('should handle Anthropic response with multiple thinking and text blocks', () => {
+      const anthropicComplexContent = [
+        { type: 'thinking', thinking: 'First, I need to understand the question...' },
+        { type: 'text', text: 'Here is part 1 of the answer. ' },
+        { type: 'thinking', thinking: 'Now let me elaborate...' },
+        { type: 'text', text: 'And here is part 2.' },
+      ];
+      expect(extractTextContent(anthropicComplexContent)).toBe(
+        'Here is part 1 of the answer. And here is part 2.'
+      );
+    });
+
+    it('should handle Anthropic response with only thinking blocks (no text)', () => {
+      // Edge case: thinking enabled but no text output (possible error state)
+      const thinkingOnlyContent = [
+        { type: 'thinking', thinking: 'I am thinking but produced no text output...' },
+      ];
+      expect(extractTextContent(thinkingOnlyContent)).toBe('');
+    });
+
+    it('should handle OpenAI response with complex multi-line content', () => {
+      // OpenAI complex analytical response
+      const openAiComplex = `Based on the analysis, here are the results:
+
+1. Total production: 42,000 barrels
+2. Average cost: $15.50 per barrel
+3. Top operator: ACME Corp
+
+The data shows a steady increase over the past quarter.`;
+      expect(extractTextContent(openAiComplex)).toBe(openAiComplex);
+    });
+
+    it('should handle Anthropic thinking mode with detailed analysis', () => {
+      // Anthropic with extended thinking process
+      const anthropicDetailedThinking = [
+        { type: 'thinking', thinking: 'Let me break down this query:\n1. Need to join production data\n2. Aggregate by operator\n3. Sort by total volume' },
+        { type: 'text', text: 'Analysis complete. ' },
+        { type: 'thinking', thinking: 'Now I should format the results in a readable way...' },
+        { type: 'text', text: 'The top operators are:\n1. ACME Corp\n2. Global Oil\n3. Energy Inc' },
+      ];
+      expect(extractTextContent(anthropicDetailedThinking)).toBe(
+        'Analysis complete. The top operators are:\n1. ACME Corp\n2. Global Oil\n3. Energy Inc'
+      );
+    });
+
+    it('should handle Azure OpenAI response (same format as OpenAI)', () => {
+      // Azure OpenAI uses the same response format as OpenAI
+      const azureContent = 'Query executed successfully. Results: 150 records found.';
+      expect(extractTextContent(azureContent)).toBe(azureContent);
+    });
+
+    it('should handle Anthropic thinking mode with reasoning_effort=high', () => {
+      // When reasoning level is high, Anthropic may include longer thinking blocks
+      const highReasoningContent = [
+        {
+          type: 'thinking',
+          thinking: 'This is a complex multi-dataset query. I need to carefully consider:\n- Join paths between tables\n- Grain of the final result\n- Potential NULL values\n- Performance implications\n\nLet me validate my approach...',
+        },
+        {
+          type: 'text',
+          text: 'I have identified a safe join path through the ontology. The query will aggregate at the monthly level.',
+        },
+        {
+          type: 'thinking',
+          thinking: 'Good, now I can construct the SQL with confidence in the join correctness.',
+        },
+        {
+          type: 'text',
+          text: '\n\nFinal SQL:\nSELECT month, SUM(production) FROM wells GROUP BY month',
+        },
+      ];
+      expect(extractTextContent(highReasoningContent)).toBe(
+        'I have identified a safe join path through the ontology. The query will aggregate at the monthly level.\n\nFinal SQL:\nSELECT month, SUM(production) FROM wells GROUP BY month'
+      );
+    });
+  });
 });
