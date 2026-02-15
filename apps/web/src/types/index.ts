@@ -20,6 +20,7 @@ export interface UserSettings {
     useProviderImage: boolean;
     customImageUrl?: string | null;
   };
+  defaultProvider?: string;
   updatedAt: string;
   version: number;
 }

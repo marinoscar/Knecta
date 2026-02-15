@@ -11,6 +11,7 @@ interface UseUserSettingsReturn {
   updateSettings: (updates: Partial<UserSettings>) => Promise<void>;
   updateTheme: (theme: 'light' | 'dark' | 'system') => Promise<void>;
   updateProfile: (profile: UserSettings['profile']) => Promise<void>;
+  updateDefaultProvider: (defaultProvider: string | undefined) => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -91,6 +92,13 @@ export function useUserSettings(): UseUserSettingsReturn {
     [updateSettings],
   );
 
+  const updateDefaultProvider = useCallback(
+    async (defaultProvider: string | undefined) => {
+      await updateSettings({ defaultProvider } as any);
+    },
+    [updateSettings],
+  );
+
   return {
     settings,
     isLoading,
@@ -99,6 +107,7 @@ export function useUserSettings(): UseUserSettingsReturn {
     updateSettings,
     updateTheme,
     updateProfile,
+    updateDefaultProvider,
     refresh: fetchSettings,
   };
 }

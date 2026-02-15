@@ -13,17 +13,27 @@ import {
   Typography,
 } from '@mui/material';
 import { getOntologies } from '../../services/api';
-import type { Ontology } from '../../types';
+import { ModelSelector } from './ModelSelector';
+import type { Ontology, LLMProviderInfo } from '../../types';
 
 interface NewChatDialogProps {
   open: boolean;
   onClose: () => void;
-  onCreated: (chatId: string, ontologyId: string, name: string) => void;
+  onCreated: (chatId: string, ontologyId: string, name: string, llmProvider?: string | null) => void;
+  providers?: LLMProviderInfo[];
+  defaultProvider?: string | null;
 }
 
-export function NewChatDialog({ open, onClose, onCreated }: NewChatDialogProps) {
+export function NewChatDialog({
+  open,
+  onClose,
+  onCreated,
+  providers = [],
+  defaultProvider = null,
+}: NewChatDialogProps) {
   const [name, setName] = useState('');
   const [selectedOntology, setSelectedOntology] = useState<Ontology | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(defaultProvider);
   const [ontologies, setOntologies] = useState<Ontology[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingOntologies, setLoadingOntologies] = useState(false);
@@ -32,8 +42,9 @@ export function NewChatDialog({ open, onClose, onCreated }: NewChatDialogProps) 
   useEffect(() => {
     if (open) {
       fetchOntologies();
+      setSelectedProvider(defaultProvider);
     }
-  }, [open]);
+  }, [open, defaultProvider]);
 
   useEffect(() => {
     // Auto-generate name when ontology is selected
@@ -78,7 +89,7 @@ export function NewChatDialog({ open, onClose, onCreated }: NewChatDialogProps) 
     try {
       // We'll create the chat in the parent component
       // This is just for validation and passing data back
-      onCreated('temp-id', selectedOntology.id, name.trim());
+      onCreated('temp-id', selectedOntology.id, name.trim(), selectedProvider);
       handleClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create chat');
@@ -90,6 +101,7 @@ export function NewChatDialog({ open, onClose, onCreated }: NewChatDialogProps) 
   const handleClose = () => {
     setName('');
     setSelectedOntology(null);
+    setSelectedProvider(defaultProvider);
     setError(null);
     onClose();
   };
@@ -153,6 +165,21 @@ export function NewChatDialog({ open, onClose, onCreated }: NewChatDialogProps) 
                 helperText="You can change this later"
                 sx={{ mt: 2 }}
               />
+
+              {providers.length > 0 && (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    AI Provider
+                  </Typography>
+                  <ModelSelector
+                    providers={providers}
+                    selectedProvider={selectedProvider}
+                    onChange={setSelectedProvider}
+                    disabled={loading}
+                    size="medium"
+                  />
+                </Box>
+              )}
             </>
           )}
         </DialogContent>

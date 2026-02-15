@@ -14,7 +14,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { PERMISSIONS } from '../common/constants/roles.constants';
 import { DataAgentService } from './data-agent.service';
 import { DataAgentAgentService } from './agent/agent.service';
-import { SystemSettingsService } from '../settings/system-settings.service';
+import { SystemSettingsService } from '../settings/system-settings/system-settings.service';
 import { LlmModelConfig } from '../llm/llm.service';
 
 /**

@@ -8,6 +8,7 @@ import {
 import { useState } from 'react';
 import { ThemeSettings } from '../components/settings/ThemeSettings';
 import { ProfileSettings } from '../components/settings/ProfileSettings';
+import { DefaultProviderSettings } from '../components/settings/DefaultProviderSettings';
 import { useUserSettings } from '../hooks/useUserSettings';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 
@@ -19,6 +20,7 @@ export default function UserSettingsPage() {
     isSaving,
     updateTheme,
     updateProfile,
+    updateDefaultProvider,
   } = useUserSettings();
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -41,6 +43,15 @@ export default function UserSettingsPage() {
       setSuccessMessage('Profile updated');
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : 'Failed to update profile');
+    }
+  };
+
+  const handleDefaultProviderChange = async (provider: string | undefined) => {
+    try {
+      await updateDefaultProvider(provider);
+      setSuccessMessage('Default provider updated');
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : 'Failed to update default provider');
     }
   };
 
@@ -77,6 +88,13 @@ export default function UserSettingsPage() {
             <ProfileSettings
               profile={settings.profile}
               onSave={handleProfileSave}
+              disabled={isSaving}
+            />
+
+            {/* Default Provider Settings */}
+            <DefaultProviderSettings
+              currentProvider={settings.defaultProvider}
+              onProviderChange={handleDefaultProviderChange}
               disabled={isSaving}
             />
           </Box>

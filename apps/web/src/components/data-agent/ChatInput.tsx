@@ -1,14 +1,26 @@
 import { useState, useRef, useEffect } from 'react';
 import { Box, OutlinedInput, IconButton, InputAdornment, useTheme } from '@mui/material';
 import { ArrowUpward as SendIcon } from '@mui/icons-material';
+import { ModelSelector } from './ModelSelector';
+import type { LLMProviderInfo } from '../../types';
 
 interface ChatInputProps {
   onSend: (content: string) => void;
   isStreaming: boolean;
   disabled?: boolean;
+  providers?: LLMProviderInfo[];
+  selectedProvider?: string | null;
+  onProviderChange?: (provider: string) => void;
 }
 
-export function ChatInput({ onSend, isStreaming, disabled = false }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  isStreaming,
+  disabled = false,
+  providers,
+  selectedProvider,
+  onProviderChange,
+}: ChatInputProps) {
   const theme = useTheme();
   const [value, setValue] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -60,6 +72,15 @@ export function ChatInput({ onSend, isStreaming, disabled = false }: ChatInputPr
           mx: 'auto',
         }}
       >
+        {providers && providers.length > 0 && (
+          <ModelSelector
+            providers={providers}
+            selectedProvider={selectedProvider || null}
+            onChange={onProviderChange || (() => {})}
+            disabled={isStreaming || disabled}
+            size="small"
+          />
+        )}
         <OutlinedInput
           inputRef={inputRef}
           fullWidth
