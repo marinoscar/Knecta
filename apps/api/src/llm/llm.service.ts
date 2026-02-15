@@ -11,6 +11,12 @@ export interface LLMProviderInfo {
   isDefault: boolean;
 }
 
+export interface LlmModelConfig {
+  temperature?: number;
+  model?: string;
+  reasoningLevel?: string;
+}
+
 @Injectable()
 export class LlmService {
   constructor(private readonly configService: ConfigService) {}
@@ -57,32 +63,71 @@ export class LlmService {
     return providers;
   }
 
-  getChatModel(provider?: string): BaseChatModel {
+  getChatModel(provider?: string, config?: LlmModelConfig): BaseChatModel {
     const targetProvider = provider || this.configService.get<string>('llm.defaultProvider') || 'openai';
 
     switch (targetProvider) {
       case 'openai': {
         const apiKey = this.configService.get<string>('llm.openai.apiKey');
         if (!apiKey) throw new BadRequestException('OpenAI API key not configured');
-        const model = this.configService.get<string>('llm.openai.model') || 'gpt-4o';
-        return new ChatOpenAI({ openAIApiKey: apiKey, modelName: model, temperature: 0 });
+        const model = config?.model || this.configService.get<string>('llm.openai.model') || 'gpt-4o';
+        const temperature = config?.temperature ?? 0;
+
+        const modelKwargs: Record<string, unknown> = {};
+        if (config?.reasoningLevel) {
+          modelKwargs.reasoning_effort = config.reasoningLevel;
+        }
+
+        return new ChatOpenAI({
+          openAIApiKey: apiKey,
+          modelName: model,
+          temperature,
+          ...(Object.keys(modelKwargs).length > 0 ? { modelKwargs } : {}),
+        });
       }
 
       case 'anthropic': {
         const apiKey = this.configService.get<string>('llm.anthropic.apiKey');
         if (!apiKey) throw new BadRequestException('Anthropic API key not configured');
-        const model = this.configService.get<string>('llm.anthropic.model') || 'claude-sonnet-4-5-20250929';
-        return new ChatAnthropic({ anthropicApiKey: apiKey, modelName: model, temperature: 0 });
+        const model = config?.model || this.configService.get<string>('llm.anthropic.model') || 'claude-sonnet-4-5-20250929';
+        const temperature = config?.temperature ?? 0;
+
+        const opts: any = {
+          anthropicApiKey: apiKey,
+          modelName: model,
+          temperature,
+        };
+
+        if (config?.reasoningLevel) {
+          if (config.reasoningLevel === 'adaptive') {
+            opts.thinking = { type: 'adaptive' };
+          } else {
+            const budget = parseInt(config.reasoningLevel, 10);
+            if (!isNaN(budget) && budget >= 1024) {
+              opts.thinking = { type: 'enabled', budget_tokens: budget };
+            }
+          }
+        }
+
+        return new ChatAnthropic(opts);
       }
 
       case 'azure': {
         const apiKey = this.configService.get<string>('llm.azure.apiKey');
         const endpoint = this.configService.get<string>('llm.azure.endpoint');
-        const deployment = this.configService.get<string>('llm.azure.deployment');
+        const deployment = config?.model || this.configService.get<string>('llm.azure.deployment');
         const apiVersion = this.configService.get<string>('llm.azure.apiVersion') || '2024-02-01';
+        const temperature = config?.temperature ?? 0;
+
         if (!apiKey || !endpoint || !deployment) {
           throw new BadRequestException('Azure OpenAI not fully configured');
         }
+
+        const modelKwargs: Record<string, unknown> = {};
+        if (config?.reasoningLevel) {
+          modelKwargs.reasoning_effort = config.reasoningLevel;
+        }
+
         return new ChatOpenAI({
           openAIApiKey: apiKey,
           configuration: {
@@ -90,7 +135,8 @@ export class LlmService {
             defaultQuery: { 'api-version': apiVersion },
             defaultHeaders: { 'api-key': apiKey },
           },
-          temperature: 0,
+          temperature,
+          ...(Object.keys(modelKwargs).length > 0 ? { modelKwargs } : {}),
         });
       }
 
