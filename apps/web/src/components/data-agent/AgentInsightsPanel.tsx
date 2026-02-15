@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Box,
   Typography,
@@ -7,6 +8,7 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Button,
 } from '@mui/material';
 import {
   ChevronRight,
@@ -17,6 +19,7 @@ import {
   CheckCircle,
   Error,
   Cancel,
+  AccountTree,
 } from '@mui/icons-material';
 import type { DataChatMessage, DataAgentStreamEvent } from '../../types';
 import {
@@ -24,10 +27,12 @@ import {
   extractStepStatuses,
   extractPhaseDetails,
   extractLiveTokens,
+  extractJoinPlan,
   formatDuration,
   formatTokenCount,
 } from './insightsUtils';
 import { useElapsedTimer } from '../../hooks/useElapsedTimer';
+import { JoinGraphDialog } from './JoinGraphDialog';
 
 interface AgentInsightsPanelProps {
   messages: DataChatMessage[];
@@ -51,6 +56,10 @@ export function AgentInsightsPanel({
   const plan = extractPlan(streamEvents, metadata, isLiveMode);
   const stepStatuses = extractStepStatuses(plan, streamEvents, metadata, isLiveMode);
   const phaseDetails = extractPhaseDetails(streamEvents, metadata, isLiveMode);
+  const joinPlan = extractJoinPlan(streamEvents, metadata, isLiveMode);
+
+  // State
+  const [joinGraphOpen, setJoinGraphOpen] = useState(false);
 
   // Live timer — read startedAt from the message_start stream event (not from metadata, which isn't set until completion)
   const startedAt = isLiveMode
@@ -405,6 +414,52 @@ export function AgentInsightsPanel({
               </Accordion>
             ))}
           </Box>
+        </>
+      )}
+
+      {/* Join Graph Section */}
+      {joinPlan && joinPlan.relevantDatasets.length > 0 && (
+        <>
+          <Divider />
+          <Box sx={{ p: 2 }}>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                mb: 1,
+              }}
+            >
+              <Typography variant="subtitle2" fontWeight={600}>
+                Join Graph
+              </Typography>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<AccountTree />}
+                onClick={() => setJoinGraphOpen(true)}
+              >
+                View
+              </Button>
+            </Box>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+              <Chip
+                size="small"
+                label={`${joinPlan.relevantDatasets.length} datasets`}
+                variant="outlined"
+              />
+              <Chip
+                size="small"
+                label={`${joinPlan.joinPaths.length} join paths`}
+                variant="outlined"
+              />
+            </Box>
+          </Box>
+          <JoinGraphDialog
+            joinPlan={joinPlan}
+            open={joinGraphOpen}
+            onClose={() => setJoinGraphOpen(false)}
+          />
         </>
       )}
 
