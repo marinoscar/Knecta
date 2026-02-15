@@ -6,6 +6,7 @@ import { buildVerifierPrompt } from '../prompts/verifier.prompt';
 import { SandboxService } from '../../../sandbox/sandbox.service';
 import { extractTokenUsage } from '../utils/token-tracker';
 import { DataAgentTracer } from '../utils/data-agent-tracer';
+import { extractTextContent } from '../utils/content-extractor';
 
 export function createVerifierNode(llm: any, sandboxService: SandboxService, emit: EmitFn, tracer: DataAgentTracer) {
   return async (state: DataAgentStateType): Promise<Partial<DataAgentStateType>> => {
@@ -66,7 +67,7 @@ export function createVerifierNode(llm: any, sandboxService: SandboxService, emi
       );
       const nodeTokens = extractTokenUsage(codeResponse);
 
-      let code = typeof codeResponse.content === 'string' ? codeResponse.content : '';
+      let code = extractTextContent(codeResponse.content);
       code = code.replace(/^```(?:python)?\n?/m, '').replace(/\n?```\s*$/m, '').trim();
 
       let report: VerificationReport;

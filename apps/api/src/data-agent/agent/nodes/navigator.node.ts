@@ -9,6 +9,7 @@ import { createGetRelationshipsTool } from '../tools/get-relationships.tool';
 import { NeoOntologyService } from '../../../ontologies/neo-ontology.service';
 import { extractTokenUsage, mergeTokenUsage } from '../utils/token-tracker';
 import { DataAgentTracer } from '../utils/data-agent-tracer';
+import { extractTextContent } from '../utils/content-extractor';
 
 const MAX_NAVIGATOR_ITERATIONS = 8;
 
@@ -103,9 +104,7 @@ export function createNavigatorNode(
       const lastAiMessage = messages
         .filter((m) => m._getType() === 'ai')
         .pop();
-      const findings = typeof lastAiMessage?.content === 'string'
-        ? lastAiMessage.content
-        : '';
+      const findings = extractTextContent(lastAiMessage?.content);
 
       // Build JoinPlanArtifact from the navigator's exploration
       // Get all relationships for structured output

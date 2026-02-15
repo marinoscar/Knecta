@@ -7,6 +7,7 @@ import { DiscoveryService } from '../../../discovery/discovery.service';
 import { SandboxService } from '../../../sandbox/sandbox.service';
 import { extractTokenUsage, mergeTokenUsage } from '../utils/token-tracker';
 import { DataAgentTracer } from '../utils/data-agent-tracer';
+import { extractTextContent } from '../utils/content-extractor';
 
 export function createExecutorNode(
   llm: any,
@@ -78,7 +79,7 @@ export function createExecutorNode(
                   () => llm.invoke(repairMessages),
                 );
                 nodeTokens = mergeTokenUsage(nodeTokens, extractTokenUsage(repairResponse));
-                const repairedSql = typeof repairResponse.content === 'string' ? repairResponse.content.trim() : '';
+                const repairedSql = extractTextContent(repairResponse.content).trim();
                 if (repairedSql) {
                   fullSql = repairedSql;
                 }
@@ -139,7 +140,7 @@ export function createExecutorNode(
             );
             nodeTokens = mergeTokenUsage(nodeTokens, extractTokenUsage(codeResponse));
 
-            let code = typeof codeResponse.content === 'string' ? codeResponse.content : '';
+            let code = extractTextContent(codeResponse.content);
             // Strip markdown fences if present
             code = code.replace(/^```(?:python)?\n?/m, '').replace(/\n?```\s*$/m, '').trim();
 

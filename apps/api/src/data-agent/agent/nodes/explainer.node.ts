@@ -6,6 +6,7 @@ import { buildExplainerPrompt } from '../prompts/explainer.prompt';
 import { SandboxService } from '../../../sandbox/sandbox.service';
 import { extractTokenUsage } from '../utils/token-tracker';
 import { DataAgentTracer } from '../utils/data-agent-tracer';
+import { extractTextContent } from '../utils/content-extractor';
 
 export function createExplainerNode(llm: any, sandboxService: SandboxService, emit: EmitFn, tracer: DataAgentTracer) {
   return async (state: DataAgentStateType): Promise<Partial<DataAgentStateType>> => {
@@ -37,7 +38,7 @@ export function createExplainerNode(llm: any, sandboxService: SandboxService, em
       );
       const nodeTokens = extractTokenUsage(response);
 
-      const narrative = typeof response.content === 'string' ? response.content : '';
+      const narrative = extractTextContent(response.content);
 
       // Collect charts from all step results
       const charts: string[] = [];

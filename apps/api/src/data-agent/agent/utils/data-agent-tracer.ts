@@ -2,6 +2,7 @@ import { BaseMessage } from '@langchain/core/messages';
 import { extractTokenUsage } from './token-tracker';
 import { EmitFn } from '../graph';
 import { LlmTraceInput, CollectedTrace } from '../types';
+import { extractTextContent } from './content-extractor';
 
 export class DataAgentTracer {
   private callCounter = 0;
@@ -148,16 +149,14 @@ export class DataAgentTracer {
     // withStructuredOutput response has {parsed, raw}
     if (response?.parsed !== undefined && response?.raw) {
       return {
-        content: typeof response.raw.content === 'string'
-          ? response.raw.content
-          : JSON.stringify(response.parsed),
+        content: extractTextContent(response.raw.content) || JSON.stringify(response.parsed),
         toolCalls: response.raw.tool_calls,
         raw: response.raw,
       };
     }
     // Regular AIMessage
     return {
-      content: typeof response?.content === 'string' ? response.content : '',
+      content: extractTextContent(response?.content),
       toolCalls: response?.tool_calls,
       raw: response,
     };
