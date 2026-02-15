@@ -150,7 +150,7 @@ export function JoinGraphDialog({ joinPlan, open, onClose }: JoinGraphDialogProp
 
                 {/* Dataset properties */}
                 <Box sx={{ p: 2 }}>
-                  {selectedNode.properties.source && (
+                  {selectedNode.properties.source ? (
                     <Box sx={{ mb: 2 }}>
                       <Typography variant="caption" color="text.secondary">
                         Source
@@ -162,9 +162,9 @@ export function JoinGraphDialog({ joinPlan, open, onClose }: JoinGraphDialogProp
                         {asString(selectedNode.properties.source)}
                       </Typography>
                     </Box>
-                  )}
+                  ) : null}
 
-                  {selectedNode.properties.description && (
+                  {selectedNode.properties.description ? (
                     <Box sx={{ mb: 2 }}>
                       <Typography variant="caption" color="text.secondary">
                         Description
@@ -173,7 +173,7 @@ export function JoinGraphDialog({ joinPlan, open, onClose }: JoinGraphDialogProp
                         {asString(selectedNode.properties.description)}
                       </Typography>
                     </Box>
-                  )}
+                  ) : null}
 
                   {/* Joins section */}
                   <Box sx={{ mb: 2 }}>
@@ -229,7 +229,7 @@ export function JoinGraphDialog({ joinPlan, open, onClose }: JoinGraphDialogProp
                   </Box>
 
                   {/* YAML definition */}
-                  {selectedNode.properties.yaml && (
+                  {selectedNode.properties.yaml ? (
                     <>
                       <Divider sx={{ my: 2 }} />
                       <Box>
@@ -265,7 +265,7 @@ export function JoinGraphDialog({ joinPlan, open, onClose }: JoinGraphDialogProp
                         </Paper>
                       </Box>
                     </>
-                  )}
+                  ) : null}
                 </Box>
               </Box>
             )}
