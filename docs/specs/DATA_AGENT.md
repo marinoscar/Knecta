@@ -20,8 +20,9 @@
 16. [Neo4j Vector Search](#neo4j-vector-search)
 17. [Docker Python Sandbox](#docker-python-sandbox)
 18. [Frontend Components](#frontend-components)
-19. [Configuration](#configuration)
-20. [File Inventory](#file-inventory)
+19. [Model Selection](#model-selection)
+20. [Configuration](#configuration)
+21. [File Inventory](#file-inventory)
 21. [Testing](#testing)
 22. [Packages](#packages)
 
@@ -165,7 +166,8 @@ The Data Agent uses a multi-service architecture combining NestJS backend, Neo4j
 - **ChatMessage**: Individual message bubble with verification badge and data lineage
 - **PhaseIndicator**: MUI Stepper showing current phase (NEW)
 - **ToolCallAccordion**: Collapsible tool execution display grouped by phase + step (UPDATED)
-- **ChatInput**: Auto-resize textarea with Enter to send
+- **ChatInput**: Auto-resize textarea with Enter to send, ModelSelector for provider selection
+- **ModelSelector**: Compact MUI Select showing enabled providers
 - **WelcomeScreen**: Empty state with suggestion cards
 - **NewChatDialog**: Ontology selection for new chats
 
@@ -1306,12 +1308,13 @@ Located in `apps/api/prisma/schema.prisma`:
 
 ```prisma
 model DataChat {
-  id         String            @id @default(uuid()) @db.Uuid
-  name       String            @db.VarChar(255)
-  ontologyId String            @map("ontology_id") @db.Uuid
-  ownerId    String            @map("owner_id") @db.Uuid
-  createdAt  DateTime          @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt  DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+  id          String            @id @default(uuid()) @db.Uuid
+  name        String            @db.VarChar(255)
+  ontologyId  String            @map("ontology_id") @db.Uuid
+  ownerId     String            @map("owner_id") @db.Uuid
+  llmProvider String?           @map("llm_provider") @db.VarChar(50)  // Selected LLM provider (openai, anthropic, azure). Null = system default.
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime          @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relations
   ontology Ontology          @relation("DataChatOntology", fields: [ontologyId], references: [id], onDelete: Cascade)
@@ -1405,7 +1408,8 @@ POST /api/data-agent/chats
 ```json
 {
   "name": "Sales Analysis Q4 2025",
-  "ontologyId": "uuid"
+  "ontologyId": "uuid",
+  "llmProvider": "openai"  // Optional: openai | anthropic | azure. Null = system default.
 }
 ```
 
@@ -1417,6 +1421,7 @@ POST /api/data-agent/chats
     "name": "Sales Analysis Q4 2025",
     "ontologyId": "uuid",
     "ownerId": "uuid",
+    "llmProvider": "openai",
     "createdAt": "2025-01-15T10:00:00Z",
     "updatedAt": "2025-01-15T10:00:00Z"
   }
@@ -1461,7 +1466,8 @@ PATCH /api/data-agent/chats/:chatId
 **Request Body:**
 ```json
 {
-  "name": "Updated Chat Name"
+  "name": "Updated Chat Name",
+  "llmProvider": "anthropic"  // Optional: change provider mid-conversation. Null = clear and use system default.
 }
 ```
 
@@ -1473,6 +1479,7 @@ PATCH /api/data-agent/chats/:chatId
     "name": "Updated Chat Name",
     "ontologyId": "uuid",
     "ownerId": "uuid",
+    "llmProvider": "anthropic",
     "createdAt": "2025-01-15T10:00:00Z",
     "updatedAt": "2025-01-15T15:00:00Z"
   }
@@ -1969,7 +1976,7 @@ Empty state when no chat is selected.
 
 ### ChatInput
 
-Auto-resize textarea with Enter to send.
+Auto-resize textarea with Enter to send and model provider selection.
 
 **Location**: `apps/web/src/components/data-agent/ChatInput.tsx`
 
@@ -1977,6 +1984,7 @@ Auto-resize textarea with Enter to send.
 - Enter to send (Shift+Enter for new line)
 - Auto-resize up to 5 rows
 - Disabled during message generation
+- Integrated ModelSelector for changing provider mid-conversation
 
 ---
 
@@ -1990,6 +1998,158 @@ Ontology selection dialog for creating new chats.
 - List available ontologies (requires `ontologies:read` permission)
 - Filter by semantic model or connection
 - Automatically generate chat name based on first message
+- Pre-select user's default provider preference
+
+---
+
+### ModelSelector
+
+Compact MUI Select component for choosing LLM provider.
+
+**Location**: `apps/web/src/components/data-agent/ModelSelector.tsx`
+
+**Features**:
+- Shows enabled LLM providers (OpenAI, Anthropic, Azure OpenAI)
+- Pre-selects user's default provider preference from User Settings
+- Displays provider-specific model name (from admin config)
+- Updates chat's `llm_provider` when changed
+
+**Props**:
+```typescript
+interface ModelSelectorProps {
+  value: string | null;  // Current provider (openai | anthropic | azure | null)
+  onChange: (provider: string | null) => void;
+  disabled?: boolean;
+}
+```
+
+**Usage in ChatInput**:
+```tsx
+<ModelSelector
+  value={chat.llmProvider}
+  onChange={handleProviderChange}
+  disabled={isStreaming}
+/>
+```
+
+**Usage in NewChatDialog**:
+```tsx
+<ModelSelector
+  value={selectedProvider}
+  onChange={setSelectedProvider}
+/>
+```
+
+---
+
+### Frontend Hooks
+
+#### useLlmProviders
+
+Custom hook for fetching enabled LLM providers and resolving user's default provider.
+
+**Location**: `apps/web/src/hooks/useLlmProviders.ts`
+
+**Returns**:
+```typescript
+{
+  providers: Array<{ id: string; name: string; model: string }>;  // Enabled providers with admin-configured models
+  defaultProvider: string | null;  // User's preferred default from User Settings
+  isLoading: boolean;
+  error: Error | null;
+}
+```
+
+**Usage**:
+```tsx
+const { providers, defaultProvider, isLoading } = useLlmProviders();
+```
+
+---
+
+## Model Selection
+
+The Data Agent supports per-chat LLM provider selection with admin-configured model settings including reasoning capabilities.
+
+### Per-Chat Provider Selection
+
+Users can select an LLM provider when creating a chat or change it mid-conversation:
+
+- **OpenAI**: Standard GPT-4o or reasoning models (o1, o3) with configurable reasoning effort
+- **Anthropic**: Claude models with adaptive thinking mode or custom thinking token budgets
+- **Azure OpenAI**: Azure-hosted OpenAI models with same capabilities
+
+Provider selection is stored in the `data_chats.llm_provider` column and persists for the entire conversation. Users can switch providers at any time to compare results or use specialized model capabilities.
+
+### Admin Configuration
+
+Admins configure per-provider settings in System Settings → "Data Agent" tab:
+
+**Configuration Fields**:
+- **Model Name**: Specific model to use (e.g., `gpt-4o`, `o1-preview`, `claude-3-5-sonnet-20241022`)
+- **Temperature**: Sampling temperature (0-2, default: 0.7)
+- **Reasoning Level**: Provider-specific reasoning configuration
+
+**Reasoning Level by Provider**:
+
+| Provider | Parameter | Values | Description |
+|----------|-----------|--------|-------------|
+| OpenAI / Azure | `reasoning_effort` | `low`, `medium`, `high` | For o1/o3 reasoning models. Controls depth of internal reasoning. Not applicable to standard GPT models. |
+| Anthropic | `thinking` | `adaptive` or `1024-128000` | Adaptive mode (default) or custom thinking token budget. Enables extended thinking for complex queries. |
+
+**Example Configuration**:
+```json
+{
+  "dataAgent": {
+    "openai": {
+      "model": "o1-preview",
+      "temperature": 0.7,
+      "reasoningLevel": "high"
+    },
+    "anthropic": {
+      "model": "claude-3-5-sonnet-20241022",
+      "temperature": 0.7,
+      "reasoningLevel": "adaptive"
+    },
+    "azure": {
+      "model": "gpt-4o",
+      "temperature": 0.7,
+      "reasoningLevel": "medium"
+    }
+  }
+}
+```
+
+### Resolution Flow
+
+When a message is sent, the agent resolves which LLM to use:
+
+1. **Read Chat Provider**: Check `data_chats.llm_provider` for the chat's selected provider
+2. **Fall Back to System Default**: If not set, use `LLM_DEFAULT_PROVIDER` environment variable
+3. **Fetch Admin Config**: Load provider-specific settings from system settings `dataAgent[provider]`
+4. **Instantiate Model**: Pass provider name + config to `LlmService.getChatModel(provider, config)`
+
+**Example Flow**:
+```typescript
+// 1. Read chat's selected provider
+const chat = await prisma.dataChat.findUnique({ where: { id: chatId } });
+const provider = chat.llm_provider || process.env.LLM_DEFAULT_PROVIDER;
+
+// 2. Fetch admin config
+const systemSettings = await settingsService.getSystemSettings();
+const config = systemSettings.dataAgent[provider];
+
+// 3. Get configured model
+const llm = llmService.getChatModel(provider, config);
+```
+
+### Default Provider (User Preference)
+
+Users can set a preferred default provider in User Settings, which:
+- Pre-selects the provider in the "New Chat" dialog
+- Pre-selects the provider in the ChatInput model selector
+- Does NOT affect existing chats (stored in `data_chats.llm_provider`)
+- Falls back to system default if user preference is not set
 
 ---
 
@@ -2001,11 +2161,11 @@ Ontology selection dialog for creating new chats.
 ```bash
 # OpenAI
 OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o  # default: gpt-4o
+OPENAI_MODEL=gpt-4o  # default: gpt-4o (can be overridden by admin config)
 
 # Anthropic
 ANTHROPIC_API_KEY=sk-ant-...
-ANTHROPIC_MODEL=claude-3-5-sonnet-20241022  # default
+ANTHROPIC_MODEL=claude-3-5-sonnet-20241022  # default (can be overridden by admin config)
 
 # Azure OpenAI
 AZURE_OPENAI_API_KEY=...
@@ -2017,6 +2177,33 @@ AZURE_OPENAI_API_VERSION=2024-02-15-preview
 **Default Provider**:
 ```bash
 LLM_DEFAULT_PROVIDER=openai  # openai | anthropic | azure
+```
+
+**Admin Model Configuration**:
+
+Admins configure per-provider model settings in System Settings → "Data Agent" tab. This configuration overrides environment variable defaults.
+
+Example system settings structure:
+```json
+{
+  "dataAgent": {
+    "openai": {
+      "model": "o1-preview",
+      "temperature": 0.7,
+      "reasoningLevel": "high"
+    },
+    "anthropic": {
+      "model": "claude-3-5-sonnet-20241022",
+      "temperature": 0.7,
+      "reasoningLevel": "adaptive"
+    },
+    "azure": {
+      "model": "gpt-4o",
+      "temperature": 0.7,
+      "reasoningLevel": "medium"
+    }
+  }
+}
 ```
 
 **Embedding Provider** (OpenAI only):
@@ -2103,7 +2290,11 @@ CONVERSATION_HISTORY_LIMIT=10  # Last N messages for context
 | `apps/web/src/components/data-agent/PhaseIndicator.tsx` | MUI Stepper showing phase progress |
 | `apps/web/src/components/data-agent/AgentInsightsPanel.tsx` | Agent insights right-side panel |
 | `apps/web/src/components/data-agent/insightsUtils.ts` | Utility functions for insights data extraction |
+| `apps/web/src/components/data-agent/ModelSelector.tsx` | LLM provider selection component |
+| `apps/web/src/components/admin/DataAgentSettings.tsx` | Admin UI for per-provider model configuration |
+| `apps/web/src/components/settings/DefaultProviderSettings.tsx` | User UI for default provider preference |
 | `apps/web/src/hooks/useElapsedTimer.ts` | Live elapsed timer hook |
+| `apps/web/src/hooks/useLlmProviders.ts` | Hook for fetching enabled providers and user default |
 
 ### Modified Frontend Files
 
@@ -2113,8 +2304,11 @@ CONVERSATION_HISTORY_LIMIT=10  # Last N messages for context
 | `apps/web/src/hooks/useDataChat.ts` | Handle new SSE event types in parser |
 | `apps/web/src/pages/DataAgentPage.tsx` | Integrate AgentInsightsPanel with responsive layout |
 | `apps/web/src/components/data-agent/ChatView.tsx` | Integrate PhaseIndicator above message list, add insights panel toggle button (Analytics icon) |
+| `apps/web/src/components/data-agent/ChatInput.tsx` | Integrate ModelSelector for provider selection |
+| `apps/web/src/components/data-agent/NewChatDialog.tsx` | Integrate ModelSelector with user default pre-selection |
 | `apps/web/src/components/data-agent/ToolCallAccordion.tsx` | Group tool calls by phase + stepId |
 | `apps/web/src/components/data-agent/ChatMessage.tsx` | Show verification badge + data lineage footer |
+| `apps/api/src/llm/llm.service.ts` | Updated with `LlmModelConfig` for per-provider config with reasoning levels |
 
 ### Deleted Files
 
