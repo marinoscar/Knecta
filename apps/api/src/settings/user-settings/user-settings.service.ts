@@ -44,6 +44,7 @@ export class UserSettingsService {
     return {
       theme: value.theme,
       profile: value.profile,
+      defaultProvider: value.defaultProvider,
       updatedAt: settings.updatedAt,
       version: settings.version,
     };
@@ -80,6 +81,7 @@ export class UserSettingsService {
     return {
       theme: value.theme,
       profile: value.profile,
+      defaultProvider: value.defaultProvider,
       updatedAt: settings.updatedAt,
       version: settings.version,
     };
@@ -121,6 +123,7 @@ export class UserSettingsService {
             ? dto.profile.customImageUrl
             : current.profile.customImageUrl,
       },
+      defaultProvider: dto.defaultProvider ?? current.defaultProvider,
     };
 
     // Validate merged result
@@ -146,6 +149,7 @@ export class UserSettingsService {
     return {
       theme: value.theme,
       profile: value.profile,
+      defaultProvider: value.defaultProvider,
       updatedAt: settings.updatedAt,
       version: settings.version,
     };

@@ -12,6 +12,7 @@ export interface UserSettingsValue {
     useProviderImage: boolean;
     customImageUrl?: string | null;
   };
+  defaultProvider?: string;
 }
 
 /**
