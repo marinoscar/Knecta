@@ -329,5 +329,86 @@ describe('System Settings Integration', () => {
         .send(invalidUpdate)
         .expect(400);
     });
+
+    it('should deep merge dataAgent config', async () => {
+      const admin = await createMockAdminUser(context);
+
+      const partialUpdate = {
+        dataAgent: {
+          openai: {
+            model: 'o1',
+            reasoningLevel: 'high',
+          },
+        },
+      };
+
+      context.prismaMock.systemSettings.update.mockResolvedValue({
+        id: 'settings-1',
+        key: 'global',
+        value: {
+          ui: DEFAULT_SYSTEM_SETTINGS.ui,
+          features: DEFAULT_SYSTEM_SETTINGS.features,
+          dataAgent: {
+            openai: {
+              model: 'o1',
+              reasoningLevel: 'high',
+            },
+          },
+        } as any,
+        version: 2,
+        updatedAt: new Date(),
+        updatedByUserId: admin.id,
+        updatedByUser: { id: admin.id, email: admin.email },
+      });
+
+      context.prismaMock.auditEvent.create.mockResolvedValue({} as any);
+
+      const response = await request(context.app.getHttpServer())
+        .patch('/api/system-settings')
+        .set(authHeader(admin.accessToken))
+        .send(partialUpdate)
+        .expect(200);
+
+      expect(response.body.data.dataAgent).toEqual({
+        openai: {
+          model: 'o1',
+          reasoningLevel: 'high',
+        },
+      });
+    });
+
+    it('should return dataAgent in GET response', async () => {
+      const admin = await createMockAdminUser(context);
+
+      context.prismaMock.systemSettings.findUnique.mockResolvedValue({
+        id: 'settings-1',
+        key: 'global',
+        value: {
+          ...DEFAULT_SYSTEM_SETTINGS,
+          dataAgent: {
+            anthropic: {
+              model: 'claude-opus-4-6',
+              reasoningLevel: 'adaptive',
+            },
+          },
+        } as any,
+        version: 1,
+        updatedAt: new Date(),
+        updatedByUserId: null,
+        updatedByUser: null,
+      });
+
+      const response = await request(context.app.getHttpServer())
+        .get('/api/system-settings')
+        .set(authHeader(admin.accessToken))
+        .expect(200);
+
+      expect(response.body.data.dataAgent).toEqual({
+        anthropic: {
+          model: 'claude-opus-4-6',
+          reasoningLevel: 'adaptive',
+        },
+      });
+    });
   });
 });

@@ -99,6 +99,33 @@ describe('DataAgentService', () => {
           name: 'New Chat',
           ontologyId: mockOntologyId,
           ownerId: mockUserId,
+          llmProvider: null,
+        },
+      });
+    });
+
+    it('should create chat with llmProvider when specified', async () => {
+      const dto: CreateChatDto = {
+        name: 'New Chat',
+        ontologyId: mockOntologyId,
+        llmProvider: 'anthropic',
+      };
+
+      mockPrisma.ontology.findFirst.mockResolvedValue(mockOntology as any);
+      mockPrisma.dataChat.create.mockResolvedValue({
+        ...mockChat,
+        llmProvider: 'anthropic',
+      } as any);
+
+      const result = await service.createChat(dto, mockUserId);
+
+      expect(result.llmProvider).toBe('anthropic');
+      expect(mockPrisma.dataChat.create).toHaveBeenCalledWith({
+        data: {
+          name: 'New Chat',
+          ontologyId: mockOntologyId,
+          ownerId: mockUserId,
+          llmProvider: 'anthropic',
         },
       });
     });
@@ -304,6 +331,91 @@ describe('DataAgentService', () => {
         where: { id: mockChatId },
         data: {
           name: 'Renamed Chat',
+          updatedAt: expect.any(Date),
+        },
+      });
+    });
+
+    it('should update llmProvider', async () => {
+      const dto: UpdateChatDto = {
+        llmProvider: 'openai',
+      };
+
+      const updatedChat = {
+        ...mockChat,
+        llmProvider: 'openai',
+        updatedAt: new Date(),
+      };
+
+      mockPrisma.dataChat.findFirst.mockResolvedValue(mockChat as any);
+      mockPrisma.dataChat.update.mockResolvedValue(updatedChat as any);
+
+      const result = await service.updateChat(mockChatId, dto, mockUserId);
+
+      expect(result.llmProvider).toBe('openai');
+      expect(mockPrisma.dataChat.update).toHaveBeenCalledWith({
+        where: { id: mockChatId },
+        data: {
+          llmProvider: 'openai',
+          updatedAt: expect.any(Date),
+        },
+      });
+    });
+
+    it('should clear llmProvider when set to null', async () => {
+      const dto: UpdateChatDto = {
+        llmProvider: null,
+      };
+
+      const updatedChat = {
+        ...mockChat,
+        llmProvider: null,
+        updatedAt: new Date(),
+      };
+
+      mockPrisma.dataChat.findFirst.mockResolvedValue({
+        ...mockChat,
+        llmProvider: 'anthropic',
+      } as any);
+      mockPrisma.dataChat.update.mockResolvedValue(updatedChat as any);
+
+      const result = await service.updateChat(mockChatId, dto, mockUserId);
+
+      expect(result.llmProvider).toBeNull();
+      expect(mockPrisma.dataChat.update).toHaveBeenCalledWith({
+        where: { id: mockChatId },
+        data: {
+          llmProvider: null,
+          updatedAt: expect.any(Date),
+        },
+      });
+    });
+
+    it('should update both name and llmProvider', async () => {
+      const dto: UpdateChatDto = {
+        name: 'New Name',
+        llmProvider: 'anthropic',
+      };
+
+      const updatedChat = {
+        ...mockChat,
+        name: 'New Name',
+        llmProvider: 'anthropic',
+        updatedAt: new Date(),
+      };
+
+      mockPrisma.dataChat.findFirst.mockResolvedValue(mockChat as any);
+      mockPrisma.dataChat.update.mockResolvedValue(updatedChat as any);
+
+      const result = await service.updateChat(mockChatId, dto, mockUserId);
+
+      expect(result.name).toBe('New Name');
+      expect(result.llmProvider).toBe('anthropic');
+      expect(mockPrisma.dataChat.update).toHaveBeenCalledWith({
+        where: { id: mockChatId },
+        data: {
+          name: 'New Name',
+          llmProvider: 'anthropic',
           updatedAt: expect.any(Date),
         },
       });

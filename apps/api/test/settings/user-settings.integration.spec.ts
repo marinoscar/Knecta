@@ -509,6 +509,99 @@ describe('User Settings Integration', () => {
         'https://example.com/custom.jpg',
       );
     });
+
+    it('should update defaultProvider in user settings', async () => {
+      const user = await createMockTestUser(context);
+
+      const partialUpdate = {
+        defaultProvider: 'anthropic',
+      };
+
+      context.prismaMock.userSettings.update.mockResolvedValue({
+        id: `settings-${user.id}`,
+        userId: user.id,
+        value: {
+          theme: DEFAULT_USER_SETTINGS.theme,
+          profile: DEFAULT_USER_SETTINGS.profile,
+          defaultProvider: 'anthropic',
+        } as any,
+        version: 2,
+        updatedAt: new Date(),
+      });
+
+      context.prismaMock.user.update.mockResolvedValue({} as any);
+
+      const response = await request(context.app.getHttpServer())
+        .patch('/api/user-settings')
+        .set(authHeader(user.accessToken))
+        .send(partialUpdate)
+        .expect(200);
+
+      expect(response.body.data.defaultProvider).toBe('anthropic');
+    });
+
+    it('should return defaultProvider in GET response', async () => {
+      const user = await createMockTestUser(context);
+
+      context.prismaMock.userSettings.findUnique.mockResolvedValue({
+        id: `settings-${user.id}`,
+        userId: user.id,
+        value: {
+          ...DEFAULT_USER_SETTINGS,
+          defaultProvider: 'openai',
+        } as any,
+        version: 1,
+        updatedAt: new Date(),
+      });
+
+      const response = await request(context.app.getHttpServer())
+        .get('/api/user-settings')
+        .set(authHeader(user.accessToken))
+        .expect(200);
+
+      expect(response.body.data.defaultProvider).toBe('openai');
+    });
+
+    it('should preserve defaultProvider during theme-only PATCH', async () => {
+      const user = await createMockTestUser(context);
+
+      // Mock existing settings with defaultProvider
+      context.prismaMock.userSettings.findUnique.mockResolvedValue({
+        id: `settings-${user.id}`,
+        userId: user.id,
+        value: {
+          ...DEFAULT_USER_SETTINGS,
+          defaultProvider: 'anthropic',
+        } as any,
+        version: 1,
+        updatedAt: new Date(),
+      });
+
+      const partialUpdate = { theme: 'dark' as const };
+
+      context.prismaMock.userSettings.update.mockResolvedValue({
+        id: `settings-${user.id}`,
+        userId: user.id,
+        value: {
+          theme: 'dark',
+          profile: DEFAULT_USER_SETTINGS.profile,
+          defaultProvider: 'anthropic', // Should be preserved
+        } as any,
+        version: 2,
+        updatedAt: new Date(),
+      });
+
+      context.prismaMock.user.update.mockResolvedValue({} as any);
+
+      const response = await request(context.app.getHttpServer())
+        .patch('/api/user-settings')
+        .set(authHeader(user.accessToken))
+        .send(partialUpdate)
+        .expect(200);
+
+      expect(response.body.data.theme).toBe('dark');
+      expect(response.body.data.defaultProvider).toBe('anthropic');
+    });
   });
 
   // User isolation tests require complex multi-user mock setup

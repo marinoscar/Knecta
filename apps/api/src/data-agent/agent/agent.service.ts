@@ -84,8 +84,8 @@ export class DataAgentAgentService {
 
     // ── Step 2: Generate embedding for user question ──
     this.logger.log('Generating embedding for user question');
-    const provider = this.embeddingService.getProvider();
-    const queryEmbedding = await provider.generateEmbedding(userQuestion);
+    const embeddingProvider = this.embeddingService.getProvider();
+    const queryEmbedding = await embeddingProvider.generateEmbedding(userQuestion);
 
     // ── Step 3: Vector search for relevant datasets ──
     this.logger.log('Searching for relevant datasets');
