@@ -119,10 +119,10 @@ export class LlmService {
 
         // Set thinking options if enabled
         if (thinkingEnabled) {
-          if (config.reasoningLevel === 'adaptive') {
+          if (config?.reasoningLevel === 'adaptive') {
             opts.thinking = { type: 'adaptive' };
           } else {
-            const budget = parseInt(config.reasoningLevel, 10);
+            const budget = parseInt(config?.reasoningLevel ?? '', 10);
             opts.thinking = { type: 'enabled', budget_tokens: budget };
           }
         }
