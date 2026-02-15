@@ -479,8 +479,40 @@ model DataChatMessage {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   // Relations
-  chat DataChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  chat      DataChat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  llmTraces LlmTrace[]
 
   @@index([chatId])
   @@map("data_chat_messages")
+}
+
+model LlmTrace {
+  id               String   @id @default(uuid()) @db.Uuid
+  messageId        String   @map("message_id") @db.Uuid
+  phase            String   @db.VarChar(30)
+  callIndex        Int      @map("call_index")
+  stepId           Int?     @map("step_id")
+  purpose          String   @db.VarChar(100)
+  provider         String   @db.VarChar(30)
+  model            String   @db.VarChar(100)
+  temperature      Float?
+  structuredOutput Boolean  @default(false) @map("structured_output")
+  promptMessages   Json     @map("prompt_messages")
+  responseContent  String   @map("response_content") @db.Text
+  toolCalls        Json?    @map("tool_calls")
+  promptTokens     Int      @default(0) @map("prompt_tokens")
+  completionTokens Int      @default(0) @map("completion_tokens")
+  totalTokens      Int      @default(0) @map("total_tokens")
+  startedAt        DateTime @map("started_at") @db.Timestamptz
+  completedAt      DateTime @map("completed_at") @db.Timestamptz
+  durationMs       Int      @map("duration_ms")
+  error            String?  @db.Text
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  message DataChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([messageId, phase])
+  @@map("llm_traces")
 }
