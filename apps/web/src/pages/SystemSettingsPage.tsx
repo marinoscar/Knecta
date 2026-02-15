@@ -16,6 +16,7 @@ import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { SystemSettingsEditor } from '../components/admin/SystemSettingsEditor';
 import { FeatureFlagsList } from '../components/admin/FeatureFlagsList';
 import { UISettings } from '../components/admin/UISettings';
+import { DataAgentSettings } from '../components/admin/DataAgentSettings';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -99,6 +100,7 @@ export default function SystemSettingsPage() {
             >
               <Tab label="UI Settings" />
               <Tab label="Feature Flags" />
+              <Tab label="Data Agent" />
               <Tab label="Advanced (JSON)" />
             </Tabs>
 
@@ -120,6 +122,14 @@ export default function SystemSettingsPage() {
               </TabPanel>
 
               <TabPanel value={tabIndex} index={2}>
+                <DataAgentSettings
+                  settings={settings}
+                  onSave={(dataAgent) => handleSave('dataAgent', dataAgent)}
+                  disabled={!canWrite || isSaving}
+                />
+              </TabPanel>
+
+              <TabPanel value={tabIndex} index={3}>
                 <SystemSettingsEditor
                   settings={settings}
                   onSave={updateSettings}

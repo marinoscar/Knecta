@@ -24,11 +24,23 @@ export interface UserSettings {
   version: number;
 }
 
+export interface DataAgentProviderConfig {
+  temperature?: number;
+  model?: string;
+  reasoningLevel?: string;
+  customBudget?: number;
+}
+
 export interface SystemSettings {
   ui: {
     allowUserThemeOverride: boolean;
   };
   features: Record<string, boolean>;
+  dataAgent?: {
+    openai?: DataAgentProviderConfig;
+    anthropic?: DataAgentProviderConfig;
+    azure?: DataAgentProviderConfig;
+  };
   updatedAt: string;
   updatedBy: { id: string; email: string } | null;
   version: number;
