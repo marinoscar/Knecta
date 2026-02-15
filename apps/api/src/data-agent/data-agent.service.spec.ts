@@ -583,4 +583,233 @@ describe('DataAgentService', () => {
       });
     });
   });
+
+  describe('persistTraces', () => {
+    it('persists traces using prisma.llmTrace.createMany', async () => {
+      const messageId = 'msg-456';
+      const traces = [
+        {
+          phase: 'planner',
+          callIndex: 0,
+          stepId: 1,
+          purpose: 'Generate plan',
+          provider: 'openai',
+          model: 'gpt-4',
+          temperature: 0.7,
+          structuredOutput: true,
+          promptMessages: [
+            { role: 'system', content: 'System prompt' },
+            { role: 'human', content: 'User question' },
+          ],
+          responseContent: 'Plan response',
+          toolCalls: [{ name: 'get_sample_data', args: { table: 'users' } }],
+          promptTokens: 100,
+          completionTokens: 50,
+          totalTokens: 150,
+          startedAt: 1000,
+          completedAt: 2000,
+          durationMs: 1000,
+        },
+        {
+          phase: 'navigator',
+          callIndex: 1,
+          stepId: undefined,
+          purpose: 'Find datasets',
+          provider: 'openai',
+          model: 'gpt-4',
+          temperature: undefined,
+          structuredOutput: false,
+          promptMessages: [{ role: 'human', content: 'Find datasets' }],
+          responseContent: 'Navigator response',
+          toolCalls: undefined,
+          promptTokens: 80,
+          completionTokens: 40,
+          totalTokens: 120,
+          startedAt: 3000,
+          completedAt: 4000,
+          durationMs: 1000,
+          error: undefined,
+        },
+      ];
+
+      mockPrisma.llmTrace.createMany.mockResolvedValue({ count: 2 } as any);
+
+      await service.persistTraces(messageId, traces as any);
+
+      expect(mockPrisma.llmTrace.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            messageId,
+            phase: 'planner',
+            callIndex: 0,
+            stepId: 1,
+            purpose: 'Generate plan',
+            provider: 'openai',
+            model: 'gpt-4',
+            temperature: 0.7,
+            structuredOutput: true,
+            promptMessages: [
+              { role: 'system', content: 'System prompt' },
+              { role: 'human', content: 'User question' },
+            ],
+            responseContent: 'Plan response',
+            toolCalls: [{ name: 'get_sample_data', args: { table: 'users' } }],
+            promptTokens: 100,
+            completionTokens: 50,
+            totalTokens: 150,
+            startedAt: new Date(1000),
+            completedAt: new Date(2000),
+            durationMs: 1000,
+            error: null,
+          },
+          {
+            messageId,
+            phase: 'navigator',
+            callIndex: 1,
+            stepId: null,
+            purpose: 'Find datasets',
+            provider: 'openai',
+            model: 'gpt-4',
+            temperature: null,
+            structuredOutput: false,
+            promptMessages: [{ role: 'human', content: 'Find datasets' }],
+            responseContent: 'Navigator response',
+            toolCalls: undefined,
+            promptTokens: 80,
+            completionTokens: 40,
+            totalTokens: 120,
+            startedAt: new Date(3000),
+            completedAt: new Date(4000),
+            durationMs: 1000,
+            error: null,
+          },
+        ],
+      });
+    });
+
+    it('does nothing when traces array is empty', async () => {
+      const messageId = 'msg-789';
+
+      await service.persistTraces(messageId, []);
+
+      expect(mockPrisma.llmTrace.createMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getMessageTraces', () => {
+    const mockMessageId = 'msg-999';
+
+    it('returns traces ordered by callIndex', async () => {
+      const mockTraces = [
+        {
+          id: 'trace-1',
+          messageId: mockMessageId,
+          phase: 'planner',
+          callIndex: 0,
+          stepId: null,
+          purpose: 'Plan',
+          provider: 'openai',
+          model: 'gpt-4',
+          temperature: null,
+          structuredOutput: false,
+          promptMessages: [],
+          responseContent: 'Response 1',
+          toolCalls: null,
+          promptTokens: 100,
+          completionTokens: 50,
+          totalTokens: 150,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          durationMs: 1000,
+          error: null,
+          createdAt: new Date(),
+        },
+        {
+          id: 'trace-2',
+          messageId: mockMessageId,
+          phase: 'navigator',
+          callIndex: 1,
+          stepId: null,
+          purpose: 'Navigate',
+          provider: 'openai',
+          model: 'gpt-4',
+          temperature: null,
+          structuredOutput: false,
+          promptMessages: [],
+          responseContent: 'Response 2',
+          toolCalls: null,
+          promptTokens: 80,
+          completionTokens: 40,
+          totalTokens: 120,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          durationMs: 800,
+          error: null,
+          createdAt: new Date(),
+        },
+      ];
+
+      mockPrisma.dataChat.findFirst.mockResolvedValue(mockChat as any);
+      mockPrisma.dataChatMessage.findFirst.mockResolvedValue({
+        ...mockMessage,
+        id: mockMessageId,
+      } as any);
+      mockPrisma.llmTrace.findMany.mockResolvedValue(mockTraces as any);
+
+      const result = await service.getMessageTraces(
+        mockMessageId,
+        mockChatId,
+        mockUserId,
+      );
+
+      expect(result).toEqual(mockTraces);
+      expect(mockPrisma.llmTrace.findMany).toHaveBeenCalledWith({
+        where: { messageId: mockMessageId },
+        orderBy: { callIndex: 'asc' },
+      });
+    });
+
+    it('throws NotFoundException when chat not found', async () => {
+      mockPrisma.dataChat.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getMessageTraces(mockMessageId, 'nonexistent-chat', mockUserId),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        service.getMessageTraces(mockMessageId, 'nonexistent-chat', mockUserId),
+      ).rejects.toThrow('Chat not found');
+
+      expect(mockPrisma.llmTrace.findMany).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException when message not found', async () => {
+      mockPrisma.dataChat.findFirst.mockResolvedValue(mockChat as any);
+      mockPrisma.dataChatMessage.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getMessageTraces(mockMessageId, mockChatId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        service.getMessageTraces(mockMessageId, mockChatId, mockUserId),
+      ).rejects.toThrow('Message not found');
+
+      expect(mockPrisma.llmTrace.findMany).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException when message belongs to different chat', async () => {
+      const differentChatId = 'other-chat-id';
+
+      mockPrisma.dataChat.findFirst.mockResolvedValue(mockChat as any);
+      mockPrisma.dataChatMessage.findFirst.mockResolvedValue(null); // Wrong chatId means null
+
+      await expect(
+        service.getMessageTraces(mockMessageId, differentChatId, mockUserId),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        service.getMessageTraces(mockMessageId, differentChatId, mockUserId),
+      ).rejects.toThrow('Message not found');
+
+      expect(mockPrisma.llmTrace.findMany).not.toHaveBeenCalled();
+    });
+  });
 });
