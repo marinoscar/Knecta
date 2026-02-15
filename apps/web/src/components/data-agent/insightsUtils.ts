@@ -1,4 +1,4 @@
-import type { DataAgentStreamEvent } from '../../types';
+import type { DataAgentStreamEvent, OntologyGraph as OntologyGraphType, GraphNode, GraphEdge } from '../../types';
 
 // Phase configuration
 export const PHASE_ORDER = [
@@ -267,4 +267,95 @@ export function extractLiveTokens(
  */
 export function formatTokenCount(n: number): string {
   return n.toLocaleString('en-US');
+}
+
+// Join Plan Types
+export interface JoinEdgeData {
+  fromDataset: string;
+  toDataset: string;
+  fromColumns: string[];
+  toColumns: string[];
+  relationshipName: string;
+}
+
+export interface JoinPlanData {
+  relevantDatasets: Array<{ name: string; description: string; source: string; yaml?: string }>;
+  joinPaths: Array<{
+    datasets: string[];
+    edges: JoinEdgeData[];
+  }>;
+  notes: string;
+}
+
+/**
+ * Extract join plan from either live stream events or message metadata
+ */
+export function extractJoinPlan(
+  streamEvents: DataAgentStreamEvent[],
+  metadata: any,
+  isLive: boolean
+): JoinPlanData | null {
+  if (isLive) {
+    const navigatorArtifact = streamEvents.find(
+      (e) => e.type === 'phase_artifact' && e.phase === 'navigator'
+    );
+    if (!navigatorArtifact?.artifact) return null;
+    return navigatorArtifact.artifact as unknown as JoinPlanData;
+  } else {
+    return metadata?.joinPlan || null;
+  }
+}
+
+/**
+ * Transform JoinPlanArtifact into OntologyGraph format for visualization
+ */
+export function joinPlanToGraph(joinPlan: JoinPlanData): OntologyGraphType {
+  // 1. Create GraphNode for each dataset in relevantDatasets
+  const nodeMap = new Map<string, GraphNode>();
+  joinPlan.relevantDatasets.forEach((ds, idx) => {
+    nodeMap.set(ds.name, {
+      id: `ds-${idx}`,
+      label: 'Dataset',
+      name: ds.name,
+      properties: {
+        name: ds.name,
+        source: ds.source,
+        description: ds.description,
+        yaml: ds.yaml || '',
+      },
+    });
+  });
+
+  // 2. Collect unique edges, deduplicate by fromDataset|toDataset|relationshipName
+  const seenEdges = new Set<string>();
+  const edges: GraphEdge[] = [];
+
+  joinPlan.joinPaths.forEach((jp) => {
+    jp.edges.forEach((edge) => {
+      const key = `${edge.fromDataset}|${edge.toDataset}|${edge.relationshipName}`;
+      if (seenEdges.has(key)) return;
+      seenEdges.add(key);
+
+      const sourceNode = nodeMap.get(edge.fromDataset);
+      const targetNode = nodeMap.get(edge.toDataset);
+      if (!sourceNode || !targetNode) return;
+
+      edges.push({
+        id: `edge-${edges.length}`,
+        source: sourceNode.id,
+        target: targetNode.id,
+        type: 'RELATES_TO',
+        properties: {
+          name: edge.relationshipName,
+          fromColumns: edge.fromColumns.join(', '),
+          toColumns: edge.toColumns.join(', '),
+        },
+      });
+    });
+  });
+
+  return {
+    nodes: Array.from(nodeMap.values()),
+    edges,
+  };
 }
