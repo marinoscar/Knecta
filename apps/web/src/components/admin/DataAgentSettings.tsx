@@ -104,7 +104,7 @@ export function DataAgentSettings({ settings, onSave, disabled }: DataAgentSetti
     }
   };
 
-  const renderReasoningLevelControl = (provider: LLMProviderInfo, providerKey: ProviderKey) => {
+  const renderReasoningLevelControl = (_provider: LLMProviderInfo, providerKey: ProviderKey) => {
     const config = providerConfigs[providerKey];
     const reasoningLevel = config.reasoningLevel || '';
     const isCustomBudget = reasoningLevel === 'custom';

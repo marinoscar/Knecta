@@ -24,7 +24,7 @@ export function ModelSelector({
 }: ModelSelectorProps) {
   // Ensure selected provider is valid, otherwise use first provider
   const validSelected = providers.find((p) => p.name === selectedProvider)
-    ? selectedProvider
+    ? (selectedProvider as string)
     : providers[0]?.name || '';
 
   return (
