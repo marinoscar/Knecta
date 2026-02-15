@@ -364,6 +364,7 @@ export interface DataChat {
   id: string;
   name: string;
   ontologyId: string;
+  llmProvider?: string | null;
   ontology?: {
     id: string;
     name: string;

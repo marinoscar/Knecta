@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { getDataChat, sendDataAgentMessage } from '../services/api';
+import { getDataChat, sendDataAgentMessage, updateDataChat } from '../services/api';
 import { api } from '../services/api';
 import type { DataChat, DataChatMessage, DataAgentStreamEvent } from '../types';
 
@@ -12,6 +12,7 @@ interface UseDataChatResult {
   error: string | null;
   loadChat: (id: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
+  changeProvider: (provider: string) => Promise<void>;
   cancelStream: () => void;
   clearError: () => void;
 }
@@ -186,6 +187,19 @@ export function useDataChat(): UseDataChatResult {
     [chat, isStreaming],
   );
 
+  const changeProvider = useCallback(
+    async (provider: string) => {
+      if (!chat) return;
+      try {
+        const updated = await updateDataChat(chat.id, { llmProvider: provider });
+        setChat((prev) => prev ? { ...prev, llmProvider: updated.llmProvider } : prev);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to update provider');
+      }
+    },
+    [chat],
+  );
+
   const cancelStream = useCallback(() => {
     abortControllerRef.current?.abort();
     setIsStreaming(false);
@@ -202,6 +216,7 @@ export function useDataChat(): UseDataChatResult {
     error,
     loadChat,
     sendMessage,
+    changeProvider,
     cancelStream,
     clearError,
   };

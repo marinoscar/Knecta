@@ -528,6 +528,7 @@ export async function getDataChats(params?: {
 export async function createDataChat(data: {
   name: string;
   ontologyId: string;
+  llmProvider?: string | null;
 }): Promise<DataChat> {
   return api.post<DataChat>('/data-agent/chats', data);
 }
@@ -538,7 +539,7 @@ export async function getDataChat(id: string): Promise<DataChat> {
 
 export async function updateDataChat(
   id: string,
-  data: { name: string },
+  data: { name?: string; llmProvider?: string | null },
 ): Promise<DataChat> {
   return api.patch<DataChat>(`/data-agent/chats/${id}`, data);
 }

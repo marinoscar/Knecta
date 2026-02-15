@@ -9,6 +9,8 @@ import { NewChatDialog } from '../components/data-agent/NewChatDialog';
 import { AgentInsightsPanel } from '../components/data-agent/AgentInsightsPanel';
 import { useDataAgent } from '../hooks/useDataAgent';
 import { useDataChat } from '../hooks/useDataChat';
+import { useLlmProviders } from '../hooks/useLlmProviders';
+import { useUserSettings } from '../hooks/useUserSettings';
 
 export default function DataAgentPage() {
   const { chatId } = useParams<{ chatId: string }>();
@@ -19,6 +21,9 @@ export default function DataAgentPage() {
   const theme = useTheme();
   const isLargeScreen = useMediaQuery(theme.breakpoints.up('lg'));
   const isMediumScreen = useMediaQuery(theme.breakpoints.between('md', 'lg'));
+
+  const { settings: userSettings } = useUserSettings();
+  const { providers, defaultProvider } = useLlmProviders(userSettings?.defaultProvider);
 
   const {
     chats,
@@ -39,6 +44,7 @@ export default function DataAgentPage() {
     error: chatError,
     loadChat,
     sendMessage,
+    changeProvider,
     clearError,
   } = useDataChat();
 
@@ -65,9 +71,9 @@ export default function DataAgentPage() {
   }, []);
 
   const handleChatCreated = useCallback(
-    async (_tempId: string, ontologyId: string, name: string) => {
+    async (_tempId: string, ontologyId: string, name: string, llmProvider?: string | null) => {
       try {
-        const newChat = await createChat({ name, ontologyId });
+        const newChat = await createChat({ name, ontologyId, llmProvider: llmProvider || defaultProvider });
         navigate(`/agent/${newChat.id}`);
 
         // If there's a pending suggestion, send it after a brief delay
@@ -82,7 +88,7 @@ export default function DataAgentPage() {
         console.error('Failed to create chat:', err);
       }
     },
-    [createChat, navigate, pendingSuggestion, sendMessage],
+    [createChat, navigate, pendingSuggestion, sendMessage, defaultProvider],
   );
 
   const handleSelectChat = useCallback(
@@ -180,6 +186,9 @@ export default function DataAgentPage() {
               onSend={sendMessage}
               isStreaming={isStreaming}
               disabled={chatLoading || !chat}
+              providers={providers}
+              selectedProvider={chat?.llmProvider || defaultProvider}
+              onProviderChange={changeProvider}
             />
           </>
         )}
@@ -230,6 +239,8 @@ export default function DataAgentPage() {
           setPendingSuggestion(null);
         }}
         onCreated={handleChatCreated}
+        providers={providers}
+        defaultProvider={defaultProvider}
       />
     </Box>
   );

@@ -21,7 +21,7 @@ interface UseDataAgentResult {
     search?: string;
     ontologyId?: string;
   }) => Promise<void>;
-  createChat: (data: { name: string; ontologyId: string }) => Promise<DataChat>;
+  createChat: (data: { name: string; ontologyId: string; llmProvider?: string | null }) => Promise<DataChat>;
   deleteChat: (id: string) => Promise<void>;
   renameChat: (id: string, name: string) => Promise<void>;
   clearError: () => void;
@@ -69,7 +69,7 @@ export function useDataAgent(): UseDataAgentResult {
   }, []);
 
   const createChat = useCallback(
-    async (data: { name: string; ontologyId: string }) => {
+    async (data: { name: string; ontologyId: string; llmProvider?: string | null }) => {
       setError(null);
       try {
         const chat = await createDataChat(data);
