@@ -1,6 +1,7 @@
 import { SystemMessage, HumanMessage, AIMessage } from '@langchain/core/messages';
 import { DataAgentTracer } from './data-agent-tracer';
-import type { LlmTraceInput, EmitFn } from '../types';
+import type { LlmTraceInput } from '../types';
+import type { EmitFn } from '../graph';
 
 describe('DataAgentTracer', () => {
   let tracer: DataAgentTracer;

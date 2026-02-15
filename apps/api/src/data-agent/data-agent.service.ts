@@ -351,7 +351,7 @@ export class DataAgentService {
         structuredOutput: trace.structuredOutput,
         promptMessages: trace.promptMessages,
         responseContent: trace.responseContent,
-        toolCalls: trace.toolCalls ?? undefined,
+        toolCalls: trace.toolCalls as any ?? undefined,
         promptTokens: trace.promptTokens,
         completionTokens: trace.completionTokens,
         totalTokens: trace.totalTokens,

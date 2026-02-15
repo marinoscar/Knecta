@@ -30,7 +30,7 @@ export function createExplainerNode(llm: any, sandboxService: SandboxService, em
         new SystemMessage(prompt),
         new HumanMessage('Provide the answer.'),
       ];
-      const { response } = await tracer.trace(
+      const { response } = await tracer.trace<any>(
         { phase: 'explainer', purpose: 'narrative', structuredOutput: false },
         messages,
         () => llm.invoke(messages),

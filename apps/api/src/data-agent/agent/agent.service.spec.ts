@@ -515,6 +515,7 @@ describe('DataAgentAgentService', () => {
         connectionId: mockConnectionId,
         databaseType: 'postgresql',
         emit: onEvent,
+        tracer: expect.any(Object),
       });
 
       expect(mockGraph.invoke).toHaveBeenCalledWith({

@@ -51,7 +51,7 @@ export function createNavigatorNode(
       while (iterations < MAX_NAVIGATOR_ITERATIONS) {
         iterations++;
 
-        const { response } = await tracer.trace(
+        const { response } = await tracer.trace<any>(
           { phase: 'navigator', purpose: `tool_exploration_${iterations}`, structuredOutput: false },
           messages,
           () => llmWithTools.invoke(messages),

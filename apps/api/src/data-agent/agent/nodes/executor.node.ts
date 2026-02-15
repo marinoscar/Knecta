@@ -72,7 +72,7 @@ export function createExecutorNode(
               try {
                 const repairPrompt = buildExecutorRepairPrompt(step.description, querySpec.pilotSql, errMsg, state.databaseType, datasetSchemas);
                 const repairMessages = [new SystemMessage(repairPrompt)];
-                const { response: repairResponse } = await tracer.trace(
+                const { response: repairResponse } = await tracer.trace<any>(
                   { phase: 'executor', stepId: step.id, purpose: `sql_repair_step_${step.id}`, structuredOutput: false },
                   repairMessages,
                   () => llm.invoke(repairMessages),
@@ -132,7 +132,7 @@ export function createExecutorNode(
               new SystemMessage('You are a Python code generator. Output ONLY executable Python code. No markdown fences, no explanation.'),
               new HumanMessage(prompt),
             ];
-            const { response: codeResponse } = await tracer.trace(
+            const { response: codeResponse } = await tracer.trace<any>(
               { phase: 'executor', stepId: step.id, purpose: `python_gen_step_${step.id}`, structuredOutput: false },
               codeMessages,
               () => llm.invoke(codeMessages),

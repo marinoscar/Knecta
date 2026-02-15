@@ -70,7 +70,7 @@ export function createSqlBuilderNode(
         ),
       ];
 
-      const { response } = await tracer.trace(
+      const { response } = await tracer.trace<any>(
         { phase: 'sql_builder', purpose: 'query_generation', structuredOutput: true },
         messages,
         () => structuredLlm.invoke(messages),

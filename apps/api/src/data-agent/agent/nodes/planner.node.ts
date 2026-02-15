@@ -54,7 +54,7 @@ export function createPlannerNode(llm: any, emit: EmitFn, tracer: DataAgentTrace
         new HumanMessage(state.userQuestion),
       ];
 
-      const { response } = await tracer.trace(
+      const { response } = await tracer.trace<any>(
         { phase: 'planner', purpose: 'plan_generation', structuredOutput: true },
         messages,
         () => structuredLlm.invoke(messages),

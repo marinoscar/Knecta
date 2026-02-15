@@ -59,7 +59,7 @@ export function createVerifierNode(llm: any, sandboxService: SandboxService, emi
         new SystemMessage('You are a Python code generator. Output ONLY executable Python code. No markdown fences. The code must print a JSON object as its last output line.'),
         new HumanMessage(prompt),
       ];
-      const { response: codeResponse } = await tracer.trace(
+      const { response: codeResponse } = await tracer.trace<any>(
         { phase: 'verifier', purpose: 'verification_code', structuredOutput: false },
         messages,
         () => llm.invoke(messages),
