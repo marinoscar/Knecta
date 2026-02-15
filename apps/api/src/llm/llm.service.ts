@@ -72,6 +72,7 @@ export class LlmService {
         if (!apiKey) throw new BadRequestException('OpenAI API key not configured');
         const model = config?.model || this.configService.get<string>('llm.openai.model') || 'gpt-4o';
         const temperature = config?.temperature ?? 0;
+        const reasoningEnabled = !!config?.reasoningLevel;
 
         const modelKwargs: Record<string, unknown> = {};
         if (config?.reasoningLevel) {
@@ -81,7 +82,8 @@ export class LlmService {
         return new ChatOpenAI({
           openAIApiKey: apiKey,
           modelName: model,
-          temperature,
+          // Reasoning models (o1/o3) do not support custom temperature
+          ...(reasoningEnabled ? {} : { temperature }),
           ...(Object.keys(modelKwargs).length > 0 ? { modelKwargs } : {}),
         });
       }
@@ -134,6 +136,7 @@ export class LlmService {
         const deployment = config?.model || this.configService.get<string>('llm.azure.deployment');
         const apiVersion = this.configService.get<string>('llm.azure.apiVersion') || '2024-02-01';
         const temperature = config?.temperature ?? 0;
+        const reasoningEnabled = !!config?.reasoningLevel;
 
         if (!apiKey || !endpoint || !deployment) {
           throw new BadRequestException('Azure OpenAI not fully configured');
@@ -151,7 +154,8 @@ export class LlmService {
             defaultQuery: { 'api-version': apiVersion },
             defaultHeaders: { 'api-key': apiKey },
           },
-          temperature,
+          // Reasoning models (o1/o3) do not support custom temperature
+          ...(reasoningEnabled ? {} : { temperature }),
           ...(Object.keys(modelKwargs).length > 0 ? { modelKwargs } : {}),
         });
       }
