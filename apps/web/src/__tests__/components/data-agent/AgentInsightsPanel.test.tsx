@@ -751,4 +751,148 @@ describe('AgentInsightsPanel', () => {
       expect(screen.getByText('3,000')).toBeInTheDocument();
     });
   });
+
+  describe('Join Graph Section', () => {
+    it('does NOT show Join Graph section when no joinPlan in metadata', () => {
+      const message = makeAssistantMessage({
+        metadata: {
+          durationMs: 5000,
+          tokensUsed: { prompt: 1000, completion: 500, total: 1500 },
+        },
+      });
+
+      render(
+        <AgentInsightsPanel
+          messages={[message]}
+          streamEvents={[]}
+          isStreaming={false}
+          onClose={() => {}}
+        />
+      );
+
+      expect(screen.queryByText('Join Graph')).not.toBeInTheDocument();
+    });
+
+    it('shows Join Graph section in history mode when joinPlan exists', () => {
+      const joinPlan = {
+        relevantDatasets: [
+          { name: 'orders', description: 'Customer orders', source: 'public.orders', yaml: 'name: orders' },
+          { name: 'customers', description: 'Customer accounts', source: 'public.customers', yaml: 'name: customers' },
+        ],
+        joinPaths: [
+          {
+            datasets: ['orders', 'customers'],
+            edges: [
+              {
+                fromDataset: 'orders',
+                toDataset: 'customers',
+                fromColumns: ['customer_id'],
+                toColumns: ['id'],
+                relationshipName: 'placed_by',
+              },
+            ],
+          },
+        ],
+        notes: 'Found 2 datasets and 1 join path',
+      };
+
+      const message = makeAssistantMessage({
+        metadata: {
+          durationMs: 5000,
+          tokensUsed: { prompt: 1000, completion: 500, total: 1500 },
+          joinPlan,
+        },
+      });
+
+      render(
+        <AgentInsightsPanel
+          messages={[message]}
+          streamEvents={[]}
+          isStreaming={false}
+          onClose={() => {}}
+        />
+      );
+
+      expect(screen.getByText('Join Graph')).toBeInTheDocument();
+      expect(screen.getByText('2 datasets')).toBeInTheDocument();
+      expect(screen.getByText('1 join paths')).toBeInTheDocument();
+      expect(screen.getByText('View')).toBeInTheDocument();
+    });
+
+    it('shows Join Graph section in live mode after navigator phase_artifact', () => {
+      const message = makeAssistantMessage({
+        status: 'generating',
+        metadata: {
+          startedAt: Date.now(),
+        },
+      });
+
+      const joinPlanArtifact = {
+        relevantDatasets: [
+          { name: 'orders', description: 'Orders', source: 'public.orders', yaml: '' },
+          { name: 'products', description: 'Products', source: 'public.products', yaml: '' },
+        ],
+        joinPaths: [
+          {
+            datasets: ['orders', 'products'],
+            edges: [
+              {
+                fromDataset: 'orders',
+                toDataset: 'products',
+                fromColumns: ['product_id'],
+                toColumns: ['id'],
+                relationshipName: 'contains',
+              },
+            ],
+          },
+        ],
+        notes: 'Found 2 datasets and 1 join path',
+      };
+
+      const events: DataAgentStreamEvent[] = [
+        { type: 'phase_start', phase: 'navigator' },
+        { type: 'phase_artifact', phase: 'navigator', artifact: joinPlanArtifact },
+      ];
+
+      render(
+        <AgentInsightsPanel
+          messages={[message]}
+          streamEvents={events}
+          isStreaming={true}
+          onClose={() => {}}
+        />
+      );
+
+      expect(screen.getByText('Join Graph')).toBeInTheDocument();
+      expect(screen.getByText('2 datasets')).toBeInTheDocument();
+      expect(screen.getByText('1 join paths')).toBeInTheDocument();
+    });
+
+    it('does NOT show Join Graph when relevantDatasets is empty', () => {
+      const joinPlanEmpty = {
+        relevantDatasets: [],
+        joinPaths: [],
+        notes: 'No datasets',
+      };
+
+      const message = makeAssistantMessage({
+        metadata: {
+          durationMs: 5000,
+          tokensUsed: { prompt: 1000, completion: 500, total: 1500 },
+          joinPlan: joinPlanEmpty,
+        },
+      });
+
+      render(
+        <AgentInsightsPanel
+          messages={[message]}
+          streamEvents={[]}
+          isStreaming={false}
+          onClose={() => {}}
+        />
+      );
+
+      expect(screen.queryByText('Join Graph')).not.toBeInTheDocument();
+    });
+  });
 });

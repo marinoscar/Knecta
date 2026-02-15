@@ -6,6 +6,8 @@ import {
   extractLiveTokens,
   formatDuration,
   formatTokenCount,
+  extractJoinPlan,
+  joinPlanToGraph,
 } from '../../../components/data-agent/insightsUtils';
 import type { DataAgentStreamEvent } from '../../../types';
 
@@ -529,6 +531,255 @@ describe('insightsUtils', () => {
         { type: 'token_update', phase: 'navigator', tokensUsed: { completion: 50 } as any },
       ];
       expect(extractLiveTokens(events)).toEqual({ prompt: 100, completion: 50, total: 0 });
+    });
+  });
+
+  describe('extractJoinPlan - live mode', () => {
+    it('returns null when no navigator artifact event', () => {
+      const events: DataAgentStreamEvent[] = [
+        { type: 'phase_start', phase: 'navigator' },
+      ];
+
+      const result = extractJoinPlan(events, null, true);
+
+      expect(result).toBeNull();
+    });
+
+    it('returns joinPlan from phase_artifact event where phase="navigator"', () => {
+      const joinPlanArtifact = {
+        relevantDatasets: [
+          { name: 'orders', description: 'Customer orders', source: 'public.orders', yaml: 'name: orders' },
+        ],
+        joinPaths: [],
+        notes: 'Found 1 dataset',
+      };
+
+      const events: DataAgentStreamEvent[] = [
+        { type: 'phase_start', phase: 'navigator' },
+        { type: 'phase_artifact', phase: 'navigator', artifact: joinPlanArtifact },
+      ];
+
+      const result = extractJoinPlan(events, null, true);
+
+      expect(result).toEqual(joinPlanArtifact);
+    });
+
+    it('ignores phase_artifact events from other phases', () => {
+      const events: DataAgentStreamEvent[] = [
+        { type: 'phase_artifact', phase: 'planner', artifact: { plan: 'data' } },
+      ];
+
+      const result = extractJoinPlan(events, null, true);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('extractJoinPlan - history mode', () => {
+    it('returns null when metadata is null', () => {
+      const result = extractJoinPlan([], null, false);
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null when metadata.joinPlan is undefined', () => {
+      const metadata = { durationMs: 5000 };
+
+      const result = extractJoinPlan([], metadata, false);
+
+      expect(result).toBeNull();
+    });
+
+    it('returns metadata.joinPlan when present', () => {
+      const joinPlan = {
+        relevantDatasets: [
+          { name: 'customers', description: 'Customer accounts', source: 'public.customers', yaml: 'name: customers' },
+          { name: 'orders', description: 'Customer orders', source: 'public.orders', yaml: 'name: orders' },
+        ],
+        joinPaths: [
+          {
+            datasets: ['orders', 'customers'],
+            edges: [
+              {
+                fromDataset: 'orders',
+                toDataset: 'customers',
+                fromColumns: ['customer_id'],
+                toColumns: ['id'],
+                relationshipName: 'placed_by',
+              },
+            ],
+          },
+        ],
+        notes: 'Found 2 datasets and 1 join path',
+      };
+
+      const metadata = { joinPlan };
+
+      const result = extractJoinPlan([], metadata, false);
+
+      expect(result).toEqual(joinPlan);
+    });
+  });
+
+  describe('joinPlanToGraph', () => {
+    const sampleJoinPlan = {
+      relevantDatasets: [
+        { name: 'orders', description: 'Customer orders', source: 'public.orders', yaml: 'name: orders\nfields: []' },
+        { name: 'customers', description: 'Customer accounts', source: 'public.customers', yaml: 'name: customers\nfields: []' },
+        { name: 'products', description: 'Product catalog', source: 'public.products', yaml: 'name: products\nfields: []' },
+      ],
+      joinPaths: [
+        {
+          datasets: ['orders', 'customers'],
+          edges: [
+            { fromDataset: 'orders', toDataset: 'customers', fromColumns: ['customer_id'], toColumns: ['id'], relationshipName: 'placed_by' },
+          ],
+        },
+        {
+          datasets: ['orders', 'products'],
+          edges: [
+            { fromDataset: 'orders', toDataset: 'products', fromColumns: ['product_id'], toColumns: ['id'], relationshipName: 'contains' },
+          ],
+        },
+      ],
+      notes: 'Found 3 datasets and 2 join paths',
+    };
+
+    it('produces correct nodes from relevantDatasets', () => {
+      const graph = joinPlanToGraph(sampleJoinPlan);
+
+      expect(graph.nodes).toHaveLength(3);
+      expect(graph.nodes[0]).toMatchObject({
+        label: 'Dataset',
+        name: 'orders',
+        properties: {
+          name: 'orders',
+          source: 'public.orders',
+          description: 'Customer orders',
+          yaml: 'name: orders\nfields: []',
+        },
+      });
+      expect(graph.nodes[1]).toMatchObject({
+        label: 'Dataset',
+        name: 'customers',
+      });
+      expect(graph.nodes[2]).toMatchObject({
+        label: 'Dataset',
+        name: 'products',
+      });
+    });
+
+    it('produces correct edges from joinPaths', () => {
+      const graph = joinPlanToGraph(sampleJoinPlan);
+
+      expect(graph.edges).toHaveLength(2);
+      expect(graph.edges[0]).toMatchObject({
+        type: 'RELATES_TO',
+        properties: {
+          name: 'placed_by',
+          fromColumns: 'customer_id',
+          toColumns: 'id',
+        },
+      });
+      expect(graph.edges[1]).toMatchObject({
+        type: 'RELATES_TO',
+        properties: {
+          name: 'contains',
+          fromColumns: 'product_id',
+          toColumns: 'id',
+        },
+      });
+    });
+
+    it('deduplicates edges appearing in multiple joinPaths', () => {
+      const joinPlanWithDuplicates = {
+        relevantDatasets: [
+          { name: 'orders', description: 'Orders', source: 'public.orders', yaml: '' },
+          { name: 'customers', description: 'Customers', source: 'public.customers', yaml: '' },
+        ],
+        joinPaths: [
+          {
+            datasets: ['orders', 'customers'],
+            edges: [
+              { fromDataset: 'orders', toDataset: 'customers', fromColumns: ['customer_id'], toColumns: ['id'], relationshipName: 'placed_by' },
+            ],
+          },
+          {
+            datasets: ['customers', 'orders'],
+            edges: [
+              { fromDataset: 'orders', toDataset: 'customers', fromColumns: ['customer_id'], toColumns: ['id'], relationshipName: 'placed_by' },
+            ],
+          },
+        ],
+        notes: 'Duplicate edges',
+      };
+
+      const graph = joinPlanToGraph(joinPlanWithDuplicates);
+
+      expect(graph.edges).toHaveLength(1);
+    });
+
+    it('skips edges referencing datasets not in relevantDatasets', () => {
+      const joinPlanWithMissingDataset = {
+        relevantDatasets: [
+          { name: 'orders', description: 'Orders', source: 'public.orders', yaml: '' },
+        ],
+        joinPaths: [
+          {
+            datasets: ['orders', 'customers'],
+            edges: [
+              { fromDataset: 'orders', toDataset: 'customers', fromColumns: ['customer_id'], toColumns: ['id'], relationshipName: 'placed_by' },
+            ],
+          },
+        ],
+        notes: 'Missing dataset',
+      };
+
+      const graph = joinPlanToGraph(joinPlanWithMissingDataset);
+
+      expect(graph.edges).toHaveLength(0);
+    });
+
+    it('returns empty edges array when joinPaths is empty', () => {
+      const joinPlanNoJoins = {
+        relevantDatasets: [
+          { name: 'orders', description: 'Orders', source: 'public.orders', yaml: '' },
+          { name: 'customers', description: 'Customers', source: 'public.customers', yaml: '' },
+        ],
+        joinPaths: [],
+        notes: 'No joins',
+      };
+
+      const graph = joinPlanToGraph(joinPlanNoJoins);
+
+      expect(graph.nodes).toHaveLength(2);
+      expect(graph.edges).toHaveLength(0);
+    });
+
+    it('returns empty nodes and edges when relevantDatasets is empty', () => {
+      const emptyJoinPlan = {
+        relevantDatasets: [],
+        joinPaths: [],
+        notes: 'Empty',
+      };
+
+      const graph = joinPlanToGraph(emptyJoinPlan);
+
+      expect(graph.nodes).toHaveLength(0);
+      expect(graph.edges).toHaveLength(0);
+    });
+
+    it('stores yaml, source, description in node properties', () => {
+      const graph = joinPlanToGraph(sampleJoinPlan);
+
+      const ordersNode = graph.nodes.find((n) => n.name === 'orders');
+      expect(ordersNode).toBeDefined();
+      expect(ordersNode?.properties).toMatchObject({
+        name: 'orders',
+        source: 'public.orders',
+        description: 'Customer orders',
+        yaml: 'name: orders\nfields: []',
+      });
     });
   });
 });
