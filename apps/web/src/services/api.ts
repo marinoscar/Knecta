@@ -220,6 +220,7 @@ import type {
   OntologyGraph,
   DataChatsResponse,
   DataChat,
+  LlmTraceRecord,
 } from '../types';
 
 // Allowlist API
@@ -553,4 +554,11 @@ export async function sendDataAgentMessage(
   content: string,
 ): Promise<{ userMessage: { id: string }; assistantMessage: { id: string } }> {
   return api.post(`/data-agent/chats/${chatId}/messages`, { content });
+}
+
+export async function getMessageTraces(
+  chatId: string,
+  messageId: string,
+): Promise<LlmTraceRecord[]> {
+  return api.get<LlmTraceRecord[]>(`/data-agent/chats/${chatId}/messages/${messageId}/traces`);
 }

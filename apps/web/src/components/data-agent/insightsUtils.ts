@@ -359,3 +359,63 @@ export function joinPlanToGraph(joinPlan: JoinPlanData): OntologyGraphType {
     edges,
   };
 }
+
+// LLM Trace Types and Utilities
+
+export interface LiveLlmTrace {
+  callIndex: number;
+  phase: string;
+  stepId?: number;
+  purpose: string;
+  provider: string;
+  model: string;
+  structuredOutput: boolean;
+  promptSummary?: { messageCount: number; totalChars: number };
+  status: 'running' | 'complete' | 'error';
+  durationMs?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  responsePreview?: string;
+  toolCallCount?: number;
+  error?: string;
+}
+
+/**
+ * Extract live LLM traces from stream events by pairing llm_call_start and llm_call_end events
+ */
+export function extractLiveLlmTraces(
+  streamEvents: DataAgentStreamEvent[],
+): LiveLlmTrace[] {
+  const traceMap = new Map<number, LiveLlmTrace>();
+
+  for (const event of streamEvents) {
+    if (event.type === 'llm_call_start' && event.callIndex !== undefined) {
+      traceMap.set(event.callIndex, {
+        callIndex: event.callIndex,
+        phase: event.phase || '',
+        stepId: event.stepId,
+        purpose: event.purpose || '',
+        provider: event.provider || '',
+        model: event.model || '',
+        structuredOutput: event.structuredOutput || false,
+        promptSummary: event.promptSummary,
+        status: 'running',
+      });
+    } else if (event.type === 'llm_call_end' && event.callIndex !== undefined) {
+      const existing = traceMap.get(event.callIndex);
+      if (existing) {
+        existing.status = event.error ? 'error' : 'complete';
+        existing.durationMs = event.durationMs;
+        existing.promptTokens = event.promptTokens;
+        existing.completionTokens = event.completionTokens;
+        existing.totalTokens = event.totalTokens;
+        existing.responsePreview = event.responsePreview;
+        existing.toolCallCount = event.toolCallCount;
+        existing.error = event.error;
+      }
+    }
+  }
+
+  return Array.from(traceMap.values()).sort((a, b) => a.callIndex - b.callIndex);
+}

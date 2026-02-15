@@ -360,6 +360,29 @@ export interface OntologyGraph {
 // Data Agent
 // ==========================================
 
+export interface LlmTraceRecord {
+  id: string;
+  messageId: string;
+  phase: string;
+  callIndex: number;
+  stepId: number | null;
+  purpose: string;
+  provider: string;
+  model: string;
+  temperature: number | null;
+  structuredOutput: boolean;
+  promptMessages: Array<{ role: string; content: string }>;
+  responseContent: string;
+  toolCalls: Array<{ name: string; args: Record<string, unknown> }> | null;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  error: string | null;
+}
+
 export interface DataChat {
   id: string;
   name: string;
@@ -438,7 +461,9 @@ export interface DataAgentStreamEvent {
     | 'step_complete'
     | 'tool_start'
     | 'tool_end'
-    | 'tool_error';
+    | 'tool_error'
+    | 'llm_call_start'
+    | 'llm_call_end';
   name?: string;
   args?: Record<string, unknown>;
   result?: string;
@@ -454,4 +479,17 @@ export interface DataAgentStreamEvent {
   strategy?: string;
   error?: string;
   startedAt?: number;
+  // LLM trace fields
+  callIndex?: number;
+  purpose?: string;
+  provider?: string;
+  model?: string;
+  structuredOutput?: boolean;
+  promptSummary?: { messageCount: number; totalChars: number };
+  responsePreview?: string;
+  toolCallCount?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  durationMs?: number;
 }
