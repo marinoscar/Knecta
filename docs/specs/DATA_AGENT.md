@@ -22,9 +22,11 @@
 18. [Frontend Components](#frontend-components)
 19. [Model Selection](#model-selection)
 20. [Configuration](#configuration)
-21. [File Inventory](#file-inventory)
-21. [Testing](#testing)
-22. [Packages](#packages)
+21. [Token Usage Tracking](#token-usage-tracking)
+22. [LLM Interaction Tracing](#llm-interaction-tracing)
+23. [File Inventory](#file-inventory)
+24. [Testing](#testing)
+25. [Packages](#packages)
 
 ---
 
@@ -699,6 +701,302 @@ The `AgentInsightsPanel` component displays token usage in both live and history
 
 ---
 
+## LLM Interaction Tracing
+
+All LLM interactions across the 6-phase pipeline are traced and persisted to the database for debugging, cost analysis, and performance optimization. Each `llm.invoke()` call is wrapped by the `DataAgentTracer` utility, which captures full prompt messages, response content, tool calls, token usage, timing, and errors.
+
+### Database Schema
+
+**Table**: `llm_traces`
+
+```sql
+CREATE TABLE llm_traces (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  message_id UUID NOT NULL REFERENCES data_chat_messages(id) ON DELETE CASCADE,
+  phase VARCHAR(50) NOT NULL,  -- 'planner', 'navigator', 'sql_builder', 'executor', 'verifier', 'explainer'
+  call_index INTEGER NOT NULL,  -- Sequential index within message (0, 1, 2, ...)
+  step_id INTEGER,              -- Executor step ID (null for other phases)
+  purpose VARCHAR(100) NOT NULL, -- e.g., 'plan_generation', 'tool_exploration_1', 'query_generation'
+  provider VARCHAR(50) NOT NULL, -- 'openai', 'anthropic', 'azure'
+  model VARCHAR(100) NOT NULL,   -- e.g., 'gpt-4o', 'claude-3-7-sonnet-20250219'
+  temperature DECIMAL(3, 2),     -- null when reasoning mode is enabled
+  structured_output BOOLEAN NOT NULL DEFAULT false,
+  prompt_messages JSONB NOT NULL, -- Array of LangChain message objects
+  response_content TEXT,         -- Full AI response text
+  tool_calls JSONB,              -- Array of tool call objects (if any)
+  prompt_tokens INTEGER NOT NULL,
+  completion_tokens INTEGER NOT NULL,
+  total_tokens INTEGER NOT NULL,
+  started_at TIMESTAMP NOT NULL,
+  completed_at TIMESTAMP NOT NULL,
+  duration_ms INTEGER NOT NULL,
+  error TEXT,                    -- Error message if call failed
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_llm_traces_message_id ON llm_traces(message_id);
+CREATE INDEX idx_llm_traces_message_phase ON llm_traces(message_id, phase);
+```
+
+**Key Fields**:
+- **message_id**: Foreign key to `data_chat_messages` with cascade delete
+- **phase**: Which agent phase made the call
+- **call_index**: Unique sequential index per message (0, 1, 2, ...) for ordering
+- **step_id**: Only populated for Executor phase calls (matches sub-task ID)
+- **purpose**: Human-readable label describing why the LLM was called
+- **structured_output**: True if `withStructuredOutput()` was used
+- **prompt_messages**: Full array of LangChain message objects (system, human, ai, tool)
+- **response_content**: Complete AI response text (or structured output JSON)
+- **tool_calls**: Array of tool calls if the LLM requested them (Navigator mini-ReAct)
+
+### DataAgentTracer Utility
+
+**Location**: `apps/api/src/data-agent/agent/utils/data-agent-tracer.ts`
+
+The `DataAgentTracer` class wraps every LLM invocation to capture trace data in-memory during graph execution. Traces are batched and persisted to PostgreSQL after the agent completes.
+
+**Usage Pattern**:
+```typescript
+// In any phase node
+const tracer = new DataAgentTracer(state.messageId);
+
+const response = await tracer.trace({
+  phase: 'planner',
+  stepId: undefined,
+  purpose: 'plan_generation',
+  invoke: async () => {
+    return await llm.withStructuredOutput(PlanSchema, { name: 'generate_plan' }).invoke([
+      new SystemMessage(PLANNER_PROMPT),
+      new HumanMessage(state.userQuestion),
+    ]);
+  },
+  streamManager,
+});
+
+// Later, after graph completes
+await tracer.persistTraces(prisma);
+```
+
+**Core Methods**:
+
+1. **`trace(options: TraceOptions): Promise<T>`**
+   - Wraps an LLM invocation with timing, error handling, and metadata capture
+   - Emits `llm_call_start` and `llm_call_end` SSE events
+   - Stores trace in-memory array
+   - Returns the LLM response
+
+2. **`persistTraces(prisma: PrismaService): Promise<void>`**
+   - Batch inserts all collected traces to database
+   - Called once after agent graph completes successfully
+   - Traces are NOT persisted if the agent fails (no message created)
+
+**TraceOptions**:
+```typescript
+interface TraceOptions<T> {
+  phase: string;
+  stepId?: number;
+  purpose: string;
+  invoke: () => Promise<T>;
+  streamManager: StreamManager;
+}
+```
+
+### Purpose Labels by Phase
+
+Each phase uses descriptive purpose labels to identify why the LLM was called:
+
+| Phase | Purpose Labels | Description |
+|-------|---------------|-------------|
+| **Planner** | `plan_generation` | Structured sub-task decomposition |
+| **Navigator** | `tool_exploration_1`, `tool_exploration_2`, ... | ReAct loop iterations (up to 8) |
+| **SQL Builder** | `query_generation` | Structured SQL generation for all steps |
+| **Executor** | `sql_repair_step_{id}`, `python_gen_step_{id}` | SQL repair or Python code generation per step |
+| **Verifier** | `verification_code` | Python validation code generation |
+| **Explainer** | `narrative` | Final narrative synthesis |
+
+### SSE Events for Live Tracing
+
+The tracer emits two SSE events for real-time monitoring in the frontend:
+
+**`llm_call_start`**:
+```typescript
+{
+  type: 'llm_call_start',
+  phase: 'planner',
+  callIndex: 0,
+  stepId?: number,
+  purpose: 'plan_generation',
+  provider: 'openai',
+  model: 'gpt-4o',
+  structuredOutput: true,
+  promptSummary: {
+    messageCount: 2,
+    totalChars: 1523,
+  },
+}
+```
+
+**`llm_call_end`**:
+```typescript
+{
+  type: 'llm_call_end',
+  phase: 'planner',
+  callIndex: 0,
+  stepId?: number,
+  purpose: 'plan_generation',
+  durationMs: 2341,
+  promptTokens: 1205,
+  completionTokens: 312,
+  totalTokens: 1517,
+  responsePreview: 'This question requires analyzing store performance...', // First 200 chars
+  toolCallCount: 0,
+}
+```
+
+**Event Usage**:
+- `llm_call_start`: Displayed immediately when LLM call begins (shows "Generating..." state)
+- `llm_call_end`: Updates with final timing, tokens, and response preview
+- Events appear in `LlmTracesSection` component in real-time during streaming
+
+### REST API Endpoint
+
+**Endpoint**: `GET /api/data-agent/chats/:chatId/messages/:messageId/traces`
+
+**Permission**: `data_agent:read`
+
+**Query Parameters**: None
+
+**Response**:
+```typescript
+{
+  data: LlmTrace[],
+  meta: { timestamp: string }
+}
+
+interface LlmTrace {
+  id: string;
+  messageId: string;
+  phase: string;
+  callIndex: number;
+  stepId?: number;
+  purpose: string;
+  provider: string;
+  model: string;
+  temperature?: number;
+  structuredOutput: boolean;
+  promptMessages: any[];  // LangChain message objects
+  responseContent: string;
+  toolCalls?: any[];
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  error?: string;
+  createdAt: string;
+}
+```
+
+**Authorization**:
+- Verifies user owns the chat (via chatId → ownerId check)
+- Returns 404 if chat or message doesn't exist
+- Returns 403 if user doesn't own the chat
+
+**Ordering**: Traces ordered by `call_index ASC` (chronological order)
+
+### Frontend Components
+
+#### LlmTracesSection (NEW)
+
+**Location**: `apps/web/src/components/data-agent/LlmTracesSection.tsx`
+
+Displays LLM interaction traces in the `AgentInsightsPanel`, positioned between "Phase Details" and "Join Graph" sections.
+
+**Features**:
+- **Dual-mode rendering**: Live mode (reads from SSE events), History mode (reads from REST API)
+- **Compact trace cards**: Shows phase, purpose, provider/model, tokens, duration
+- **Click to expand**: Opens `LlmTraceDialog` with full trace details
+- **Live updates**: New traces appear as `llm_call_end` events arrive
+- **Color-coded phases**: Different background colors per phase (planner=blue, navigator=purple, etc.)
+
+**Props**:
+```typescript
+interface LlmTracesSectionProps {
+  chatId: string;
+  messageId: string;
+  streamEvents: DataAgentStreamEvent[];
+  isStreaming: boolean;
+}
+```
+
+**Live Mode** (during streaming):
+- Filters `streamEvents` for `llm_call_start` and `llm_call_end` events
+- Displays compact cards with live status indicator
+- Shows "In progress..." for calls that started but haven't completed
+
+**History Mode** (after completion):
+- Fetches traces from `GET /api/data-agent/chats/:chatId/messages/:messageId/traces`
+- Displays all traces with full metadata
+- No loading state (data already persisted)
+
+#### LlmTraceDialog (NEW)
+
+**Location**: `apps/web/src/components/data-agent/LlmTraceDialog.tsx`
+
+Full-screen dialog showing complete trace details when a trace card is clicked.
+
+**Features**:
+- **Metadata section**: Phase, purpose, provider, model, temperature, structured output flag
+- **Timing section**: Start time, end time, duration (ms)
+- **Token usage**: Prompt tokens, completion tokens, total tokens
+- **Prompt messages**: Syntax-highlighted JSON display of all LangChain messages
+- **Response content**: Syntax-highlighted response (JSON for structured output, text otherwise)
+- **Tool calls**: Displays tool call array if present (Navigator mini-ReAct)
+- **Error display**: Shows error message with red background if call failed
+
+**Props**:
+```typescript
+interface LlmTraceDialogProps {
+  trace: LlmTrace;
+  open: boolean;
+  onClose: () => void;
+}
+```
+
+**Syntax Highlighting**: Uses `react-syntax-highlighter` with `tomorrow` theme for JSON/text display.
+
+### Use Cases
+
+1. **Debugging prompt issues**: Inspect exact prompt messages sent to LLM for each phase
+2. **Cost analysis**: Track token usage per phase, per provider, across conversations
+3. **Performance optimization**: Identify slow LLM calls, optimize prompts to reduce tokens
+4. **Quality assurance**: Review LLM responses to understand decision-making
+5. **Audit trail**: Full trace of all LLM interactions for compliance/debugging
+6. **Provider comparison**: Compare token efficiency across OpenAI, Anthropic, Azure
+
+### Integration with AgentInsightsPanel
+
+The `LlmTracesSection` is integrated into `AgentInsightsPanel` as a collapsible accordion section:
+
+**Position**: After "Phase Details", before "Join Graph"
+
+**Layout**:
+```
+AgentInsightsPanel
+├─ Stats Row (duration, tokens)
+├─ Execution Plan
+├─ Phase Details
+├─ LLM Traces ← NEW
+├─ Join Graph
+├─ Verification Summary
+└─ Data Lineage
+```
+
+**Visibility**: Always visible (both live and history modes), but empty until first LLM call completes.
+
+---
+
 ## Sub-Task Decomposition
 
 The Planner phase ALWAYS decomposes questions into ordered sub-tasks. This enables:
@@ -1132,6 +1430,8 @@ The agent streams execution progress via Server-Sent Events (SSE) using the same
 | `tool_end` | `{ phase: string, stepId?: number, name: string, result: string }` | All phases | Tool call complete |
 | `tool_error` | `{ phase: string, stepId?: number, name: string, error: string }` | All phases | Tool call failed |
 | `token_update` | `{ phase: string, tokensUsed: { prompt: number, completion: number, total: number } }` | All phase nodes | Per-phase token usage report |
+| `llm_call_start` | `{ phase, callIndex, stepId?, purpose, provider, model, structuredOutput, promptSummary }` | All phase nodes | LLM call started |
+| `llm_call_end` | `{ phase, callIndex, stepId?, purpose, durationMs, promptTokens, completionTokens, totalTokens, responsePreview, toolCallCount }` | All phase nodes | LLM call completed |
 
 ### SSE Event Examples
 
@@ -1876,6 +2176,71 @@ Custom hook that provides a live elapsed timer string. Takes `startedAt` (timest
 
 ---
 
+### LlmTracesSection (NEW)
+
+Displays LLM interaction traces within the `AgentInsightsPanel`.
+
+**Location**: `apps/web/src/components/data-agent/LlmTracesSection.tsx`
+
+**Props**:
+```typescript
+interface LlmTracesSectionProps {
+  chatId: string;
+  messageId: string;
+  streamEvents: DataAgentStreamEvent[];
+  isStreaming: boolean;
+}
+```
+
+**Features**:
+- **Dual-mode rendering**: Live mode (reads from SSE events), History mode (fetches from REST API)
+- **Compact trace cards**: Phase, purpose, provider/model, tokens, duration
+- **Click to expand**: Opens `LlmTraceDialog` with full trace details
+- **Live updates**: New traces appear as `llm_call_end` events arrive during streaming
+- **Color-coded phases**: Different background colors per phase for visual grouping
+
+**Live Mode** (during streaming):
+- Filters `streamEvents` for `llm_call_start` and `llm_call_end` events
+- Shows "In progress..." status for calls that started but haven't completed
+- Updates in real-time as events arrive
+
+**History Mode** (after completion):
+- Fetches traces from `GET /api/data-agent/chats/:chatId/messages/:messageId/traces`
+- Displays all persisted traces with full metadata
+- No loading spinner (data already available)
+
+**Integration**: Rendered within `AgentInsightsPanel` as a collapsible accordion section, positioned after "Phase Details" and before "Join Graph".
+
+---
+
+### LlmTraceDialog (NEW)
+
+Full-screen dialog showing complete trace details when a trace card is clicked.
+
+**Location**: `apps/web/src/components/data-agent/LlmTraceDialog.tsx`
+
+**Props**:
+```typescript
+interface LlmTraceDialogProps {
+  trace: LlmTrace;
+  open: boolean;
+  onClose: () => void;
+}
+```
+
+**Sections**:
+1. **Metadata**: Phase, purpose, provider, model, temperature (if applicable), structured output flag
+2. **Timing**: Start time, end time, duration (milliseconds)
+3. **Token Usage**: Prompt tokens, completion tokens, total tokens with formatted numbers
+4. **Prompt Messages**: Syntax-highlighted JSON display of LangChain message array (system, human, ai, tool messages)
+5. **Response Content**: Syntax-highlighted response (JSON for structured output, plain text otherwise)
+6. **Tool Calls**: Displays tool call array if present (Navigator mini-ReAct iterations)
+7. **Error Display**: Shows error message with red background if LLM call failed
+
+**Syntax Highlighting**: Uses `react-syntax-highlighter` with `tomorrow` theme for code/JSON display.
+
+---
+
 ### ChatMessage (UPDATED)
 
 Message bubble component with verification badge and data lineage.
@@ -2273,6 +2638,7 @@ CONVERSATION_HISTORY_LIMIT=10  # Last N messages for context
 | `apps/api/src/data-agent/agent/tools/get-relationships.tool.ts` | NEW: wraps `getAllRelationships()` |
 | `apps/api/src/data-agent/agent/tools/index.ts` | Rebuilt: barrel export for 6 tools |
 | `apps/api/src/data-agent/agent/utils/token-tracker.ts` | Token usage extraction from LangChain responses |
+| `apps/api/src/data-agent/agent/utils/data-agent-tracer.ts` | DataAgentTracer class for LLM interaction tracing |
 
 ### Modified Backend Files
 
@@ -2291,6 +2657,8 @@ CONVERSATION_HISTORY_LIMIT=10  # Last N messages for context
 | `apps/web/src/components/data-agent/AgentInsightsPanel.tsx` | Agent insights right-side panel |
 | `apps/web/src/components/data-agent/insightsUtils.ts` | Utility functions for insights data extraction |
 | `apps/web/src/components/data-agent/ModelSelector.tsx` | LLM provider selection component |
+| `apps/web/src/components/data-agent/LlmTracesSection.tsx` | LLM traces section in insights panel |
+| `apps/web/src/components/data-agent/LlmTraceDialog.tsx` | Full trace detail dialog |
 | `apps/web/src/components/admin/DataAgentSettings.tsx` | Admin UI for per-provider model configuration |
 | `apps/web/src/components/settings/DefaultProviderSettings.tsx` | User UI for default provider preference |
 | `apps/web/src/hooks/useElapsedTimer.ts` | Live elapsed timer hook |
