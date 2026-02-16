@@ -44,6 +44,10 @@ sync.db-journal
 # Docker
 .docker/
 
+# Deploy persistent data (VPS volumes)
+infra/deploy/data/
+infra/deploy/repo/
+
 # Misc
 *.tgz
 .cache/
