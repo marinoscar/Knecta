@@ -18,24 +18,16 @@ export class DataAgentService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Create a new chat (validates ontology exists and is owned by user)
+   * Create a new chat (validates ontology exists and is ready)
    */
   async createChat(
     data: CreateChatDto,
     userId: string,
   ): Promise<DataChat> {
-    // Validate the ontology exists, is ready, and is owned by user
-    const ontology = await this.prisma.ontology.findFirst({
+    // Validate the ontology exists and is ready (system-level, no ownership check)
+    const ontology = await this.prisma.ontology.findUnique({
       where: {
         id: data.ontologyId,
-        ownerId: userId,
-      },
-      include: {
-        semanticModel: {
-          select: {
-            ownerId: true,
-          },
-        },
       },
     });
 
@@ -49,7 +41,7 @@ export class DataAgentService {
       throw new ConflictException('Ontology must be in ready status');
     }
 
-    // Create chat
+    // Create chat (chats remain per-user)
     const chat = await this.prisma.dataChat.create({
       data: {
         name: data.name,
