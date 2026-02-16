@@ -34,7 +34,7 @@ The Database Connections feature enables users to configure, store, manage, and 
 - **Update** connections (partial updates supported)
 - **Delete** connections
 - **Test** connections (both saved and unsaved configurations)
-- **Per-user ownership** - users only see and manage their own connections
+- **System-level shared resources** - all authorized users can see and manage connections based on RBAC permissions
 - **Type-specific configuration** - JSONB `options` field stores database-specific parameters
 - **Audit trail** - all CRUD operations logged to `audit_events` table
 
@@ -103,26 +103,26 @@ The feature follows a clean layered architecture with complete separation of con
 - **Migrations**: Auto-generated migration files
 - **Seed**: RBAC permissions seeded via `prisma/seed.ts`
 
-### Per-User Ownership Model
+### System-Level Resource Access
 
-Connections are isolated by `ownerId`:
+Connections are system-level shared resources accessible to all authorized users. Access is controlled by RBAC permissions, not ownership filtering:
 
 ```typescript
-// Service layer enforces ownerId filtering
+// Service layer returns all connections (no ownership filtering)
 async list(query: ConnectionQueryDto, userId: string) {
   const where: any = {
-    ownerId: userId, // ← Only return this user's connections
+    // No ownerId filter - all connections visible to authorized users
   };
   // ...
 }
 ```
 
-- **Create**: `ownerId` set to authenticated user ID
-- **Read**: WHERE clause filters by `ownerId`
-- **Update/Delete**: WHERE clause includes `ownerId` check (returns 404 if not owner)
-- **Test**: Only owners can test their connections
+- **Create**: `createdByUserId` set to authenticated user ID (for audit tracking only)
+- **Read**: All authorized users can see all connections (no ownership filter)
+- **Update/Delete**: All authorized users can modify/delete any connection (RBAC-controlled)
+- **Test**: All authorized users can test any connection
 
-This ensures complete data isolation between users without explicit permission checks.
+Access control is enforced through RBAC permissions (`connections:read`, `connections:write`, etc.), not ownership checks.
 
 ---
 
@@ -153,7 +153,7 @@ model DataConnection {
   encryptedCredential String?      @map("encrypted_credential")
   useSsl              Boolean      @default(false) @map("use_ssl")
   options             Json?        // JSONB for type-specific config
-  ownerId             String       @map("owner_id") @db.Uuid
+  createdByUserId     String?      @map("created_by_user_id") @db.Uuid
   lastTestedAt        DateTime?    @map("last_tested_at") @db.Timestamptz
   lastTestResult      Boolean?     @map("last_test_result")
   lastTestMessage     String?      @map("last_test_message")
@@ -161,9 +161,9 @@ model DataConnection {
   updatedAt           DateTime     @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relations
-  owner User @relation("UserDataConnections", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdByUser User? @relation("UserDataConnections", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
-  @@index([ownerId])
+  @@index([createdByUserId])
   @@index([dbType])
   @@map("data_connections")
 }
@@ -184,7 +184,7 @@ model DataConnection {
 | `encryptedCredential` | String | No | AES-256-GCM encrypted password/token |
 | `useSsl` | Boolean | Yes | Enable SSL/TLS (default: false) |
 | `options` | JSONB | No | Type-specific configuration (see below) |
-| `ownerId` | UUID | Yes | Foreign key to users.id |
+| `createdByUserId` | UUID | No | Foreign key to users.id (nullable, for audit tracking only) |
 | `lastTestedAt` | Timestamp | No | Last test execution time |
 | `lastTestResult` | Boolean | No | Last test success/failure |
 | `lastTestMessage` | String | No | Last test result message |
@@ -230,7 +230,7 @@ The `options` field stores database-specific configuration:
 
 ### Indexes
 
-- `ownerId` - Fast lookup for user's connections
+- `createdByUserId` - Fast lookup for audit queries (who created which connections)
 - `dbType` - Filtering by database type
 
 ---
@@ -277,7 +277,7 @@ GET /api/connections
         "lastTestMessage": "Connection successful",
         "createdAt": "2024-01-01T00:00:00Z",
         "updatedAt": "2024-01-15T10:30:00Z",
-        "ownerId": "user-uuid"
+        "createdByUserId": "user-uuid"
       }
     ],
     "total": 25,
@@ -305,7 +305,7 @@ GET /api/connections/:id
 
 **Response (200):** Single connection object (same structure as list items)
 
-**Response (404):** Connection not found or not owned by user
+**Response (404):** Connection not found
 
 ---
 
@@ -379,7 +379,7 @@ PATCH /api/connections/:id
 
 **Response (200):** Updated connection object
 
-**Response (404):** Connection not found or not owned by user
+**Response (404):** Connection not found
 
 **Audit Event:** `connections:update` logged
 
@@ -395,7 +395,7 @@ DELETE /api/connections/:id
 
 **Response (204):** No content (success)
 
-**Response (404):** Connection not found or not owned by user
+**Response (404):** Connection not found
 
 **Audit Event:** `connections:delete` logged
 
@@ -450,7 +450,7 @@ POST /api/connections/:id/test
 - Updates `lastTestedAt`, `lastTestResult`, `lastTestMessage` fields
 - Creates audit event `connections:test`
 
-**Response (404):** Connection not found or not owned by user
+**Response (404):** Connection not found
 
 ---
 
@@ -589,7 +589,7 @@ export const PERMISSIONS = {
 | **Contributor** | ✅ | ✅ | ✅ | ✅ |
 | **Viewer** | ❌ | ❌ | ❌ | ❌ |
 
-**Note:** Viewers have NO access to connections (enterprise data security requirement).
+**Note:** Viewers have NO access to connections (enterprise data security requirement). All authorized users can see and manage all connections - access is controlled by RBAC permissions, not ownership.
 
 ### Controller Usage
 
@@ -1166,7 +1166,7 @@ export class FeatureService {
     const { page, pageSize } = query;
     const skip = (page - 1) * pageSize;
 
-    const where = { ownerId: userId }; // Per-user ownership
+    const where = {}; // System-level access - no ownership filtering
 
     const [items, total] = await Promise.all([
       this.prisma.feature.findMany({ where, skip, take: pageSize }),
@@ -1215,9 +1215,9 @@ export class AppModule {}
 
 ---
 
-### 2. Implementing Per-User Resource Ownership
+### 2. Implementing System-Level Resource Access
 
-**Pattern:** Filter all queries by `ownerId` to isolate user data.
+**Pattern:** Allow all authorized users to access resources, use `createdByUserId` for audit tracking only (not access control).
 
 **Create:**
 ```typescript
@@ -1225,7 +1225,7 @@ async create(dto: CreateDto, userId: string) {
   const entity = await this.prisma.entity.create({
     data: {
       ...dto,
-      ownerId: userId, // ← Set owner
+      createdByUserId: userId, // ← Track creator (for audit only)
     },
   });
   return entity;
@@ -1235,7 +1235,8 @@ async create(dto: CreateDto, userId: string) {
 **Read (List):**
 ```typescript
 async list(query: QueryDto, userId: string) {
-  const where = { ownerId: userId }; // ← Filter by owner
+  // No ownership filtering - all authorized users see all resources
+  const where = {}; // ← No createdByUserId filter
   const items = await this.prisma.entity.findMany({ where });
   return items;
 }
@@ -1244,11 +1245,9 @@ async list(query: QueryDto, userId: string) {
 **Read (Single):**
 ```typescript
 async getById(id: string, userId: string) {
-  const entity = await this.prisma.entity.findFirst({
-    where: {
-      id,
-      ownerId: userId, // ← Ensure user owns this entity
-    },
+  // Use findUnique since we're not filtering by ownership
+  const entity = await this.prisma.entity.findUnique({
+    where: { id }, // ← No createdByUserId check
   });
 
   if (!entity) {
@@ -1262,16 +1261,16 @@ async getById(id: string, userId: string) {
 **Update/Delete:**
 ```typescript
 async update(id: string, dto: UpdateDto, userId: string) {
-  // First verify ownership
-  const existing = await this.prisma.entity.findFirst({
-    where: { id, ownerId: userId },
+  // Verify entity exists (no ownership check)
+  const existing = await this.prisma.entity.findUnique({
+    where: { id }, // ← No createdByUserId check
   });
 
   if (!existing) {
     throw new NotFoundException(`Entity ${id} not found`);
   }
 
-  // Then update
+  // Update (any authorized user can update)
   const updated = await this.prisma.entity.update({
     where: { id },
     data: dto,
@@ -1284,16 +1283,18 @@ async update(id: string, dto: UpdateDto, userId: string) {
 **Database Schema:**
 ```prisma
 model Entity {
-  id       String @id @default(uuid()) @db.Uuid
+  id              String  @id @default(uuid()) @db.Uuid
   // ... other fields
-  ownerId  String @map("owner_id") @db.Uuid
+  createdByUserId String? @map("created_by_user_id") @db.Uuid
 
-  owner User @relation("UserEntities", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdByUser User? @relation("UserEntities", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
-  @@index([ownerId]) // ← Important for query performance
+  @@index([createdByUserId]) // ← For audit queries only
   @@map("entities")
 }
 ```
+
+**Access Control:** Enforce via RBAC permissions (`@Auth({ permissions: [...] })` decorator) on controller endpoints, NOT via ownership filtering in service layer.
 
 ---
 
@@ -1398,7 +1399,7 @@ export class FeatureService {
       data: {
         ...dto,
         encryptedSecret, // Store encrypted
-        ownerId: userId,
+        createdByUserId: userId, // Track creator (for audit only)
       },
     });
 
@@ -1838,7 +1839,7 @@ File: `apps/api/test/connections.integration.spec.ts`
 - ✅ 403 for viewer (no permission)
 - ✅ Empty list when no connections
 - ✅ Paginated results
-- ✅ Filter by ownerId (isolation)
+- ✅ Returns all connections (no ownership filtering)
 - ✅ hasCredential in response, no password
 
 **GET /api/connections/:id**
@@ -1846,7 +1847,6 @@ File: `apps/api/test/connections.integration.spec.ts`
 - ✅ 403 for viewer
 - ✅ 200 with connection data
 - ✅ 404 for non-existent
-- ✅ 404 for other user's connection
 
 **POST /api/connections**
 - ✅ 401 if not authenticated

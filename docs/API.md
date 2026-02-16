@@ -1317,7 +1317,7 @@ The database connections API allows users to store and manage connection configu
 
 #### GET /connections
 
-**Requires:** `connections:read` permission - List current user's database connections.
+**Requires:** `connections:read` permission - List database connections.
 
 **Query Parameters:**
 | Parameter | Type | Default | Description |
@@ -1381,13 +1381,13 @@ The database connections API allows users to store and manage connection configu
 | `createdAt` | string | Creation timestamp |
 | `updatedAt` | string | Last update timestamp |
 
-**Note:** Only returns connections owned by the current user. Password field is never returned; `hasCredential` indicates if a password is stored.
+**Note:** Password field is never returned; `hasCredential` indicates if a password is stored. Access control is enforced through RBAC permissions.
 
 ---
 
 #### GET /connections/:id
 
-**Requires:** `connections:read` permission - Get connection by ID (own connections only).
+**Requires:** `connections:read` permission - Get connection by ID.
 
 **Parameters:**
 - `id` (UUID) - Connection ID
@@ -1559,7 +1559,8 @@ The database connections API allows users to store and manage connection configu
 ```
 
 **Error Cases:**
-- 404 Not Found - Connection not found or belongs to another user
+- 404 Not Found - Connection not found
+- 403 Forbidden - Insufficient permissions
 - 400 Bad Request - Invalid input
 
 ---
@@ -1665,7 +1666,8 @@ The database connections API allows users to store and manage connection configu
 - Updates `lastTestMessage` with result message
 
 **Error Cases:**
-- 404 Not Found - Connection not found or belongs to another user
+- 404 Not Found - Connection not found
+- 403 Forbidden - Insufficient permissions
 
 **Use Case:** Verify that stored connection still works or troubleshoot connection issues.
 

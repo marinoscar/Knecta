@@ -31,7 +31,7 @@ The Semantic Models feature enables users to automatically generate semantic mod
 - **OSI Compliance**: Generated models follow the Open Semantic Interface specification
 - **YAML Export**: Models can be exported in standard YAML format
 - **Run Tracking**: Complete audit trail of agent execution with status, progress, and results
-- **Per-User Ownership**: Users only see and manage their own semantic models
+- **System-Level Shared Resources**: All authorized users can view and manage semantic models based on RBAC permissions
 
 ### Use Cases
 
@@ -169,16 +169,16 @@ model SemanticModel {
   fieldCount          Int                  @default(0) @map("field_count")
   relationshipCount   Int                  @default(0) @map("relationship_count")
   metricCount         Int                  @default(0) @map("metric_count")
-  ownerId             String               @map("owner_id") @db.Uuid
+  createdByUserId     String?              @map("created_by_user_id") @db.Uuid
   createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz
   updatedAt           DateTime             @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relations
-  connection DataConnection @relation("SemanticModelConnection", fields: [connectionId], references: [id], onDelete: Cascade)
-  owner      User           @relation("UserSemanticModels", fields: [ownerId], references: [id], onDelete: Cascade)
-  runs       SemanticModelRun[] @relation("SemanticModelRuns")
+  connection    DataConnection @relation("SemanticModelConnection", fields: [connectionId], references: [id], onDelete: Cascade)
+  createdByUser User?          @relation("UserSemanticModels", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  runs          SemanticModelRun[] @relation("SemanticModelRuns")
 
-  @@index([ownerId])
+  @@index([createdByUserId])
   @@index([connectionId])
   @@index([status])
   @@map("semantic_models")
@@ -201,7 +201,7 @@ model SemanticModel {
 | `fieldCount` | Integer | Yes | Number of fields across all datasets (default: 0) |
 | `relationshipCount` | Integer | Yes | Number of relationships discovered (default: 0) |
 | `metricCount` | Integer | Yes | Number of metrics defined (default: 0) |
-| `ownerId` | UUID | Yes | Foreign key to users.id |
+| `createdByUserId` | UUID | No | Foreign key to users.id (nullable, for audit tracking) |
 | `createdAt` | Timestamp | Yes | Record creation time |
 | `updatedAt` | Timestamp | Yes | Last update time |
 
@@ -232,16 +232,16 @@ model SemanticModelRun {
   errorMessage    String?                   @map("error_message")
   startedAt       DateTime?                 @map("started_at") @db.Timestamptz
   completedAt     DateTime?                 @map("completed_at") @db.Timestamptz
-  ownerId         String                    @map("owner_id") @db.Uuid
+  createdByUserId String?                   @map("created_by_user_id") @db.Uuid
   createdAt       DateTime                  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime                  @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relations
   semanticModel SemanticModel? @relation("SemanticModelRuns", fields: [semanticModelId], references: [id], onDelete: SetNull)
   connection    DataConnection @relation("SemanticModelRunConnection", fields: [connectionId], references: [id], onDelete: Cascade)
-  owner         User           @relation("UserSemanticModelRuns", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdByUser User?          @relation("UserSemanticModelRuns", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
-  @@index([ownerId])
+  @@index([createdByUserId])
   @@index([semanticModelId])
   @@index([status])
   @@map("semantic_model_runs")
@@ -264,13 +264,13 @@ model SemanticModelRun {
 | `errorMessage` | String | No | Error details if status is failed |
 | `startedAt` | Timestamp | No | When agent execution began |
 | `completedAt` | Timestamp | No | When agent execution finished |
-| `ownerId` | UUID | Yes | Foreign key to users.id |
+| `createdByUserId` | UUID | No | Foreign key to users.id (nullable, for audit tracking) |
 | `createdAt` | Timestamp | Yes | Record creation time |
 | `updatedAt` | Timestamp | Yes | Last update time |
 
 ### Indexes
 
-- `ownerId` - Fast lookup for user's models and runs
+- `createdByUserId` - Track models and runs by creator for audit purposes
 - `connectionId` - Filter models by connection
 - `semanticModelId` - Find runs for a model
 - `status` - Filter by generation/run status
@@ -317,6 +317,7 @@ GET /api/semantic-models
         "fieldCount": 45,
         "relationshipCount": 12,
         "metricCount": 5,
+        "createdByUserId": "uuid",
         "createdAt": "2024-01-01T00:00:00Z",
         "updatedAt": "2024-01-15T10:30:00Z"
       }
@@ -344,7 +345,7 @@ GET /api/semantic-models/:id
 
 **Response (200):** Single semantic model object including full OSI model JSON
 
-**Response (404):** Model not found or not owned by user
+**Response (404):** Model not found
 
 ---
 
@@ -366,7 +367,7 @@ PATCH /api/semantic-models/:id
 
 **Response (200):** Updated semantic model object
 
-**Response (404):** Model not found or not owned by user
+**Response (404):** Model not found
 
 **Note:** Only name and description can be updated. Model JSON is immutable after generation.
 
@@ -382,7 +383,7 @@ DELETE /api/semantic-models/:id
 
 **Response (204):** No content (success)
 
-**Response (404):** Model not found or not owned by user
+**Response (404):** Model not found
 
 **Side Effects:**
 - Deletes associated semantic_model_runs (onDelete: SetNull sets semanticModelId to null)
@@ -448,7 +449,7 @@ GET /api/semantic-models/:id/runs
 }
 ```
 
-**Response (404):** Model not found or not owned by user
+**Response (404):** Model not found
 
 ---
 
@@ -473,7 +474,7 @@ POST /api/semantic-models/runs
 ```
 
 **Validation Rules:**
-- `connectionId`: Required, must be owned by user
+- `connectionId`: Required, must be a valid accessible connection
 - `databaseName`: Required, must exist in connection
 - `selectedSchemas`: Optional array of schema names
 - `selectedTables`: Required array of qualified table names (schema.table)
@@ -489,7 +490,7 @@ POST /api/semantic-models/runs
 }
 ```
 
-**Response (404):** Connection not found or not owned by user
+**Response (404):** Connection not found or not accessible
 
 **Side Effects:**
 - Creates `SemanticModelRun` record with status "pending"
@@ -530,7 +531,7 @@ GET /api/semantic-models/runs/:runId
 }
 ```
 
-**Response (404):** Run not found or not owned by user
+**Response (404):** Run not found
 
 ---
 
@@ -552,7 +553,7 @@ POST /api/semantic-models/runs/:runId/cancel
 }
 ```
 
-**Response (404):** Run not found or not owned by user
+**Response (404):** Run not found
 
 **Response (400):** Run already completed or failed
 
@@ -583,7 +584,7 @@ GET /api/connections/:id/databases
 }
 ```
 
-**Response (404):** Connection not found or not owned by user
+**Response (404):** Connection not found or not accessible
 
 ---
 
@@ -788,7 +789,7 @@ POST /api/semantic-models/runs/:runId/stream
 
 **Error Responses:**
 - **409 Conflict** - Run already executing (claimRun failed)
-- **404 Not Found** - Run not found or not owned by user
+- **404 Not Found** - Run not found
 - **500 Internal Server Error** - Stream setup failed
 
 **Note:** No `tool_start` or `tool_result` events — discovery is programmatic via DiscoveryService methods, not LLM-driven tool calls.
@@ -803,7 +804,7 @@ Semantic models contain database metadata (table/column names, relationships) bu
 
 - **No Credential Storage**: Models reference connections via `connectionId` but don't duplicate credentials
 - **Metadata Only**: Models contain schema names, table structures, relationships (not row data)
-- **Per-User Isolation**: Models are filtered by `ownerId` (same pattern as connections)
+- **RBAC-Based Access**: Models are accessible to all authorized users based on RBAC permissions
 
 ### Agent Safety
 
@@ -812,7 +813,7 @@ The agent has read-only access to databases with multiple safety layers:
 1. **Read-Only Queries**: DiscoveryService methods only execute SELECT queries; write keywords are blocked
 2. **Query Timeout**: 30-second timeout prevents long-running queries
 3. **Row Limit**: 100 row limit on sample data queries
-4. **Connection Validation**: Agent can only access user's own connections
+4. **Connection Validation**: Agent validates connection exists and is accessible
 5. **Error Handling**: All discovery errors are caught and logged without exposing sensitive info
 6. **Atomic Run Claiming**: `claimRun()` prevents duplicate concurrent execution of the same run
 
@@ -874,7 +875,7 @@ async list(
   @Query() query: SemanticModelQueryDto,
   @CurrentUser('id') userId: string,
 ) {
-  return this.semanticModelsService.list(query, userId);
+  return this.semanticModelsService.list(query);
 }
 ```
 
@@ -2138,9 +2139,9 @@ const osiModel = builder.build();
 ```typescript
 import * as yaml from 'js-yaml';
 
-async function exportModelAsYaml(modelId: string, userId: string): Promise<string> {
-  const model = await prisma.semanticModel.findFirst({
-    where: { id: modelId, ownerId: userId },
+async function exportModelAsYaml(modelId: string): Promise<string> {
+  const model = await prisma.semanticModel.findUnique({
+    where: { id: modelId },
   });
 
   if (!model || !model.model) {
@@ -2166,9 +2167,8 @@ async function exportModelAsYaml(modelId: string, userId: string): Promise<strin
 @Header('Content-Disposition', 'attachment; filename="semantic-model.yaml"')
 async exportYaml(
   @Param('id') id: string,
-  @CurrentUser('id') userId: string,
 ): Promise<string> {
-  return this.semanticModelsService.exportYaml(id, userId);
+  return this.semanticModelsService.exportYaml(id);
 }
 ```
 
@@ -2311,7 +2311,7 @@ File: `apps/api/test/semantic-models.integration.spec.ts`
 - ✅ 403 for viewer (no permission)
 - ✅ Empty list when no models
 - ✅ Paginated results
-- ✅ Filter by ownerId (isolation)
+- ✅ Returns all models (system-level access)
 - ✅ Search by name/description
 - ✅ Filter by status
 - ✅ Filter by connectionId
@@ -2322,7 +2322,6 @@ File: `apps/api/test/semantic-models.integration.spec.ts`
 - ✅ 403 for viewer
 - ✅ 200 with full model JSON
 - ✅ 404 for non-existent
-- ✅ 404 for other user's model
 
 **PATCH /api/semantic-models/:id**
 - ✅ 401 if not authenticated

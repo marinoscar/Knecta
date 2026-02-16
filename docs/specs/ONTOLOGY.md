@@ -260,15 +260,15 @@ model Ontology {
   datasetCount        Int              @default(0) @map("dataset_count")
   fieldCount          Int              @default(0) @map("field_count")
   relationshipCount   Int              @default(0) @map("relationship_count")
-  ownerId             String           @map("owner_id") @db.Uuid
+  createdByUserId     String?          @map("created_by_user_id") @db.Uuid
   createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt           DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relations
   semanticModel SemanticModel @relation("OntologySemanticModel", fields: [semanticModelId], references: [id], onDelete: Cascade)
-  owner         User          @relation("UserOntologies", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdByUser User?         @relation("UserOntologies", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
-  @@index([ownerId])
+  @@index([createdByUserId])
   @@index([semanticModelId])
   @@index([status])
   @@map("ontologies")
@@ -287,13 +287,13 @@ model Ontology {
 | `datasetCount` | Integer | Yes | Number of Dataset nodes in graph (default: 0) |
 | `fieldCount` | Integer | Yes | Number of Field nodes in graph (default: 0) |
 | `relationshipCount` | Integer | Yes | Number of RELATES_TO relationships (default: 0) |
-| `ownerId` | UUID | Yes | Foreign key to users.id |
+| `createdByUserId` | UUID | No | Foreign key to users.id (for audit, nullable) |
 | `createdAt` | Timestamp | Yes | Record creation time |
 | `updatedAt` | Timestamp | Yes | Last update time |
 
 ### Indexes
 
-- `ownerId` - Fast lookup for user's ontologies
+- `createdByUserId` - Track creator for audit purposes
 - `semanticModelId` - Find ontology for a semantic model
 - `status` - Filter by creation status
 
@@ -334,6 +334,7 @@ GET /api/ontologies
         "datasetCount": 8,
         "fieldCount": 45,
         "relationshipCount": 12,
+        "createdByUserId": "uuid",
         "createdAt": "2024-01-01T00:00:00Z",
         "updatedAt": "2024-01-15T10:30:00Z"
       }
@@ -361,7 +362,7 @@ GET /api/ontologies/:id
 
 **Response (200):** Single ontology object with metadata
 
-**Response (404):** Ontology not found or not owned by user
+**Response (404):** Ontology not found
 
 ---
 
@@ -385,7 +386,7 @@ POST /api/ontologies
 **Validation Rules:**
 - `name`: Required, 1-255 characters
 - `description`: Optional, max 1000 characters
-- `semanticModelId`: Required, must reference a "ready" semantic model owned by user
+- `semanticModelId`: Required, must reference a "ready" semantic model
 
 **Response (201):**
 ```json
@@ -394,6 +395,7 @@ POST /api/ontologies
     "id": "uuid",
     "name": "Sales Analytics Ontology",
     "status": "creating",
+    "createdByUserId": "uuid",
     "createdAt": "2024-01-15T10:00:00Z"
   }
 }
@@ -401,16 +403,16 @@ POST /api/ontologies
 
 **Response (400):** Validation error or semantic model not ready
 
-**Response (404):** Semantic model not found or not owned by user
+**Response (404):** Semantic model not found
 
 **Side Effects:**
 - Creates `Ontology` record with status "creating"
-- Initiates background job to create Neo4j graph
+- Initiates synchronous Neo4j graph creation
 - Updates status to "ready" or "failed" on completion
 
 **Process:**
-1. Validate semantic model is "ready" and owned by user
-2. Create ontology record in PostgreSQL
+1. Validate semantic model is "ready"
+2. Create ontology record in PostgreSQL (createdByUserId: userId)
 3. Parse OSI model from semantic model
 4. Create Dataset nodes in Neo4j
 5. Create Field nodes with HAS_FIELD relationships
@@ -429,7 +431,7 @@ DELETE /api/ontologies/:id
 
 **Response (204):** No content (success)
 
-**Response (404):** Ontology not found or not owned by user
+**Response (404):** Ontology not found
 
 **Side Effects:**
 - Deletes ontology record from PostgreSQL
@@ -498,7 +500,7 @@ GET /api/ontologies/:id/graph
 }
 ```
 
-**Response (404):** Ontology not found or not owned by user
+**Response (404):** Ontology not found
 
 **Note:** Returns graph data formatted for react-force-graph-2d visualization.
 
@@ -512,7 +514,7 @@ Ontologies contain the same data as semantic models (metadata only, no credentia
 
 - **No Credential Storage**: Ontologies reference semantic models which reference connections
 - **Metadata Only**: Graph contains schema names, table structures, relationships (not row data)
-- **Per-User Isolation**: Ontologies filtered by `ownerId` in PostgreSQL
+- **RBAC-Based Access**: All authorized users can see all ontologies, controlled by RBAC permissions
 - **Namespace Isolation**: All Neo4j nodes tagged with `ontologyId` for multi-tenancy
 
 ### Neo4j Security
@@ -567,9 +569,9 @@ Permissions enforced via `@Auth` decorator:
 @ApiOperation({ summary: 'List ontologies' })
 async list(
   @Query() query: OntologyQueryDto,
-  @CurrentUser('id') userId: string,
+  @CurrentUser('id') userId: string, // For audit only, not filtering
 ) {
-  return this.ontologiesService.list(query, userId);
+  return this.ontologiesService.list(query); // No userId filter
 }
 ```
 
@@ -585,11 +587,11 @@ async list(
 2. Frontend sends POST /api/ontologies with semanticModelId
    ↓
 3. OntologiesService validates:
-   - Semantic model exists and is owned by user
+   - Semantic model exists
    - Status is "ready"
    - Model has valid OSI JSON
    ↓
-4. Create ontology record (status: creating)
+4. Create ontology record in PostgreSQL (status: creating, createdByUserId: userId)
    ↓
 5. Parse OSI model JSON
    ↓
@@ -1283,10 +1285,10 @@ File: `apps/api/test/ontologies.integration.spec.ts`
 
 **GET /api/ontologies**
 - ✅ 401 if not authenticated
-- ✅ 403 for viewer (no permission)
+- ✅ 403 without read permission
 - ✅ Empty list when no ontologies
 - ✅ Paginated results
-- ✅ Filter by ownerId (isolation)
+- ✅ Returns all ontologies (system-level, no ownership filter)
 - ✅ Search by name/description
 - ✅ Filter by status
 - ✅ Filter by semanticModelId
@@ -1294,31 +1296,31 @@ File: `apps/api/test/ontologies.integration.spec.ts`
 
 **GET /api/ontologies/:id**
 - ✅ 401 if not authenticated
-- ✅ 403 for viewer
+- ✅ 403 without read permission
 - ✅ 200 with ontology metadata
-- ✅ 404 for non-existent
-- ✅ 404 for other user's ontology
+- ✅ 404 for non-existent ontology
 
 **POST /api/ontologies**
 - ✅ 401 if not authenticated
-- ✅ 403 for viewer
-- ✅ 201 with created ontology
+- ✅ 403 without write permission
+- ✅ 201 with created ontology (createdByUserId set for audit)
 - ✅ Validation errors (400)
 - ✅ 404 for non-existent semantic model
 - ✅ 400 if semantic model not "ready"
 
 **DELETE /api/ontologies/:id**
 - ✅ 401 if not authenticated
-- ✅ 403 for viewer
+- ✅ 403 without delete permission
 - ✅ 204 on success
-- ✅ 404 for non-existent
+- ✅ 404 for non-existent ontology
 - ✅ Deletes Neo4j graph
 
 **GET /api/ontologies/:id/graph**
 - ✅ 401 if not authenticated
+- ✅ 403 without read permission
 - ✅ 200 with graph data
 - ✅ Correct node/edge format
-- ✅ 404 for non-existent
+- ✅ 404 for non-existent ontology
 
 **Run:**
 ```bash

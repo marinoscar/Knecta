@@ -41,7 +41,7 @@ sequenceDiagram
     API->>Google: Exchange code for tokens
     Google->>API: Return user profile
     API->>API: Provision or update user
-    API->>API: Assign default role (Viewer)
+    API->>API: Assign default role (Contributor)
     API->>API: Check admin bootstrap (INITIAL_ADMIN_EMAIL)
     API->>API: Generate JWT access token + refresh token
     API->>API: Store hashed refresh token in DB
@@ -60,7 +60,7 @@ sequenceDiagram
 3. Check if user identity exists (provider + subject)
 4. If not, check if user exists by email (identity linking)
 5. If neither, create new user with:
-   - Default role: `viewer`
+   - Default role: `contributor`
    - Default user settings (theme, locale)
    - Linked OAuth identity
    - Mark allowlist entry as claimed (`claimedById`, `claimedAt`)
@@ -320,11 +320,11 @@ erDiagram
 
 **Role Descriptions:**
 - **Admin**: Full system access - manage users, roles, and all settings
-- **Contributor**: Standard user capabilities - manage own settings (ready for future feature expansion)
-- **Viewer**: Read-only access - minimal privileges, manage own settings (default role for new users)
+- **Contributor**: Standard user capabilities - manage own settings (default role for new users)
+- **Viewer**: Read-only access - minimal privileges, manage own settings
 
 **Default Role Assignment:**
-- New users are assigned the `viewer` role automatically
+- New users are assigned the `contributor` role automatically
 - First user matching `INITIAL_ADMIN_EMAIL` receives `admin` role (bootstrap)
 - Additional roles can be assigned by admins via `/api/users/{id}` endpoint
 

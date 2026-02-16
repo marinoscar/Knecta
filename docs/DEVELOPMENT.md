@@ -94,7 +94,7 @@ This application uses **Fastify** as the HTTP adapter, not Express. This has imp
 
 ### First Login
 
-The first user to login with the email matching `INITIAL_ADMIN_EMAIL` (from .env) will automatically be granted the **admin** role. All subsequent users get the **viewer** role by default.
+The first user to login with the email matching `INITIAL_ADMIN_EMAIL` (from .env) will automatically be granted the **admin** role. All subsequent users get the **contributor** role by default.
 
 ---
 

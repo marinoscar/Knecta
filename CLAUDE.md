@@ -268,7 +268,7 @@ cd apps/api && npm run prisma:migrate
 - `PATCH /api/storage/objects/:id/metadata` - Update metadata
 
 ### Database Connections
-- `GET /api/connections` - List user's connections (paginated)
+- `GET /api/connections` - List connections (paginated)
 - `GET /api/connections/:id` - Get connection by ID
 - `POST /api/connections` - Create new connection
 - `PATCH /api/connections/:id` - Update connection
@@ -314,8 +314,8 @@ cd apps/api && npm run prisma:migrate
 
 ### Roles
 - **Admin**: Full access, manage users and system settings
-- **Contributor**: Standard capabilities, manage own settings
-- **Viewer**: Least privilege (default), manage own settings
+- **Contributor**: Standard capabilities, manage own settings (default for new users)
+- **Viewer**: Least privilege, manage own settings
 
 ### Key Permissions
 - `system_settings:read/write` - System settings access
@@ -343,8 +343,8 @@ cd apps/api && npm run prisma:migrate
 - `device_codes` - Device authorization codes (RFC 8628)
 - `storage_objects` - File metadata, status, storage references
 - `storage_object_chunks` - Multipart upload chunk tracking
-- `data_connections` - Database connection configurations (per-user, encrypted credentials)
-- `semantic_models` - AI-generated semantic models (OSI spec, JSON model, per-user)
+- `data_connections` - Database connection configurations (system-level, encrypted credentials)
+- `semantic_models` - AI-generated semantic models (OSI spec, JSON model, system-level)
 - `semantic_model_runs` - Agent execution tracking (status, plan, progress)
 - `ontologies` - Graph ontology metadata (status, counts, link to semantic model)
 
