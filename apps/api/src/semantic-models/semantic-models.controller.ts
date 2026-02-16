@@ -46,9 +46,8 @@ export class SemanticModelsController {
   @ApiResponse({ status: 200, description: 'Paginated list of semantic models' })
   async list(
     @Query() query: ModelQueryDto,
-    @CurrentUser('id') userId: string,
   ) {
-    return this.service.list(query, userId);
+    return this.service.list(query);
   }
 
   @Post('runs')
@@ -71,9 +70,8 @@ export class SemanticModelsController {
   @ApiResponse({ status: 404, description: 'Run not found' })
   async getRun(
     @Param('runId', ParseUUIDPipe) runId: string,
-    @CurrentUser('id') userId: string,
   ) {
-    return this.service.getRun(runId, userId);
+    return this.service.getRun(runId);
   }
 
   @Post('runs/:runId/cancel')
@@ -92,18 +90,17 @@ export class SemanticModelsController {
 
   @Get('runs')
   @Auth({ permissions: [PERMISSIONS.SEMANTIC_MODELS_READ] })
-  @ApiOperation({ summary: 'List all runs for current user' })
+  @ApiOperation({ summary: 'List all runs' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'pageSize', required: false, type: Number })
   @ApiQuery({ name: 'status', required: false, type: String })
   @ApiResponse({ status: 200, description: 'Paginated list of runs' })
   async listAllRuns(
-    @CurrentUser('id') userId: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
     @Query('status') status?: string,
   ) {
-    return this.service.listAllRuns(userId, {
+    return this.service.listAllRuns({
       page: page ? parseInt(page, 10) : undefined,
       pageSize: pageSize ? parseInt(pageSize, 10) : undefined,
       status,
@@ -144,9 +141,8 @@ export class SemanticModelsController {
   @ApiResponse({ status: 404, description: 'Model not found' })
   async getById(
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser('id') userId: string,
   ) {
-    return this.service.getById(id, userId);
+    return this.service.getById(id);
   }
 
   @Patch(':id')
@@ -188,9 +184,8 @@ export class SemanticModelsController {
   @ApiResponse({ status: 400, description: 'No model data to export' })
   async exportYaml(
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser('id') userId: string,
   ) {
-    return this.service.exportYaml(id, userId);
+    return this.service.exportYaml(id);
   }
 
   @Get(':id/runs')
@@ -201,8 +196,7 @@ export class SemanticModelsController {
   @ApiResponse({ status: 404, description: 'Model not found' })
   async listRuns(
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser('id') userId: string,
   ) {
-    return this.service.listRuns(id, userId);
+    return this.service.listRuns(id);
   }
 }

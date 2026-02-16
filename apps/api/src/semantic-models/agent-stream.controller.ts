@@ -205,11 +205,11 @@ export class AgentStreamController {
     const startTime = Date.now();
 
     try {
-      // 1. Validate run exists and user has access
-      const run = await this.semanticModelsService.getRun(runId, userId);
+      // 1. Validate run exists
+      const run = await this.semanticModelsService.getRun(runId);
 
       // Atomically claim the run
-      const claimed = await this.semanticModelsService.claimRun(runId, userId);
+      const claimed = await this.semanticModelsService.claimRun(runId);
       if (!claimed) {
         throw { status: 409, code: 'RUN_ALREADY_EXECUTING', message: 'This run is already being executed' };
       }
@@ -307,7 +307,7 @@ export class AgentStreamController {
         sseHandler.closeCurrentStep();
 
         // 10. Fetch updated run
-        const updatedRun = await this.semanticModelsService.getRun(runId, userId);
+        const updatedRun = await this.semanticModelsService.getRun(runId);
         const duration = Date.now() - startTime;
 
         // 11. Final progress update
@@ -347,7 +347,6 @@ export class AgentStreamController {
         try {
           await this.semanticModelsService.updateRunStatus(
             runId,
-            userId,
             'failed',
             error.message || 'Agent execution failed',
           );

@@ -190,35 +190,6 @@ describe('Semantic Models (Integration)', () => {
       );
     });
 
-    it('should only return user\'s own models (ownership isolation)', async () => {
-      const contributor = await createMockContributorUser(context);
-
-      const mockModels = [
-        createMockSemanticModel({
-          id: 'sm-uuid-1',
-          name: 'My Model',
-          connectionId: 'conn-uuid-1',
-          ownerId: contributor.id,
-        }),
-      ];
-
-      context.prismaMock.semanticModel.findMany.mockResolvedValue(mockModels);
-      context.prismaMock.semanticModel.count.mockResolvedValue(1);
-
-      await request(context.app.getHttpServer())
-        .get('/api/semantic-models')
-        .set(authHeader(contributor.accessToken))
-        .expect(200);
-
-      // Verify the mock was called with ownerId filter
-      expect(context.prismaMock.semanticModel.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            ownerId: contributor.id,
-          }),
-        }),
-      );
-    });
   });
 
   // ==========================================================================
@@ -254,7 +225,7 @@ describe('Semantic Models (Integration)', () => {
         connection: mockConnection,
       };
 
-      context.prismaMock.semanticModel.findFirst.mockResolvedValue(
+      context.prismaMock.semanticModel.findUnique.mockResolvedValue(
         modelWithConnection,
       );
 
@@ -272,7 +243,7 @@ describe('Semantic Models (Integration)', () => {
     it('should return 404 for non-existent model', async () => {
       const contributor = await createMockContributorUser(context);
 
-      context.prismaMock.semanticModel.findFirst.mockResolvedValue(null);
+      context.prismaMock.semanticModel.findUnique.mockResolvedValue(null);
 
       await request(context.app.getHttpServer())
         .get('/api/semantic-models/123e4567-e89b-12d3-a456-426614174999')
@@ -280,26 +251,6 @@ describe('Semantic Models (Integration)', () => {
         .expect(404);
     });
 
-    it('should return 404 for other user\'s model', async () => {
-      const contributor = await createMockContributorUser(context);
-
-      // Mock returns null because ownerId doesn't match
-      context.prismaMock.semanticModel.findFirst.mockResolvedValue(null);
-
-      await request(context.app.getHttpServer())
-        .get('/api/semantic-models/123e4567-e89b-12d3-a456-426614174001')
-        .set(authHeader(contributor.accessToken))
-        .expect(404);
-
-      // Verify the query included ownerId filter
-      expect(context.prismaMock.semanticModel.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            ownerId: contributor.id,
-          }),
-        }),
-      );
-    });
   });
 
   // ==========================================================================
@@ -341,7 +292,7 @@ describe('Semantic Models (Integration)', () => {
         description: 'New description',
       };
 
-      context.prismaMock.semanticModel.findFirst.mockResolvedValue(
+      context.prismaMock.semanticModel.findUnique.mockResolvedValue(
         existingModel,
       );
       context.prismaMock.semanticModel.update.mockResolvedValue(updatedModel);
@@ -363,7 +314,7 @@ describe('Semantic Models (Integration)', () => {
     it('should return 404 for non-existent model', async () => {
       const contributor = await createMockContributorUser(context);
 
-      context.prismaMock.semanticModel.findFirst.mockResolvedValue(null);
+      context.prismaMock.semanticModel.findUnique.mockResolvedValue(null);
 
       await request(context.app.getHttpServer())
         .patch('/api/semantic-models/123e4567-e89b-12d3-a456-426614174999')
@@ -469,7 +420,7 @@ describe('Semantic Models (Integration)', () => {
         metricCount: 1,
       };
 
-      context.prismaMock.semanticModel.findFirst.mockResolvedValue(
+      context.prismaMock.semanticModel.findUnique.mockResolvedValue(
         existingModel,
       );
       context.prismaMock.semanticModel.update.mockResolvedValue(updatedModel);
@@ -499,7 +450,7 @@ describe('Semantic Models (Integration)', () => {
         ownerId: contributor.id,
       });
 
-      context.prismaMock.semanticModel.findFirst.mockResolvedValue(
+      context.prismaMock.semanticModel.findUnique.mockResolvedValue(
         existingModel,
       );
       context.prismaMock.auditEvent.create.mockResolvedValue({} as any);
@@ -570,7 +521,7 @@ describe('Semantic Models (Integration)', () => {
         metricCount: 0,
       };
 
-      context.prismaMock.semanticModel.findFirst.mockResolvedValue(
+      context.prismaMock.semanticModel.findUnique.mockResolvedValue(
         existingModel,
       );
       context.prismaMock.semanticModel.update.mockResolvedValue(updatedModel);
@@ -611,7 +562,7 @@ describe('Semantic Models (Integration)', () => {
         // stats should NOT be reset
       };
 
-      context.prismaMock.semanticModel.findFirst.mockResolvedValue(
+      context.prismaMock.semanticModel.findUnique.mockResolvedValue(
         existingModel,
       );
       context.prismaMock.semanticModel.update.mockResolvedValue(updatedModel);
@@ -664,7 +615,7 @@ describe('Semantic Models (Integration)', () => {
         ownerId: contributor.id,
       });
 
-      context.prismaMock.semanticModel.findFirst.mockResolvedValue(mockModel);
+      context.prismaMock.semanticModel.findUnique.mockResolvedValue(mockModel);
       context.prismaMock.semanticModel.delete.mockResolvedValue(mockModel);
       context.prismaMock.auditEvent.create.mockResolvedValue({} as any);
 
@@ -681,7 +632,7 @@ describe('Semantic Models (Integration)', () => {
     it('should return 404 for non-existent model', async () => {
       const contributor = await createMockContributorUser(context);
 
-      context.prismaMock.semanticModel.findFirst.mockResolvedValue(null);
+      context.prismaMock.semanticModel.findUnique.mockResolvedValue(null);
 
       await request(context.app.getHttpServer())
         .delete('/api/semantic-models/123e4567-e89b-12d3-a456-426614174999')
@@ -801,7 +752,7 @@ describe('Semantic Models (Integration)', () => {
         },
       });
 
-      context.prismaMock.semanticModel.findFirst.mockResolvedValue(mockModel);
+      context.prismaMock.semanticModel.findUnique.mockResolvedValue(mockModel);
 
       const response = await request(context.app.getHttpServer())
         .get('/api/semantic-models/123e4567-e89b-12d3-a456-426614174011/yaml')
@@ -816,7 +767,7 @@ describe('Semantic Models (Integration)', () => {
     it('should return 404 for non-existent model', async () => {
       const contributor = await createMockContributorUser(context);
 
-      context.prismaMock.semanticModel.findFirst.mockResolvedValue(null);
+      context.prismaMock.semanticModel.findUnique.mockResolvedValue(null);
 
       await request(context.app.getHttpServer())
         .get('/api/semantic-models/123e4567-e89b-12d3-a456-426614174999/yaml')
@@ -876,7 +827,7 @@ describe('Semantic Models (Integration)', () => {
         ownerId: contributor.id,
       });
 
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(
+      context.prismaMock.dataConnection.findUnique.mockResolvedValue(
         mockConnection,
       );
       context.prismaMock.semanticModelRun.create.mockResolvedValue(mockRun);
@@ -932,7 +883,7 @@ describe('Semantic Models (Integration)', () => {
     it('should return 404 if connection doesn\'t exist', async () => {
       const contributor = await createMockContributorUser(context);
 
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(null);
+      context.prismaMock.dataConnection.findUnique.mockResolvedValue(null);
 
       await request(context.app.getHttpServer())
         .post('/api/semantic-models/runs')
@@ -964,7 +915,7 @@ describe('Semantic Models (Integration)', () => {
         ownerId: contributor.id,
       });
 
-      context.prismaMock.semanticModelRun.findFirst.mockResolvedValue(mockRun);
+      context.prismaMock.semanticModelRun.findUnique.mockResolvedValue(mockRun);
 
       const response = await request(context.app.getHttpServer())
         .get('/api/semantic-models/runs/123e4567-e89b-12d3-a456-426614174021')
@@ -978,7 +929,7 @@ describe('Semantic Models (Integration)', () => {
     it('should return 404 for non-existent run', async () => {
       const contributor = await createMockContributorUser(context);
 
-      context.prismaMock.semanticModelRun.findFirst.mockResolvedValue(null);
+      context.prismaMock.semanticModelRun.findUnique.mockResolvedValue(null);
 
       await request(context.app.getHttpServer())
         .get('/api/semantic-models/runs/123e4567-e89b-12d3-a456-426614174999')
@@ -1007,7 +958,7 @@ describe('Semantic Models (Integration)', () => {
         status: 'cancelled',
       };
 
-      context.prismaMock.semanticModelRun.findFirst.mockResolvedValue(mockRun);
+      context.prismaMock.semanticModelRun.findUnique.mockResolvedValue(mockRun);
       context.prismaMock.semanticModelRun.update.mockResolvedValue(
         cancelledRun,
       );
@@ -1031,7 +982,7 @@ describe('Semantic Models (Integration)', () => {
         ownerId: contributor.id,
       });
 
-      context.prismaMock.semanticModelRun.findFirst.mockResolvedValue(mockRun);
+      context.prismaMock.semanticModelRun.findUnique.mockResolvedValue(mockRun);
 
       await request(context.app.getHttpServer())
         .post('/api/semantic-models/runs/123e4567-e89b-12d3-a456-426614174021/cancel')

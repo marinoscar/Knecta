@@ -22,14 +22,12 @@ export class SemanticModelsService {
   /**
    * List semantic models with pagination and filtering
    */
-  async list(query: ModelQueryDto, userId: string) {
+  async list(query: ModelQueryDto) {
     const { page, pageSize, search, status, connectionId, sortBy, sortOrder } = query;
     const skip = (page - 1) * pageSize;
 
     // Build where clause
-    const where: any = {
-      ownerId: userId,
-    };
+    const where: any = {};
 
     if (search) {
       where.OR = [
@@ -77,12 +75,9 @@ export class SemanticModelsService {
   /**
    * Get semantic model by ID
    */
-  async getById(id: string, userId: string) {
-    const model = await this.prisma.semanticModel.findFirst({
-      where: {
-        id,
-        ownerId: userId,
-      },
+  async getById(id: string) {
+    const model = await this.prisma.semanticModel.findUnique({
+      where: { id },
       include: {
         connection: {
           select: {
@@ -104,12 +99,9 @@ export class SemanticModelsService {
    * Update a semantic model
    */
   async update(id: string, dto: UpdateModelDto, userId: string) {
-    // Verify ownership
-    const existing = await this.prisma.semanticModel.findFirst({
-      where: {
-        id,
-        ownerId: userId,
-      },
+    // Verify model exists
+    const existing = await this.prisma.semanticModel.findUnique({
+      where: { id },
     });
 
     if (!existing) {
@@ -209,12 +201,9 @@ export class SemanticModelsService {
    * Delete a semantic model
    */
   async delete(id: string, userId: string) {
-    // Verify ownership
-    const model = await this.prisma.semanticModel.findFirst({
-      where: {
-        id,
-        ownerId: userId,
-      },
+    // Verify model exists
+    const model = await this.prisma.semanticModel.findUnique({
+      where: { id },
     });
 
     if (!model) {
@@ -241,9 +230,9 @@ export class SemanticModelsService {
   /**
    * Export semantic model as YAML
    */
-  async exportYaml(id: string, userId: string) {
+  async exportYaml(id: string) {
     // Get model
-    const model = await this.getById(id, userId);
+    const model = await this.getById(id);
 
     if (!model.model) {
       throw new BadRequestException('Semantic model has no data to export');
@@ -261,13 +250,10 @@ export class SemanticModelsService {
   /**
    * List runs for a semantic model
    */
-  async listRuns(modelId: string, userId: string) {
-    // Verify model ownership
-    const model = await this.prisma.semanticModel.findFirst({
-      where: {
-        id: modelId,
-        ownerId: userId,
-      },
+  async listRuns(modelId: string) {
+    // Verify model exists
+    const model = await this.prisma.semanticModel.findUnique({
+      where: { id: modelId },
     });
 
     if (!model) {
@@ -291,12 +277,9 @@ export class SemanticModelsService {
    * Create a new semantic model run
    */
   async createRun(dto: CreateRunDto, userId: string) {
-    // Verify connection exists and is owned by user
-    const connection = await this.prisma.dataConnection.findFirst({
-      where: {
-        id: dto.connectionId,
-        ownerId: userId,
-      },
+    // Verify connection exists
+    const connection = await this.prisma.dataConnection.findUnique({
+      where: { id: dto.connectionId },
     });
 
     if (!connection) {
@@ -313,7 +296,7 @@ export class SemanticModelsService {
         name: dto.name,
         instructions: dto.instructions,
         status: 'pending',
-        ownerId: userId,
+        createdByUserId: userId,
       },
     });
 
@@ -334,12 +317,9 @@ export class SemanticModelsService {
   /**
    * Get a semantic model run by ID
    */
-  async getRun(runId: string, userId: string) {
-    const run = await this.prisma.semanticModelRun.findFirst({
-      where: {
-        id: runId,
-        ownerId: userId,
-      },
+  async getRun(runId: string) {
+    const run = await this.prisma.semanticModelRun.findUnique({
+      where: { id: runId },
     });
 
     if (!run) {
@@ -354,12 +334,11 @@ export class SemanticModelsService {
    */
   async updateRunStatus(
     runId: string,
-    userId: string,
     status: string,
     errorMessage?: string,
   ) {
-    const run = await this.prisma.semanticModelRun.findFirst({
-      where: { id: runId, ownerId: userId },
+    const run = await this.prisma.semanticModelRun.findUnique({
+      where: { id: runId },
     });
 
     if (!run) {
@@ -389,9 +368,9 @@ export class SemanticModelsService {
    * Atomically claim a run for execution (pending → executing).
    * Returns true if this request claimed it, false if another request already did.
    */
-  async claimRun(runId: string, userId: string): Promise<boolean> {
+  async claimRun(runId: string): Promise<boolean> {
     const result = await this.prisma.semanticModelRun.updateMany({
-      where: { id: runId, ownerId: userId, status: 'pending' },
+      where: { id: runId, status: 'pending' },
       data: { status: 'executing', startedAt: new Date(), updatedAt: new Date() },
     });
     return result.count > 0;
@@ -412,12 +391,9 @@ export class SemanticModelsService {
    * Cancel a semantic model run
    */
   async cancelRun(runId: string, userId: string) {
-    // Verify ownership
-    const run = await this.prisma.semanticModelRun.findFirst({
-      where: {
-        id: runId,
-        ownerId: userId,
-      },
+    // Verify run exists
+    const run = await this.prisma.semanticModelRun.findUnique({
+      where: { id: runId },
     });
 
     if (!run) {
@@ -455,15 +431,14 @@ export class SemanticModelsService {
   }
 
   /**
-   * List all runs for a user (paginated)
+   * List all runs (paginated)
    */
   async listAllRuns(
-    userId: string,
     opts: { page?: number; pageSize?: number; status?: string },
   ) {
     const { page = 1, pageSize = 20, status } = opts;
     const skip = (page - 1) * pageSize;
-    const where: any = { ownerId: userId };
+    const where: any = {};
     if (status) where.status = status;
 
     const [runs, total] = await Promise.all([
@@ -494,8 +469,8 @@ export class SemanticModelsService {
    * Delete a semantic model run (only failed or cancelled)
    */
   async deleteRun(runId: string, userId: string) {
-    const run = await this.prisma.semanticModelRun.findFirst({
-      where: { id: runId, ownerId: userId },
+    const run = await this.prisma.semanticModelRun.findUnique({
+      where: { id: runId },
     });
     if (!run) {
       throw new NotFoundException('Run not found');
@@ -537,7 +512,7 @@ export class SemanticModelsService {
       fieldCount: model.fieldCount,
       relationshipCount: model.relationshipCount,
       metricCount: model.metricCount,
-      ownerId: model.ownerId,
+      createdByUserId: model.createdByUserId,
       createdAt: model.createdAt,
       updatedAt: model.updatedAt,
     };
@@ -562,7 +537,7 @@ export class SemanticModelsService {
       errorMessage: run.errorMessage,
       startedAt: run.startedAt,
       completedAt: run.completedAt,
-      ownerId: run.ownerId,
+      createdByUserId: run.createdByUserId,
       createdAt: run.createdAt,
       updatedAt: run.updatedAt,
     };
