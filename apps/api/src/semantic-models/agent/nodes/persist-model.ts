@@ -28,7 +28,7 @@ export function createPersistNode(prisma: PrismaService) {
         fieldCount: stats.fieldCount,
         relationshipCount: stats.relationshipCount,
         metricCount: stats.metricCount,
-        ownerId: state.userId,
+        createdByUserId: state.userId,
       },
     });
 
