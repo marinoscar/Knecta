@@ -22,14 +22,12 @@ export class OntologiesService {
   /**
    * List ontologies with pagination and filtering
    */
-  async list(query: OntologyQueryDto, userId: string) {
+  async list(query: OntologyQueryDto) {
     const { page, pageSize, search, status, sortBy, sortOrder } = query;
     const skip = (page - 1) * pageSize;
 
     // Build where clause
-    const where: any = {
-      ownerId: userId,
-    };
+    const where: any = {};
 
     if (search) {
       where.OR = [
@@ -73,12 +71,9 @@ export class OntologiesService {
   /**
    * Get ontology by ID
    */
-  async getById(id: string, userId: string) {
-    const ontology = await this.prisma.ontology.findFirst({
-      where: {
-        id,
-        ownerId: userId,
-      },
+  async getById(id: string) {
+    const ontology = await this.prisma.ontology.findUnique({
+      where: { id },
       include: {
         semanticModel: {
           select: {
@@ -100,12 +95,9 @@ export class OntologiesService {
    * Create a new ontology from semantic model
    */
   async create(dto: CreateOntologyDto, userId: string) {
-    // Find the semantic model by ID and verify ownership
-    const semanticModel = await this.prisma.semanticModel.findFirst({
-      where: {
-        id: dto.semanticModelId,
-        ownerId: userId,
-      },
+    // Find the semantic model by ID and verify it exists
+    const semanticModel = await this.prisma.semanticModel.findUnique({
+      where: { id: dto.semanticModelId },
     });
 
     if (!semanticModel) {
@@ -130,7 +122,7 @@ export class OntologiesService {
         name: dto.name,
         description: dto.description,
         semanticModelId: dto.semanticModelId,
-        ownerId: userId,
+        createdByUserId: userId,
         status: 'creating',
       },
       include: {
@@ -219,12 +211,9 @@ export class OntologiesService {
    * Delete ontology (from both PostgreSQL and Neo4j)
    */
   async delete(id: string, userId: string) {
-    // Verify ownership
-    const ontology = await this.prisma.ontology.findFirst({
-      where: {
-        id,
-        ownerId: userId,
-      },
+    // Verify ontology exists
+    const ontology = await this.prisma.ontology.findUnique({
+      where: { id },
     });
 
     if (!ontology) {
@@ -257,13 +246,10 @@ export class OntologiesService {
   /**
    * Get graph representation for visualization
    */
-  async getGraph(id: string, userId: string) {
-    // Verify ownership
-    const ontology = await this.prisma.ontology.findFirst({
-      where: {
-        id,
-        ownerId: userId,
-      },
+  async getGraph(id: string) {
+    // Verify ontology exists
+    const ontology = await this.prisma.ontology.findUnique({
+      where: { id },
     });
 
     if (!ontology) {
@@ -298,7 +284,7 @@ export class OntologiesService {
       nodeCount: ontology.nodeCount,
       relationshipCount: ontology.relationshipCount,
       errorMessage: ontology.errorMessage,
-      ownerId: ontology.ownerId,
+      createdByUserId: ontology.createdByUserId,
       createdAt: ontology.createdAt,
       updatedAt: ontology.updatedAt,
     };

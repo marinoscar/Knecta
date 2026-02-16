@@ -40,11 +40,8 @@ export class OntologiesController {
   @ApiQuery({ name: 'sortBy', required: false, enum: ['name', 'status', 'createdAt', 'updatedAt'] })
   @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
   @ApiResponse({ status: 200, description: 'Paginated list of ontologies' })
-  async list(
-    @Query() query: OntologyQueryDto,
-    @CurrentUser('id') userId: string,
-  ) {
-    return this.service.list(query, userId);
+  async list(@Query() query: OntologyQueryDto) {
+    return this.service.list(query);
   }
 
   @Get(':id')
@@ -53,11 +50,8 @@ export class OntologiesController {
   @ApiParam({ name: 'id', type: String, format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Ontology found' })
   @ApiResponse({ status: 404, description: 'Ontology not found' })
-  async getById(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser('id') userId: string,
-  ) {
-    return this.service.getById(id, userId);
+  async getById(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.getById(id);
   }
 
   @Post()
@@ -93,10 +87,7 @@ export class OntologiesController {
   @ApiParam({ name: 'id', type: String, format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Graph data retrieved' })
   @ApiResponse({ status: 404, description: 'Ontology not found' })
-  async getGraph(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser('id') userId: string,
-  ) {
-    return this.service.getGraph(id, userId);
+  async getGraph(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.getGraph(id);
   }
 }
