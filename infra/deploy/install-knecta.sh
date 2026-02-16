@@ -8,9 +8,10 @@
 #   1. Creates data directories for persistent volumes
 #   2. Clones (or pulls) the Knecta repository
 #   3. Validates that .env exists
-#   4. Builds and starts all Docker containers
+#   4. Builds images and starts dependencies (Neo4j, sandbox)
 #   5. Runs Prisma migrations and database seed (against cloud PostgreSQL)
-#   6. Verifies service health
+#   6. Starts all services (API, web)
+#   7. Verifies service health
 #
 # Usage:
 #   cd /opt/infra/apps/knecta
@@ -36,7 +37,7 @@ log "============================================"
 log " Knecta Installer"
 log "============================================"
 log ""
-log "[1/6] Setting up directories..."
+log "[1/7] Setting up directories..."
 mkdir -p "${KNECTA_DIR}/data/neo4j"
 log "  Directories ready."
 
@@ -44,7 +45,7 @@ log "  Directories ready."
 # Step 2: Clone or pull the repository
 # -----------------------------------------------
 log ""
-log "[2/6] Fetching source code..."
+log "[2/7] Fetching source code..."
 if [ -d "${REPO_DIR}/.git" ]; then
     log "  Repository exists. Pulling latest from ${BRANCH}..."
     cd "${REPO_DIR}"
@@ -62,7 +63,7 @@ fi
 # Step 3: Check .env exists
 # -----------------------------------------------
 log ""
-log "[3/6] Checking environment file..."
+log "[3/7] Checking environment file..."
 if [ ! -f "${KNECTA_DIR}/.env" ]; then
     log ""
     log "  ERROR: .env file not found at ${KNECTA_DIR}/.env"
@@ -77,16 +78,53 @@ fi
 log "  .env file found."
 
 # -----------------------------------------------
-# Step 4: Build and start containers
+# Step 4: Build images and start dependencies
 # -----------------------------------------------
 log ""
-log "[4/6] Building and starting containers..."
+log "[4/7] Building images and starting dependencies..."
 cd "${KNECTA_DIR}"
 docker compose build
-docker compose up -d
-log "  Containers started."
+docker compose up -d neo4j sandbox
+log "  Waiting for Neo4j and sandbox to be healthy..."
 
-# Wait for API to be ready (depends on Neo4j + sandbox health checks)
+# Wait for Neo4j health check
+NEO4J_READY=false
+for i in $(seq 1 60); do
+    if docker compose exec -T neo4j cypher-shell -u "${NEO4J_USER:-neo4j}" -p "${NEO4J_PASSWORD}" 'RETURN 1' >/dev/null 2>&1; then
+        NEO4J_READY=true
+        break
+    fi
+    sleep 2
+done
+
+if [ "${NEO4J_READY}" = "false" ]; then
+    log "  ERROR: Neo4j did not become healthy within 120 seconds."
+    log "  Check logs: docker compose logs neo4j"
+    exit 1
+fi
+log "  Dependencies ready."
+
+# -----------------------------------------------
+# Step 5: Run Prisma migrations + seed
+# -----------------------------------------------
+log ""
+log "[5/7] Running database migrations (against cloud PostgreSQL)..."
+docker compose run --rm -T api npm run prisma:migrate
+log "  Migrations complete."
+
+log "  Running database seed..."
+docker compose run --rm -T api npm run prisma:seed
+log "  Seed complete."
+
+# -----------------------------------------------
+# Step 6: Start all services
+# -----------------------------------------------
+log ""
+log "[6/7] Starting all services..."
+docker compose up -d
+log "  All containers started."
+
+# Wait for API to be ready
 log "  Waiting for API to initialize..."
 API_READY=false
 for i in $(seq 1 60); do
@@ -99,27 +137,14 @@ done
 
 if [ "${API_READY}" = "false" ]; then
     log "  WARNING: API health check did not pass within 120 seconds."
-    log "  Continuing with migrations (API may still be starting)..."
-    log "  Check logs if needed: docker compose logs api"
+    log "  Check logs: docker compose logs api"
 fi
 
 # -----------------------------------------------
-# Step 5: Run Prisma migrations + seed
+# Step 7: Verify health
 # -----------------------------------------------
 log ""
-log "[5/6] Running database migrations (against cloud PostgreSQL)..."
-docker compose exec -T api npm run prisma:migrate
-log "  Migrations complete."
-
-log "  Running database seed..."
-docker compose exec -T api npm run prisma:seed
-log "  Seed complete."
-
-# -----------------------------------------------
-# Step 6: Verify health
-# -----------------------------------------------
-log ""
-log "[6/6] Verifying services..."
+log "[7/7] Verifying services..."
 sleep 3
 
 # Check containers are running
