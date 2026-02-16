@@ -71,6 +71,9 @@ services:
     container_name: knecta-neo4j
     environment:
       - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD}
+      - NEO4J_server_memory_heap_initial__size=512m
+      - NEO4J_server_memory_heap_max__size=512m
+      - NEO4J_server_memory_pagecache_size=256m
     volumes:
       - ./data/neo4j:/data
     healthcheck:
@@ -83,7 +86,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 1G
     networks:
       - app-network
 
