@@ -337,7 +337,7 @@ model DataConnection {
   encryptedCredential String?      @map("encrypted_credential")
   useSsl              Boolean      @default(false) @map("use_ssl")
   options             Json?
-  ownerId             String       @map("owner_id") @db.Uuid
+  createdByUserId     String?      @map("created_by_user_id") @db.Uuid
   lastTestedAt        DateTime?    @map("last_tested_at") @db.Timestamptz
   lastTestResult      Boolean?     @map("last_test_result")
   lastTestMessage     String?      @map("last_test_message")
@@ -345,11 +345,11 @@ model DataConnection {
   updatedAt           DateTime     @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relations
-  owner             User               @relation("UserDataConnections", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdByUser     User?              @relation("UserDataConnections", fields: [createdByUserId], references: [id], onDelete: SetNull)
   semanticModels    SemanticModel[]    @relation("ConnectionSemanticModels")
   semanticModelRuns SemanticModelRun[] @relation("ConnectionSemanticModelRuns")
 
-  @@index([ownerId])
+  @@index([createdByUserId])
   @@index([dbType])
   @@map("data_connections")
 }
@@ -371,17 +371,17 @@ model SemanticModel {
   fieldCount        Int                 @default(0) @map("field_count")
   relationshipCount Int                 @default(0) @map("relationship_count")
   metricCount       Int                 @default(0) @map("metric_count")
-  ownerId           String              @map("owner_id") @db.Uuid
+  createdByUserId   String?             @map("created_by_user_id") @db.Uuid
   createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz
   updatedAt         DateTime            @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relations
-  owner      User             @relation("UserSemanticModels", fields: [ownerId], references: [id], onDelete: Cascade)
-  connection DataConnection   @relation("ConnectionSemanticModels", fields: [connectionId], references: [id], onDelete: Cascade)
-  runs       SemanticModelRun[]
-  ontologies Ontology[]       @relation("SemanticModelOntologies")
+  createdByUser User?            @relation("UserSemanticModels", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  connection    DataConnection   @relation("ConnectionSemanticModels", fields: [connectionId], references: [id], onDelete: Cascade)
+  runs          SemanticModelRun[]
+  ontologies    Ontology[]       @relation("SemanticModelOntologies")
 
-  @@index([ownerId])
+  @@index([createdByUserId])
   @@index([connectionId])
   @@index([status])
   @@map("semantic_models")
@@ -402,16 +402,16 @@ model SemanticModelRun {
   errorMessage    String?    @map("error_message")
   startedAt       DateTime?  @map("started_at") @db.Timestamptz
   completedAt     DateTime?  @map("completed_at") @db.Timestamptz
-  ownerId         String     @map("owner_id") @db.Uuid
+  createdByUserId String?    @map("created_by_user_id") @db.Uuid
   createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relations
-  owner         User           @relation("UserSemanticModelRuns", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdByUser User?          @relation("UserSemanticModelRuns", fields: [createdByUserId], references: [id], onDelete: SetNull)
   semanticModel SemanticModel? @relation(fields: [semanticModelId], references: [id], onDelete: SetNull)
   connection    DataConnection @relation("ConnectionSemanticModelRuns", fields: [connectionId], references: [id], onDelete: Cascade)
 
-  @@index([ownerId])
+  @@index([createdByUserId])
   @@index([semanticModelId])
   @@index([connectionId])
   @@index([status])
@@ -427,7 +427,7 @@ model Ontology {
   name              String
   description       String?
   semanticModelId   String         @map("semantic_model_id") @db.Uuid
-  ownerId           String         @map("owner_id") @db.Uuid
+  createdByUserId   String?        @map("created_by_user_id") @db.Uuid
   status            OntologyStatus @default(creating)
   nodeCount         Int            @default(0) @map("node_count")
   relationshipCount Int            @default(0) @map("relationship_count")
@@ -436,11 +436,11 @@ model Ontology {
   updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relations
-  owner         User          @relation("UserOntologies", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdByUser User?         @relation("UserOntologies", fields: [createdByUserId], references: [id], onDelete: SetNull)
   semanticModel SemanticModel @relation("SemanticModelOntologies", fields: [semanticModelId], references: [id], onDelete: Cascade)
   dataChats     DataChat[]    @relation("OntologyDataChats")
 
-  @@index([ownerId])
+  @@index([createdByUserId])
   @@index([semanticModelId])
   @@index([status])
   @@map("ontologies")
