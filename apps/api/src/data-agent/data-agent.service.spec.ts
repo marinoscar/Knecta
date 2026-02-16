@@ -75,18 +75,15 @@ describe('DataAgentService', () => {
         ontologyId: mockOntologyId,
       };
 
-      mockPrisma.ontology.findFirst.mockResolvedValue(mockOntology as any);
+      mockPrisma.ontology.findUnique.mockResolvedValue(mockOntology as any);
       mockPrisma.dataChat.create.mockResolvedValue(mockChat as any);
 
       const result = await service.createChat(dto, mockUserId);
 
       expect(result).toEqual(mockChat);
-      expect(mockPrisma.ontology.findFirst).toHaveBeenCalledWith({
+      expect(mockPrisma.ontology.findUnique).toHaveBeenCalledWith({
         where: {
           id: mockOntologyId,
-        },
-        include: {
-          semanticModel: true,
         },
       });
       expect(mockPrisma.dataChat.create).toHaveBeenCalledWith({
@@ -106,7 +103,7 @@ describe('DataAgentService', () => {
         llmProvider: 'anthropic',
       };
 
-      mockPrisma.ontology.findFirst.mockResolvedValue(mockOntology as any);
+      mockPrisma.ontology.findUnique.mockResolvedValue(mockOntology as any);
       mockPrisma.dataChat.create.mockResolvedValue({
         ...mockChat,
         llmProvider: 'anthropic',
@@ -131,7 +128,7 @@ describe('DataAgentService', () => {
         ontologyId: 'nonexistent-id',
       };
 
-      mockPrisma.ontology.findFirst.mockResolvedValue(null);
+      mockPrisma.ontology.findUnique.mockResolvedValue(null);
 
       await expect(service.createChat(dto, mockUserId)).rejects.toThrow(
         NotFoundException,
@@ -154,7 +151,7 @@ describe('DataAgentService', () => {
         status: 'creating',
       };
 
-      mockPrisma.ontology.findFirst.mockResolvedValue(creatingOntology as any);
+      mockPrisma.ontology.findUnique.mockResolvedValue(creatingOntology as any);
 
       await expect(service.createChat(dto, mockUserId)).rejects.toThrow(
         ConflictException,

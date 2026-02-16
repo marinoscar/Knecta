@@ -55,8 +55,8 @@ describe('Auth Service - Allowlist Enforcement', () => {
 
     // Setup role mocks with userRoles for admin bootstrap
     prismaMock.role.findUnique.mockImplementation(async ({ where }: any) => {
-      if (where.name === 'viewer') {
-        return mockRoles.viewer as any;
+      if (where.name === 'contributor') {
+        return mockRoles.contributor as any;
       }
       if (where.name === 'admin') {
         return { ...mockRoles.admin, userRoles: [] } as any;
@@ -101,7 +101,7 @@ describe('Auth Service - Allowlist Enforcement', () => {
       // Mock user creation
       const newUser = createMockUserWithRelations({
         email: profile.email,
-        roleName: 'viewer',
+        roleName: 'contributor',
       });
       prismaMock.user.create.mockResolvedValue(newUser as any);
       prismaMock.user.update.mockResolvedValue(newUser as any);
@@ -213,7 +213,7 @@ describe('Auth Service - Allowlist Enforcement', () => {
       const newUser = createMockUserWithRelations({
         id: 'new-user-id',
         email: profile.email,
-        roleName: 'viewer',
+        roleName: 'contributor',
       });
       prismaMock.user.create.mockResolvedValue(newUser as any);
       prismaMock.user.update.mockResolvedValue(newUser as any);
@@ -272,7 +272,7 @@ describe('Auth Service - Allowlist Enforcement', () => {
       const newUser = createMockUserWithRelations({
         id: 'user-link-id',
         email: profile.email,
-        roleName: 'viewer',
+        roleName: 'contributor',
       });
       prismaMock.user.create.mockResolvedValue(newUser as any);
       prismaMock.user.update.mockResolvedValue(newUser as any);
@@ -328,7 +328,7 @@ describe('Auth Service - Allowlist Enforcement', () => {
       // Mock user creation
       const newUser = createMockUserWithRelations({
         email: profile.email.toLowerCase(),
-        roleName: 'viewer',
+        roleName: 'contributor',
       });
       prismaMock.user.create.mockResolvedValue(newUser as any);
       prismaMock.user.update.mockResolvedValue(newUser as any);
@@ -403,7 +403,7 @@ describe('Auth Service - Allowlist Enforcement', () => {
       const existingUser = createMockUserWithRelations({
         id: 'existing-user-id',
         email: profile.email,
-        roleName: 'viewer',
+        roleName: 'contributor',
       });
 
       // Even though identity exists, allowlist check happens first
