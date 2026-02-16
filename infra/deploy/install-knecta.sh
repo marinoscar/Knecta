@@ -9,9 +9,8 @@
 #   2. Clones (or pulls) the Knecta repository
 #   3. Validates that .env exists
 #   4. Builds and starts all Docker containers
-#   5. Waits for the database to be ready
-#   6. Runs Prisma migrations and database seed
-#   7. Verifies service health
+#   5. Runs Prisma migrations and database seed (against cloud PostgreSQL)
+#   6. Verifies service health
 #
 # Usage:
 #   cd /opt/infra/apps/knecta
@@ -37,8 +36,7 @@ log "============================================"
 log " Knecta Installer"
 log "============================================"
 log ""
-log "[1/7] Setting up directories..."
-mkdir -p "${KNECTA_DIR}/data/postgres"
+log "[1/6] Setting up directories..."
 mkdir -p "${KNECTA_DIR}/data/neo4j"
 log "  Directories ready."
 
@@ -46,7 +44,7 @@ log "  Directories ready."
 # Step 2: Clone or pull the repository
 # -----------------------------------------------
 log ""
-log "[2/7] Fetching source code..."
+log "[2/6] Fetching source code..."
 if [ -d "${REPO_DIR}/.git" ]; then
     log "  Repository exists. Pulling latest from ${BRANCH}..."
     cd "${REPO_DIR}"
@@ -64,7 +62,7 @@ fi
 # Step 3: Check .env exists
 # -----------------------------------------------
 log ""
-log "[3/7] Checking environment file..."
+log "[3/6] Checking environment file..."
 if [ ! -f "${KNECTA_DIR}/.env" ]; then
     log ""
     log "  ERROR: .env file not found at ${KNECTA_DIR}/.env"
@@ -82,38 +80,34 @@ log "  .env file found."
 # Step 4: Build and start containers
 # -----------------------------------------------
 log ""
-log "[4/7] Building and starting containers..."
+log "[4/6] Building and starting containers..."
 cd "${KNECTA_DIR}"
 docker compose build
 docker compose up -d
 log "  Containers started."
 
-# -----------------------------------------------
-# Step 5: Wait for database to be ready
-# -----------------------------------------------
-log ""
-log "[5/7] Waiting for database..."
-DB_READY=false
-for i in $(seq 1 30); do
-    if docker compose exec -T db pg_isready -U "$(grep -m1 '^POSTGRES_USER=' .env | cut -d= -f2 || echo knecta)" >/dev/null 2>&1; then
-        DB_READY=true
+# Wait for API to be ready (depends on Neo4j + sandbox health checks)
+log "  Waiting for API to initialize..."
+API_READY=false
+for i in $(seq 1 60); do
+    if docker compose exec -T api wget -qO- http://localhost:3000/api/health/live >/dev/null 2>&1; then
+        API_READY=true
         break
     fi
-    sleep 1
+    sleep 2
 done
 
-if [ "${DB_READY}" = "false" ]; then
-    log "  ERROR: Database did not become ready within 30 seconds."
-    log "  Check logs: docker compose logs db"
-    exit 1
+if [ "${API_READY}" = "false" ]; then
+    log "  WARNING: API health check did not pass within 120 seconds."
+    log "  Continuing with migrations (API may still be starting)..."
+    log "  Check logs if needed: docker compose logs api"
 fi
-log "  Database is ready."
 
 # -----------------------------------------------
-# Step 6: Run Prisma migrations + seed
+# Step 5: Run Prisma migrations + seed
 # -----------------------------------------------
 log ""
-log "[6/7] Running database migrations..."
+log "[5/6] Running database migrations (against cloud PostgreSQL)..."
 docker compose exec -T api npm run prisma:migrate
 log "  Migrations complete."
 
@@ -122,18 +116,18 @@ docker compose exec -T api npm run prisma:seed
 log "  Seed complete."
 
 # -----------------------------------------------
-# Step 7: Verify health
+# Step 6: Verify health
 # -----------------------------------------------
 log ""
-log "[7/7] Verifying services..."
+log "[6/6] Verifying services..."
 sleep 3
 
 # Check containers are running
 RUNNING=$(docker compose ps --format '{{.Name}}' 2>/dev/null | wc -l)
 log "  Containers running: ${RUNNING}"
 
-# Check API health via internal nginx
-API_STATUS=$(docker compose exec -T nginx wget -qO- http://localhost:80/api/health/live 2>/dev/null || echo "FAIL")
+# Check API health
+API_STATUS=$(docker compose exec -T api wget -qO- http://localhost:3000/api/health/live 2>/dev/null || echo "FAIL")
 if echo "${API_STATUS}" | grep -qi "ok\|up\|live\|status"; then
     log "  API health:    OK"
 else
@@ -141,20 +135,11 @@ else
     log "                 Check: docker compose logs api"
 fi
 
-# Check nginx health
-NGINX_STATUS=$(docker compose exec -T nginx wget -qO- http://localhost:80/nginx-health 2>/dev/null || echo "FAIL")
-if echo "${NGINX_STATUS}" | grep -qi "healthy"; then
-    log "  Nginx health:  OK"
-else
-    log "  Nginx health:  WARN (response: ${NGINX_STATUS})"
-fi
-
 log ""
 log "============================================"
 log " Knecta installation complete!"
 log "============================================"
 log ""
-log " Internal URL: http://knecta-nginx:80"
 log " External URL: https://knecta.marin.cr"
 log ""
 log " If this is the first install, complete these steps:"

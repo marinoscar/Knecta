@@ -6,7 +6,7 @@ It follows the same conventions as the rest of the infrastructure repository:
 
 * Root-operated server
 * Docker Compose per app
-* Nginx reverse proxy (Docker)
+* Shared Nginx reverse proxy (Docker)
 * No secrets committed to Git
 * Deterministic, repeatable steps
 
@@ -21,6 +21,7 @@ Before deploying Knecta, the following must already be in place:
 * Shared Docker network `proxy` created (`docker network create proxy`)
 * Nginx reverse proxy running from `/opt/infra/proxy`
 * DNS A record: `knecta.marin.cr` pointing to VPS IP
+* **Cloud-hosted PostgreSQL** instance accessible from the VPS
 * Google OAuth credentials configured for `knecta.marin.cr`
 * S3 bucket (AWS, R2, or MinIO) for file storage
 * At least one LLM API key (OpenAI or Anthropic)
@@ -35,23 +36,24 @@ Internet
    v
 VPS Nginx Proxy (knecta.marin.cr:443)
    |  proxy Docker network
-   v
-knecta-nginx (:80)            <-- internal same-origin router
-   |  app-network
-   +---> knecta-web (:80)      <-- React static files (nginx:alpine)
+   |
    +---> knecta-api (:3000)    <-- NestJS API (node:20-alpine)
-            |
-            +---> knecta-db (:5432)      <-- PostgreSQL 15
-            +---> knecta-neo4j (:7687)   <-- Neo4j 5
-            +---> knecta-sandbox (:8000) <-- Python code runner
+   |        |  app-network
+   |        +---> knecta-neo4j (:7687)   <-- Neo4j 5 (graph DB)
+   |        +---> knecta-sandbox (:8000) <-- Python code runner
+   |
+   +---> knecta-web (:80)      <-- React static files (nginx:alpine)
+   |
+   +- - -> Cloud PostgreSQL     <-- External (not in Docker)
 ```
 
 Key points:
 
 * Single domain `knecta.marin.cr` handles both frontend and API
-* The internal nginx routes `/` to the web container, `/api` to the API container
-* The VPS proxy handles TLS termination and passes everything to the internal nginx
-* No containers expose ports to the host; all traffic flows through Docker networks
+* The VPS Nginx proxy routes `/api` to `knecta-api:3000` and `/` to `knecta-web:80`
+* PostgreSQL is external (cloud-hosted), not a Docker container
+* Neo4j and the Python sandbox run as Docker containers on the internal network
+* The API and Web containers are on both `app-network` (internal) and `proxy` (VPS proxy)
 
 ---
 
@@ -64,12 +66,10 @@ After deployment, the structure on the VPS:
     .env                    # Runtime secrets (NOT committed)
     .env.example            # Template for reference
     compose.yml             # Docker Compose file
-    nginx-prod.conf         # Internal nginx config (production)
     knecta.conf             # VPS proxy config (copy to proxy/nginx/conf.d/)
     install-knecta.sh       # Installer script
     repo/                   # Cloned application source code
     data/                   # Persistent data (NOT committed)
-        postgres/           # PostgreSQL data files
         neo4j/              # Neo4j graph data
 ```
 
@@ -116,7 +116,9 @@ nano .env
 
 | Variable | How to generate / where to find |
 |----------|-------------------------------|
-| `POSTGRES_PASSWORD` | `openssl rand -base64 24` |
+| `POSTGRES_HOST` | Your cloud PostgreSQL hostname |
+| `POSTGRES_USER` | Cloud PostgreSQL username |
+| `POSTGRES_PASSWORD` | Cloud PostgreSQL password |
 | `NEO4J_PASSWORD` | `openssl rand -base64 24` (min 8 chars) |
 | `JWT_SECRET` | `openssl rand -base64 32` |
 | `COOKIE_SECRET` | `openssl rand -base64 32` |
@@ -138,9 +140,9 @@ cd /opt/infra/apps/knecta
 
 This will:
 1. Clone the repository to `./repo/`
-2. Build all Docker images (api, web, sandbox) and pull postgres + neo4j
-3. Start all 6 containers
-4. Run Prisma migrations (creates all database tables)
+2. Build Docker images (api, web, sandbox) and pull neo4j
+3. Start all 4 containers
+4. Run Prisma migrations against your cloud PostgreSQL (creates all tables)
 5. Run database seed (creates roles, permissions, system settings)
 6. Verify service health
 
@@ -192,8 +194,8 @@ https://knecta.marin.cr/api/auth/google/callback
 # Check all containers
 docker compose -f /opt/infra/apps/knecta/compose.yml ps
 
-# API health
-curl https://knecta.marin.cr/api/health/live
+# API health (includes database connectivity check)
+curl https://knecta.marin.cr/api/health/ready
 
 # Web frontend
 curl -sI https://knecta.marin.cr/ | head -5
@@ -212,18 +214,11 @@ cd /opt/infra/apps/knecta
 ./install-knecta.sh
 ```
 
-The script detects the existing repository and runs `git pull` instead of `git clone`. It rebuilds images, runs any new migrations, and restarts all services.
+The script detects the existing repository and runs `git pull` instead of `git clone`. It rebuilds images, runs any new migrations against the cloud database, and restarts all services.
 
 ---
 
 ## 6. Backup
-
-### PostgreSQL
-
-```bash
-docker compose -f /opt/infra/apps/knecta/compose.yml exec -T db \
-  pg_dump -U knecta knecta | gzip > /opt/infra/backups/knecta-pg-$(date +%Y%m%d).sql.gz
-```
 
 ### Neo4j
 
@@ -236,13 +231,9 @@ cp -r data/neo4j /opt/infra/backups/knecta-neo4j-$(date +%Y%m%d)
 docker compose start neo4j
 ```
 
-### Restore PostgreSQL
+### PostgreSQL
 
-```bash
-gunzip -c /opt/infra/backups/knecta-pg-YYYYMMDD.sql.gz | \
-  docker compose -f /opt/infra/apps/knecta/compose.yml exec -T db \
-  psql -U knecta knecta
-```
+PostgreSQL is cloud-hosted. Use your cloud provider's backup tools (automated snapshots, pg_dump from the provider's dashboard, etc.).
 
 ---
 
@@ -259,8 +250,8 @@ docker compose logs -f
 # Specific service
 docker compose logs -f api
 docker compose logs -f web
-docker compose logs -f db
 docker compose logs -f neo4j
+docker compose logs -f sandbox
 ```
 
 ### Restart services
@@ -296,9 +287,16 @@ docker compose logs api
 ```
 
 Common causes:
-* Database not ready yet (check `docker compose logs db`)
+* Cloud PostgreSQL not reachable (check `POSTGRES_HOST`, firewall rules, SSL settings)
 * Missing environment variable (check `.env` for `CHANGE_ME` values)
 * Prisma migrations not run (run `docker compose exec api npm run prisma:migrate`)
+
+### Cannot connect to cloud PostgreSQL
+
+* Verify `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD` in `.env`
+* Ensure `POSTGRES_SSL=true` if your cloud provider requires SSL
+* Check that the VPS IP is allowlisted in your cloud PostgreSQL firewall/security group
+* Test connectivity: `docker compose exec api node -e "const net=require('net');const s=net.connect(5432,'YOUR_HOST',()=>{console.log('OK');s.end()})"`
 
 ### Neo4j authentication failure
 
@@ -306,9 +304,10 @@ Neo4j requires passwords of at least 8 characters. Check `NEO4J_PASSWORD` in `.e
 
 ### SSE streaming not working (agent timeouts)
 
-Verify that both nginx configs have SSE support:
-* Internal: `nginx-prod.conf` has dedicated SSE location blocks with `proxy_buffering off`
-* VPS proxy: `knecta.conf` has `proxy_buffering off` and 300s timeouts
+Verify that the VPS proxy config (`knecta.conf`) has:
+* Dedicated SSE location blocks for `/api/semantic-models/runs/.../stream` and `/api/data-agent/chats/.../messages/.../stream`
+* `proxy_buffering off` on those locations
+* 300s timeouts
 
 ### OAuth redirect mismatch
 
@@ -327,14 +326,6 @@ docker compose down
 docker compose up -d --build
 ```
 
-### Port conflicts
-
-No ports are published to the host. If you see port conflicts, another service may be using the `proxy` network with the same container name. Check with:
-
-```bash
-docker network inspect proxy
-```
-
 ---
 
 ## 9. Design Notes
@@ -342,9 +333,10 @@ docker network inspect proxy
 * Source code lives in `repo/` and is fully replaceable via `git pull`
 * Configuration is centralized in `.env` (single source of truth)
 * Docker images are rebuilt explicitly (no auto-pull)
-* The VPS proxy owns TLS termination; the internal nginx handles same-origin routing
-* PostgreSQL and Neo4j data persist in `data/` bind mounts (easy to back up)
-* Knecta runs its own isolated PostgreSQL (not the shared VPS database)
+* The VPS Nginx proxy handles TLS termination and routes directly to API/Web containers
+* No internal Nginx — the VPS proxy does all routing (`/api` → api, `/` → web)
+* PostgreSQL is external (cloud-hosted) — not managed by Docker
+* Neo4j data persists in `data/neo4j/` bind mount (easy to back up)
 
 ---
 
