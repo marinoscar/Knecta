@@ -67,7 +67,8 @@ After deployment, the structure on the VPS:
     .env.example            # Template for reference
     compose.yml             # Docker Compose file
     knecta.conf             # VPS proxy config (copy to proxy/nginx/conf.d/)
-    install-knecta.sh       # Installer script
+    install-knecta.sh       # First-time installer
+    update.sh               # Update script (pulls, rebuilds, migrates, restarts)
     repo/                   # Cloned application source code
     data/                   # Persistent data (NOT committed)
         neo4j/              # Neo4j graph data
@@ -210,14 +211,16 @@ Open `https://knecta.marin.cr` in a browser and log in via Google OAuth.
 
 ## 5. Updating Knecta
 
-To deploy the latest code:
+Use the dedicated update script for ongoing deployments:
 
 ```bash
 cd /opt/infra/apps/knecta
-./install-knecta.sh
+./update.sh
 ```
 
-The script detects the existing repository and runs `git pull` instead of `git clone`. It rebuilds images, runs any new migrations against the cloud database, and restarts all services.
+This pulls latest code, rebuilds only changed images, runs migrations, restarts services, and updates the proxy config if it changed. It exits early if already up to date and shows rollback instructions if something fails.
+
+See [UPDATE.md](UPDATE.md) for full details, options (`--no-cache`, `--skip-proxy`), rollback procedures, and troubleshooting.
 
 ---
 
