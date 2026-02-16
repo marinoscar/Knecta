@@ -127,6 +127,7 @@ export interface DataConnection {
   lastTestedAt: string | null;
   lastTestResult: boolean | null;
   lastTestMessage: string | null;
+  createdByUserId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -203,7 +204,7 @@ export interface SemanticModel {
   fieldCount: number;
   relationshipCount: number;
   metricCount: number;
-  ownerId: string;
+  createdByUserId: string | null;
   createdAt: string;
   updatedAt: string;
   connection?: {
@@ -317,7 +318,7 @@ export interface Ontology {
   nodeCount: number;
   relationshipCount: number;
   errorMessage: string | null;
-  ownerId: string;
+  createdByUserId: string | null;
   createdAt: string;
   updatedAt: string;
 }

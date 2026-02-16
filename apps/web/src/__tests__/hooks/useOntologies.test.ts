@@ -145,7 +145,7 @@ describe('useOntologies', () => {
                   nodeCount: 25,
                   relationshipCount: 30,
                   errorMessage: null,
-                  ownerId: 'user-1',
+                  createdByUserId: 'user-1',
                   createdAt: '2026-02-09T00:00:00Z',
                   updatedAt: '2026-02-09T00:00:00Z',
                 },
