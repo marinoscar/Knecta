@@ -18,8 +18,7 @@ Before deploying Knecta, the following must already be in place:
 
 * Ubuntu VPS with `/opt/infra` initialized
 * Docker + Docker Compose installed
-* Shared Docker network `proxy` created (`docker network create proxy`)
-* Nginx reverse proxy running from `/opt/infra/proxy`
+* Nginx reverse proxy running from `/opt/infra/proxy` (in host network mode)
 * DNS A record: `knecta.marin.cr` pointing to VPS IP
 * **Cloud-hosted PostgreSQL** instance accessible from the VPS
 * Google OAuth credentials configured for `knecta.marin.cr`
@@ -35,14 +34,14 @@ Internet
    |
    v
 VPS Nginx Proxy (knecta.marin.cr:443)
-   |  proxy Docker network
+   |  host network mode
    |
-   +---> knecta-api (:3000)    <-- NestJS API (node:20-alpine)
+   +---> 127.0.0.1:3100 (knecta-api :3000)    <-- NestJS API (node:20-alpine)
    |        |  app-network
    |        +---> knecta-neo4j (:7687)   <-- Neo4j 5 (graph DB)
    |        +---> knecta-sandbox (:8000) <-- Python code runner
    |
-   +---> knecta-web (:80)      <-- React static files (nginx:alpine)
+   +---> 127.0.0.1:3101 (knecta-web :80)      <-- React static files (nginx:alpine)
    |
    +- - -> Cloud PostgreSQL     <-- External (not in Docker)
 ```
@@ -50,10 +49,11 @@ VPS Nginx Proxy (knecta.marin.cr:443)
 Key points:
 
 * Single domain `knecta.marin.cr` handles both frontend and API
-* The VPS Nginx proxy routes `/api` to `knecta-api:3000` and `/` to `knecta-web:80`
+* The VPS Nginx proxy runs in host network mode and routes to localhost ports
+* The API container exposes port 3100 (maps to container port 3000)
+* The Web container exposes port 3101 (maps to container port 80)
 * PostgreSQL is external (cloud-hosted), not a Docker container
 * Neo4j and the Python sandbox run as Docker containers on the internal network
-* The API and Web containers are on both `app-network` (internal) and `proxy` (VPS proxy)
 
 ---
 
@@ -141,10 +141,11 @@ cd /opt/infra/apps/knecta
 This will:
 1. Clone the repository to `./repo/`
 2. Build Docker images (api, web, sandbox) and pull neo4j
-3. Start all 4 containers
-4. Run Prisma migrations against your cloud PostgreSQL (creates all tables)
-5. Run database seed (creates roles, permissions, system settings)
-6. Verify service health
+3. Start dependencies (Neo4j, sandbox) and wait for health
+4. Run Prisma migrations against your cloud PostgreSQL via temporary container
+5. Run database seed via temporary container (creates roles, permissions, system settings)
+6. Start all services (API, web)
+7. Verify service health
 
 Expected build time: 3-5 minutes on first run.
 
@@ -335,8 +336,9 @@ docker compose up -d --build
 * Source code lives in `repo/` and is fully replaceable via `git pull`
 * Configuration is centralized in `.env` (single source of truth)
 * Docker images are rebuilt explicitly (no auto-pull)
-* The VPS Nginx proxy handles TLS termination and routes directly to API/Web containers
-* No internal Nginx — the VPS proxy does all routing (`/api` → api, `/` → web)
+* The VPS Nginx proxy handles TLS termination and routes to localhost ports (3100, 3101)
+* The API container exposes port 3100 (mapped from container port 3000)
+* The Web container exposes port 3101 (mapped from container port 80)
 * PostgreSQL is external (cloud-hosted) — not managed by Docker
 * Neo4j data persists in `data/neo4j/` bind mount (easy to back up)
 
@@ -347,7 +349,13 @@ docker compose up -d --build
 Certbot auto-renewal should already be configured on the VPS. Verify:
 
 ```bash
-certbot renew --dry-run
+certbot renew --dry-run --config-dir /opt/infra/proxy/letsencrypt
 ```
 
 If Knecta's certificate was added after the initial certbot setup, it will be included automatically in the next renewal cycle.
+
+For manual renewal:
+
+```bash
+certbot renew --config-dir /opt/infra/proxy/letsencrypt
+```
