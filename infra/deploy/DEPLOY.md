@@ -158,10 +158,12 @@ cp /opt/infra/apps/knecta/knecta.conf /opt/infra/proxy/nginx/conf.d/
 
 ### Step 6: Obtain TLS certificate
 
+**Important:** Use `--config-dir /opt/infra/proxy/letsencrypt` so the certificate lands inside the proxy container's volume mount.
+
 Using the webroot method (proxy stays running):
 
 ```bash
-certbot certonly --webroot -w /opt/infra/proxy/webroot -d knecta.marin.cr
+certbot certonly --webroot -w /opt/infra/proxy/webroot -d knecta.marin.cr --config-dir /opt/infra/proxy/letsencrypt
 ```
 
 Or standalone method (temporarily stops proxy):
@@ -169,7 +171,7 @@ Or standalone method (temporarily stops proxy):
 ```bash
 cd /opt/infra/proxy
 docker compose stop
-certbot certonly --standalone -d knecta.marin.cr
+certbot certonly --standalone -d knecta.marin.cr --config-dir /opt/infra/proxy/letsencrypt
 docker compose up -d
 ```
 
