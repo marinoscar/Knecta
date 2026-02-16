@@ -68,4 +68,4 @@ export type PermissionName = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 // Default Role
 // =============================================================================
 
-export const DEFAULT_ROLE = ROLES.VIEWER;
+export const DEFAULT_ROLE = ROLES.CONTRIBUTOR;
