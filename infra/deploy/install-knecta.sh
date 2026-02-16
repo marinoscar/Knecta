@@ -77,6 +77,12 @@ if [ ! -f "${KNECTA_DIR}/.env" ]; then
 fi
 log "  .env file found."
 
+# Load variables needed by this script (NEO4J_USER, NEO4J_PASSWORD)
+set -a
+# shellcheck disable=SC1091
+source "${KNECTA_DIR}/.env"
+set +a
+
 # -----------------------------------------------
 # Step 4: Build images and start dependencies
 # -----------------------------------------------
