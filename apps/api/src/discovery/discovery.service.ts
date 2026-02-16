@@ -19,8 +19,8 @@ export class DiscoveryService {
   /**
    * List databases on a connection
    */
-  async listDatabases(connectionId: string, userId: string) {
-    const { params, dbType } = await this.getConnectionParams(connectionId, userId);
+  async listDatabases(connectionId: string) {
+    const { params, dbType } = await this.getConnectionParams(connectionId);
     const driver = getDiscoveryDriver(dbType);
     const databases = await driver.listDatabases(params);
 
@@ -32,8 +32,8 @@ export class DiscoveryService {
   /**
    * List schemas in a database
    */
-  async listSchemas(connectionId: string, database: string, userId: string) {
-    const { params, dbType } = await this.getConnectionParams(connectionId, userId);
+  async listSchemas(connectionId: string, database: string) {
+    const { params, dbType } = await this.getConnectionParams(connectionId);
     const driver = getDiscoveryDriver(dbType);
     const schemas = await driver.listSchemas(params, database);
 
@@ -45,8 +45,8 @@ export class DiscoveryService {
   /**
    * List tables in a schema
    */
-  async listTables(connectionId: string, database: string, schema: string, userId: string) {
-    const { params, dbType } = await this.getConnectionParams(connectionId, userId);
+  async listTables(connectionId: string, database: string, schema: string) {
+    const { params, dbType } = await this.getConnectionParams(connectionId);
     const driver = getDiscoveryDriver(dbType);
     const tables = await driver.listTables(params, database, schema);
 
@@ -63,9 +63,8 @@ export class DiscoveryService {
     database: string,
     schema: string,
     table: string,
-    userId: string,
   ) {
-    const { params, dbType } = await this.getConnectionParams(connectionId, userId);
+    const { params, dbType } = await this.getConnectionParams(connectionId);
     const driver = getDiscoveryDriver(dbType);
     const columns = await driver.listColumns(params, database, schema, table);
 
@@ -77,8 +76,8 @@ export class DiscoveryService {
   /**
    * Get foreign keys for a schema
    */
-  async getForeignKeys(connectionId: string, database: string, schema: string, userId: string) {
-    const { params, dbType } = await this.getConnectionParams(connectionId, userId);
+  async getForeignKeys(connectionId: string, database: string, schema: string) {
+    const { params, dbType } = await this.getConnectionParams(connectionId);
     const driver = getDiscoveryDriver(dbType);
     const foreignKeys = await driver.listForeignKeys(params, database, schema);
 
@@ -96,9 +95,8 @@ export class DiscoveryService {
     schema: string,
     table: string,
     limit: number,
-    userId: string,
   ) {
-    const { params, dbType } = await this.getConnectionParams(connectionId, userId);
+    const { params, dbType } = await this.getConnectionParams(connectionId);
     const driver = getDiscoveryDriver(dbType);
     const sampleData = await driver.getSampleData(params, database, schema, table, limit);
 
@@ -116,9 +114,8 @@ export class DiscoveryService {
     schema: string,
     table: string,
     column: string,
-    userId: string,
   ) {
-    const { params, dbType } = await this.getConnectionParams(connectionId, userId);
+    const { params, dbType } = await this.getConnectionParams(connectionId);
     const driver = getDiscoveryDriver(dbType);
     const stats = await driver.getColumnStats(params, database, schema, table, column);
 
@@ -130,8 +127,8 @@ export class DiscoveryService {
   /**
    * Execute a read-only SQL query
    */
-  async executeQuery(connectionId: string, sql: string, userId: string, maxRows: number = 100) {
-    const { params, dbType } = await this.getConnectionParams(connectionId, userId);
+  async executeQuery(connectionId: string, sql: string, maxRows: number = 100) {
+    const { params, dbType } = await this.getConnectionParams(connectionId);
     const driver = getDiscoveryDriver(dbType);
     const result = await driver.executeReadOnlyQuery(params, sql, maxRows);
 
@@ -141,17 +138,15 @@ export class DiscoveryService {
   }
 
   /**
-   * Get connection params for a connection, with ownership check
+   * Get connection params for a connection
    */
   private async getConnectionParams(
     connectionId: string,
-    userId: string,
   ): Promise<{ params: ConnectionParams; dbType: string }> {
-    // Find connection with ownership check
-    const connection = await this.prisma.dataConnection.findFirst({
+    // Find connection
+    const connection = await this.prisma.dataConnection.findUnique({
       where: {
         id: connectionId,
-        ownerId: userId,
       },
     });
 

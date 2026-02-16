@@ -62,7 +62,7 @@ export function createExecutorNode(
             // Run pilot query first
             try {
               emit({ type: 'tool_start', phase: 'executor', stepId: step.id, name: 'query_database', args: { sql: querySpec.pilotSql } });
-              const pilotResult = await discoveryService.executeQuery(connectionId, querySpec.pilotSql, state.userId, 10);
+              const pilotResult = await discoveryService.executeQuery(connectionId, querySpec.pilotSql, 10);
               emit({ type: 'tool_end', phase: 'executor', stepId: step.id, name: 'query_database', result: `Pilot OK: ${pilotResult.data.rowCount} rows` });
               trackedToolCalls.push({ phase: 'executor', stepId: step.id, name: 'query_database', args: { sql: querySpec.pilotSql }, result: `Pilot OK: ${pilotResult.data.rowCount} rows` });
             } catch (pilotError) {
@@ -91,7 +91,7 @@ export function createExecutorNode(
             // Run full query
             try {
               emit({ type: 'tool_start', phase: 'executor', stepId: step.id, name: 'query_database', args: { sql: fullSql } });
-              const fullResult = await discoveryService.executeQuery(connectionId, fullSql, state.userId, 500);
+              const fullResult = await discoveryService.executeQuery(connectionId, fullSql, 500);
               const { data } = fullResult;
 
               // Format as pipe-separated table (truncate to 100 rows for state)

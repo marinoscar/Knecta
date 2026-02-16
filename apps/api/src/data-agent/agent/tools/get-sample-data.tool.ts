@@ -40,7 +40,6 @@ export function createGetSampleDataTool(
         const result = await discoveryService.executeQuery(
           connectionId,
           sql,
-          userId,
           actualLimit,
         );
 

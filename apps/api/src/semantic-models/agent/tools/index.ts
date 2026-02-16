@@ -22,7 +22,7 @@ export function createAgentTools(
       database: z.string().describe('The database name to list schemas for'),
     }),
     func: async ({ database }: { database: string }) => {
-      const result = await discoveryService.listSchemas(connectionId, database, userId);
+      const result = await discoveryService.listSchemas(connectionId, database);
       return JSON.stringify(result);
     },
   } as any);
@@ -35,7 +35,7 @@ export function createAgentTools(
       schema: z.string().describe('The schema name'),
     }),
     func: async ({ database, schema }: { database: string; schema: string }) => {
-      const result = await discoveryService.listTables(connectionId, database, schema, userId);
+      const result = await discoveryService.listTables(connectionId, database, schema);
       return JSON.stringify(result);
     },
   } as any);
@@ -49,7 +49,7 @@ export function createAgentTools(
       table: z.string().describe('The table name'),
     }),
     func: async ({ database, schema, table }: { database: string; schema: string; table: string }) => {
-      const result = await discoveryService.listColumns(connectionId, database, schema, table, userId);
+      const result = await discoveryService.listColumns(connectionId, database, schema, table);
       return JSON.stringify(result);
     },
   } as any);
@@ -62,7 +62,7 @@ export function createAgentTools(
       schema: z.string().describe('The schema name'),
     }),
     func: async ({ database, schema }: { database: string; schema: string }) => {
-      const result = await discoveryService.getForeignKeys(connectionId, database, schema, userId);
+      const result = await discoveryService.getForeignKeys(connectionId, database, schema);
       return JSON.stringify(result);
     },
   } as any);
@@ -77,7 +77,7 @@ export function createAgentTools(
       limit: z.number().min(1).max(10).default(5).describe('Number of rows to sample'),
     }),
     func: async ({ database, schema, table, limit }: { database: string; schema: string; table: string; limit: number }) => {
-      const result = await discoveryService.getSampleData(connectionId, database, schema, table, limit, userId);
+      const result = await discoveryService.getSampleData(connectionId, database, schema, table, limit);
       return JSON.stringify(result);
     },
   } as any);
@@ -92,7 +92,7 @@ export function createAgentTools(
       column: z.string().describe('The column name'),
     }),
     func: async ({ database, schema, table, column }: { database: string; schema: string; table: string; column: string }) => {
-      const result = await discoveryService.getColumnStats(connectionId, database, schema, table, column, userId);
+      const result = await discoveryService.getColumnStats(connectionId, database, schema, table, column);
       return JSON.stringify(result);
     },
   } as any);
@@ -104,7 +104,7 @@ export function createAgentTools(
       sql: z.string().describe('The SQL SELECT query to execute'),
     }),
     func: async ({ sql }: { sql: string }) => {
-      const result = await discoveryService.executeQuery(connectionId, sql, userId);
+      const result = await discoveryService.executeQuery(connectionId, sql);
       return JSON.stringify(result);
     },
   } as any);

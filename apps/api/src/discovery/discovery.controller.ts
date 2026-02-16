@@ -13,7 +13,6 @@ import {
 
 import { DiscoveryService } from './discovery.service';
 import { Auth } from '../auth/decorators/auth.decorator';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { PERMISSIONS } from '../common/constants/roles.constants';
 
 @ApiTags('Discovery')
@@ -30,9 +29,8 @@ export class DiscoveryController {
   @ApiResponse({ status: 400, description: 'Schema discovery not supported for this database type' })
   async listDatabases(
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser('id') userId: string,
   ) {
-    return this.discoveryService.listDatabases(id, userId);
+    return this.discoveryService.listDatabases(id);
   }
 
   @Get(':id/databases/:database/schemas')
@@ -46,9 +44,8 @@ export class DiscoveryController {
   async listSchemas(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('database') database: string,
-    @CurrentUser('id') userId: string,
   ) {
-    return this.discoveryService.listSchemas(id, database, userId);
+    return this.discoveryService.listSchemas(id, database);
   }
 
   @Get(':id/databases/:database/schemas/:schema/tables')
@@ -64,9 +61,8 @@ export class DiscoveryController {
     @Param('id', ParseUUIDPipe) id: string,
     @Param('database') database: string,
     @Param('schema') schema: string,
-    @CurrentUser('id') userId: string,
   ) {
-    return this.discoveryService.listTables(id, database, schema, userId);
+    return this.discoveryService.listTables(id, database, schema);
   }
 
   @Get(':id/databases/:database/schemas/:schema/tables/:table/columns')
@@ -84,8 +80,7 @@ export class DiscoveryController {
     @Param('database') database: string,
     @Param('schema') schema: string,
     @Param('table') table: string,
-    @CurrentUser('id') userId: string,
   ) {
-    return this.discoveryService.listColumns(id, database, schema, table, userId);
+    return this.discoveryService.listColumns(id, database, schema, table);
   }
 }

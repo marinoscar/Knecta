@@ -26,7 +26,6 @@ export function createQueryDatabaseTool(
         const result = await discoveryService.executeQuery(
           connectionId,
           sql,
-          userId,
           500,
         );
 

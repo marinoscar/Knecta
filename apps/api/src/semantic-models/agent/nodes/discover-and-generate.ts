@@ -119,12 +119,12 @@ export function createDiscoverAndGenerateNode(
 
       try {
         // 1. List columns
-        const columnsResult = await discoveryService.listColumns(connectionId, databaseName, schemaName, tableName, userId);
+        const columnsResult = await discoveryService.listColumns(connectionId, databaseName, schemaName, tableName);
         const columns = columnsResult.data;
 
         // 2. Get foreign keys (cached per schema)
         if (!fkCache.has(schemaName)) {
-          const fkResult = await discoveryService.getForeignKeys(connectionId, databaseName, schemaName, userId);
+          const fkResult = await discoveryService.getForeignKeys(connectionId, databaseName, schemaName);
           fkCache.set(schemaName, fkResult.data);
         }
         const schemaFKs = fkCache.get(schemaName)!;
@@ -133,14 +133,14 @@ export function createDiscoverAndGenerateNode(
         );
 
         // 3. Get sample data
-        const sampleResult = await discoveryService.getSampleData(connectionId, databaseName, schemaName, tableName, 5, userId);
+        const sampleResult = await discoveryService.getSampleData(connectionId, databaseName, schemaName, tableName, 5);
 
         // 4. Get column stats for selected columns
         const statsColumns = selectColumnsForStats(columns, tableFKs, tableName);
         const columnStats = new Map<string, ColumnStatsResult>();
         for (const colName of statsColumns) {
           try {
-            const statsResult = await discoveryService.getColumnStats(connectionId, databaseName, schemaName, tableName, colName, userId);
+            const statsResult = await discoveryService.getColumnStats(connectionId, databaseName, schemaName, tableName, colName);
             columnStats.set(colName, statsResult.data);
           } catch (err) {
             logger.warn(`Failed to get stats for ${tableFQN}.${colName}: ${err}`);
