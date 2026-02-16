@@ -27,14 +27,12 @@ export class ConnectionsService {
   /**
    * List data connections with pagination and filtering
    */
-  async list(query: ConnectionQueryDto, userId: string) {
+  async list(query: ConnectionQueryDto) {
     const { page, pageSize, search, dbType, sortBy, sortOrder } = query;
     const skip = (page - 1) * pageSize;
 
     // Build where clause
-    const where: any = {
-      ownerId: userId,
-    };
+    const where: any = {};
 
     if (search) {
       where.OR = [
@@ -70,12 +68,9 @@ export class ConnectionsService {
   /**
    * Get connection by ID
    */
-  async getById(id: string, userId: string) {
-    const connection = await this.prisma.dataConnection.findFirst({
-      where: {
-        id,
-        ownerId: userId,
-      },
+  async getById(id: string) {
+    const connection = await this.prisma.dataConnection.findUnique({
+      where: { id },
     });
 
     if (!connection) {
@@ -108,7 +103,7 @@ export class ConnectionsService {
         encryptedCredential,
         useSsl: dto.useSsl,
         options: dto.options as any,
-        ownerId: userId,
+        createdByUserId: userId,
       },
     });
 
@@ -131,11 +126,8 @@ export class ConnectionsService {
    */
   async update(id: string, dto: UpdateConnectionDto, userId: string) {
     // Find existing connection
-    const existing = await this.prisma.dataConnection.findFirst({
-      where: {
-        id,
-        ownerId: userId,
-      },
+    const existing = await this.prisma.dataConnection.findUnique({
+      where: { id },
     });
 
     if (!existing) {
@@ -197,11 +189,8 @@ export class ConnectionsService {
    */
   async delete(id: string, userId: string) {
     // Find connection
-    const connection = await this.prisma.dataConnection.findFirst({
-      where: {
-        id,
-        ownerId: userId,
-      },
+    const connection = await this.prisma.dataConnection.findUnique({
+      where: { id },
     });
 
     if (!connection) {
@@ -230,11 +219,8 @@ export class ConnectionsService {
    */
   async testExisting(id: string, userId: string) {
     // Find connection
-    const connection = await this.prisma.dataConnection.findFirst({
-      where: {
-        id,
-        ownerId: userId,
-      },
+    const connection = await this.prisma.dataConnection.findUnique({
+      where: { id },
     });
 
     if (!connection) {
@@ -331,7 +317,7 @@ export class ConnectionsService {
       lastTestMessage: connection.lastTestMessage,
       createdAt: connection.createdAt,
       updatedAt: connection.updatedAt,
-      ownerId: connection.ownerId,
+      createdByUserId: connection.createdByUserId,
     };
   }
 

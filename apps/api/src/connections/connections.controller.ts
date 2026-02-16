@@ -43,11 +43,8 @@ export class ConnectionsController {
   @ApiQuery({ name: 'sortBy', required: false, enum: ['name', 'dbType', 'createdAt', 'lastTestedAt'] })
   @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
   @ApiResponse({ status: 200, description: 'Paginated list of connections' })
-  async list(
-    @Query() query: ConnectionQueryDto,
-    @CurrentUser('id') userId: string,
-  ) {
-    return this.connectionsService.list(query, userId);
+  async list(@Query() query: ConnectionQueryDto) {
+    return this.connectionsService.list(query);
   }
 
   @Get(':id')
@@ -56,11 +53,8 @@ export class ConnectionsController {
   @ApiParam({ name: 'id', type: String, format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Connection found' })
   @ApiResponse({ status: 404, description: 'Connection not found' })
-  async getById(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser('id') userId: string,
-  ) {
-    return this.connectionsService.getById(id, userId);
+  async getById(@Param('id', ParseUUIDPipe) id: string) {
+    return this.connectionsService.getById(id);
   }
 
   @Post()
