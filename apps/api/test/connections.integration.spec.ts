@@ -248,6 +248,24 @@ describe('Connections (Integration)', () => {
       expect(response.body.data).toHaveProperty('hasCredential');
       expect(response.body.data).not.toHaveProperty('password');
       expect(context.prismaMock.dataConnection.create).toHaveBeenCalled();
+
+      // Verify createdByUserId is passed (system-level resource)
+      expect(context.prismaMock.dataConnection.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            createdByUserId: contributor.id,
+          }),
+        }),
+      );
+
+      // Verify ownerId is NOT used (regression guard)
+      expect(context.prismaMock.dataConnection.create).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            ownerId: expect.anything(),
+          }),
+        }),
+      );
     });
 
     it('should validate required fields', async () => {

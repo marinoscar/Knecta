@@ -431,6 +431,24 @@ describe('Ontologies (Integration)', () => {
       expect(response.body.data).toHaveProperty('relationshipCount', 30);
       expect(context.prismaMock.ontology.create).toHaveBeenCalled();
       expect(context.prismaMock.ontology.update).toHaveBeenCalled();
+
+      // Verify createdByUserId is passed (system-level resource)
+      expect(context.prismaMock.ontology.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            createdByUserId: contributor.id,
+          }),
+        }),
+      );
+
+      // Verify ownerId is NOT used (regression guard)
+      expect(context.prismaMock.ontology.create).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            ownerId: expect.anything(),
+          }),
+        }),
+      );
     });
 
     it('should handle Neo4j failure gracefully', async () => {

@@ -848,6 +848,24 @@ describe('Semantic Models (Integration)', () => {
       expect(response.body.data).toHaveProperty('id', '123e4567-e89b-12d3-a456-426614174021');
       expect(response.body.data).toHaveProperty('status', 'pending');
       expect(context.prismaMock.semanticModelRun.create).toHaveBeenCalled();
+
+      // Verify createdByUserId is passed (system-level resource)
+      expect(context.prismaMock.semanticModelRun.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            createdByUserId: contributor.id,
+          }),
+        }),
+      );
+
+      // Verify ownerId is NOT used (regression guard)
+      expect(context.prismaMock.semanticModelRun.create).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            ownerId: expect.anything(),
+          }),
+        }),
+      );
     });
 
     it('should return 400 for validation errors (missing connectionId)', async () => {
