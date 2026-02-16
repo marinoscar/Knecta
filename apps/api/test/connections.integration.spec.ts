@@ -75,12 +75,12 @@ describe('Connections (Integration)', () => {
         createMockConnection({
           id: '123e4567-e89b-12d3-a456-426614174001',
           name: 'Connection 1',
-          ownerId: contributor.id,
+          createdByUserId: contributor.id,
         }),
         createMockConnection({
           id: '123e4567-e89b-12d3-a456-426614174002',
           name: 'Connection 2',
-          ownerId: contributor.id,
+          createdByUserId: contributor.id,
         }),
       ];
 
@@ -100,14 +100,14 @@ describe('Connections (Integration)', () => {
       expect(response.body.data.items[0]).not.toHaveProperty('encryptedCredential');
     });
 
-    it('should filter by ownerId (users only see their own)', async () => {
+    it('should return all connections (no ownership filter)', async () => {
       const contributor = await createMockContributorUser(context);
 
       const mockConnections = [
         createMockConnection({
           id: '123e4567-e89b-12d3-a456-426614174001',
-          name: 'My Connection',
-          ownerId: contributor.id,
+          name: 'System Connection',
+          createdByUserId: contributor.id,
         }),
       ];
 
@@ -121,12 +121,10 @@ describe('Connections (Integration)', () => {
         .set(authHeader(contributor.accessToken))
         .expect(200);
 
-      // Verify the mock was called with ownerId filter
+      // Verify no ownership filter is applied (system-level)
       expect(context.prismaMock.dataConnection.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({
-            ownerId: contributor.id,
-          }),
+          where: {},
         }),
       );
     });
@@ -154,11 +152,11 @@ describe('Connections (Integration)', () => {
       const mockConnection = createMockConnection({
         id: '123e4567-e89b-12d3-a456-426614174001',
         name: 'Test DB',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
         encryptedCredential: 'encrypted-value',
       });
 
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(
+      context.prismaMock.dataConnection.findUnique.mockResolvedValue(
         mockConnection,
       );
 
@@ -177,34 +175,12 @@ describe('Connections (Integration)', () => {
     it('should return 404 for non-existent connection', async () => {
       const contributor = await createMockContributorUser(context);
 
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(null);
+      context.prismaMock.dataConnection.findUnique.mockResolvedValue(null);
 
       await request(context.app.getHttpServer())
         .get('/api/connections/123e4567-e89b-12d3-a456-426614174999')
         .set(authHeader(contributor.accessToken))
         .expect(404);
-    });
-
-    it('should return 404 for connection owned by another user', async () => {
-      const contributor = await createMockContributorUser(context);
-      const otherUserId = 'other-user-id';
-
-      // Mock returns null because ownerId doesn't match
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(null);
-
-      await request(context.app.getHttpServer())
-        .get('/api/connections/123e4567-e89b-12d3-a456-426614174001')
-        .set(authHeader(contributor.accessToken))
-        .expect(404);
-
-      // Verify the query included ownerId filter
-      expect(context.prismaMock.dataConnection.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            ownerId: contributor.id,
-          }),
-        }),
-      );
     });
   });
 
@@ -245,7 +221,7 @@ describe('Connections (Integration)', () => {
         dbType: 'postgresql',
         host: 'localhost',
         port: 5432,
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
       context.prismaMock.dataConnection.create.mockResolvedValue(
@@ -292,7 +268,7 @@ describe('Connections (Integration)', () => {
       const mockConnection = createMockConnection({
         id: '123e4567-e89b-12d3-a456-426614174003',
         name: 'Secure DB',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
         encryptedCredential: 'encrypted-password',
       });
 
@@ -343,7 +319,7 @@ describe('Connections (Integration)', () => {
       const existingConnection = createMockConnection({
         id: '123e4567-e89b-12d3-a456-426614174001',
         name: 'Old Name',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
       const updatedConnection = {
@@ -351,7 +327,7 @@ describe('Connections (Integration)', () => {
         name: 'New Name',
       };
 
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(
+      context.prismaMock.dataConnection.findUnique.mockResolvedValue(
         existingConnection,
       );
       context.prismaMock.dataConnection.update.mockResolvedValue(
@@ -374,11 +350,11 @@ describe('Connections (Integration)', () => {
       const existingConnection = createMockConnection({
         id: '123e4567-e89b-12d3-a456-426614174001',
         name: 'DB',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
         encryptedCredential: 'existing-encrypted',
       });
 
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(
+      context.prismaMock.dataConnection.findUnique.mockResolvedValue(
         existingConnection,
       );
       context.prismaMock.dataConnection.update.mockResolvedValue(
@@ -405,7 +381,7 @@ describe('Connections (Integration)', () => {
     it('should return 404 for non-existent connection', async () => {
       const contributor = await createMockContributorUser(context);
 
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(null);
+      context.prismaMock.dataConnection.findUnique.mockResolvedValue(null);
 
       await request(context.app.getHttpServer())
         .patch('/api/connections/123e4567-e89b-12d3-a456-426614174999')
@@ -437,10 +413,10 @@ describe('Connections (Integration)', () => {
       const mockConnection = createMockConnection({
         id: '123e4567-e89b-12d3-a456-426614174001',
         name: 'To Delete',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(
+      context.prismaMock.dataConnection.findUnique.mockResolvedValue(
         mockConnection,
       );
       context.prismaMock.dataConnection.delete.mockResolvedValue(
@@ -461,7 +437,7 @@ describe('Connections (Integration)', () => {
     it('should return 404 for non-existent connection', async () => {
       const contributor = await createMockContributorUser(context);
 
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(null);
+      context.prismaMock.dataConnection.findUnique.mockResolvedValue(null);
 
       await request(context.app.getHttpServer())
         .delete('/api/connections/123e4567-e89b-12d3-a456-426614174999')
@@ -543,11 +519,11 @@ describe('Connections (Integration)', () => {
       const mockConnection = createMockConnection({
         id: '123e4567-e89b-12d3-a456-426614174001',
         name: 'Test DB',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
         encryptedCredential: null,
       });
 
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(
+      context.prismaMock.dataConnection.findUnique.mockResolvedValue(
         mockConnection,
       );
       context.prismaMock.dataConnection.update.mockResolvedValue(
@@ -592,7 +568,7 @@ describe('Connections (Integration)', () => {
     it('should return 404 for valid UUID that does not exist', async () => {
       const contributor = await createMockContributorUser(context);
 
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(null);
+      context.prismaMock.dataConnection.findUnique.mockResolvedValue(null);
 
       await request(context.app.getHttpServer())
         .post('/api/connections/123e4567-e89b-12d3-a456-426614174999/test')

@@ -55,7 +55,7 @@ describe('Discovery (Integration)', () => {
     it('should return 404 for non-existent connection', async () => {
       const contributor = await createMockContributorUser(context);
 
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(null);
+      context.prismaMock.dataConnection.findUnique.mockResolvedValue(null);
 
       await request(context.app.getHttpServer())
         .get('/api/connections/123e4567-e89b-12d3-a456-426614174999/databases')
@@ -63,26 +63,6 @@ describe('Discovery (Integration)', () => {
         .expect(404);
     });
 
-    it('should return 404 for other user\'s connection', async () => {
-      const contributor = await createMockContributorUser(context);
-
-      // Mock returns null because ownerId doesn't match
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(null);
-
-      await request(context.app.getHttpServer())
-        .get('/api/connections/123e4567-e89b-12d3-a456-426614174001/databases')
-        .set(authHeader(contributor.accessToken))
-        .expect(404);
-
-      // Verify the query included ownerId filter
-      expect(context.prismaMock.dataConnection.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            ownerId: contributor.id,
-          }),
-        }),
-      );
-    });
 
     it('should pass auth/RBAC checks and attempt database connection', async () => {
       const contributor = await createMockContributorUser(context);
@@ -90,11 +70,11 @@ describe('Discovery (Integration)', () => {
       const mockConnection = createMockConnection({
         id: '123e4567-e89b-12d3-a456-426614174001',
         name: 'Test DB',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
         encryptedCredential: null, // No password for discovery tests
       });
 
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(
+      context.prismaMock.dataConnection.findUnique.mockResolvedValue(
         mockConnection,
       );
 
@@ -136,7 +116,7 @@ describe('Discovery (Integration)', () => {
     it('should return 404 for non-existent connection', async () => {
       const contributor = await createMockContributorUser(context);
 
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(null);
+      context.prismaMock.dataConnection.findUnique.mockResolvedValue(null);
 
       await request(context.app.getHttpServer())
         .get(
@@ -152,11 +132,11 @@ describe('Discovery (Integration)', () => {
       const mockConnection = createMockConnection({
         id: '123e4567-e89b-12d3-a456-426614174001',
         name: 'Test DB',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
         encryptedCredential: null, // No password for discovery tests
       });
 
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(
+      context.prismaMock.dataConnection.findUnique.mockResolvedValue(
         mockConnection,
       );
 
@@ -199,7 +179,7 @@ describe('Discovery (Integration)', () => {
     it('should return 404 for non-existent connection', async () => {
       const contributor = await createMockContributorUser(context);
 
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(null);
+      context.prismaMock.dataConnection.findUnique.mockResolvedValue(null);
 
       await request(context.app.getHttpServer())
         .get(
@@ -215,11 +195,11 @@ describe('Discovery (Integration)', () => {
       const mockConnection = createMockConnection({
         id: '123e4567-e89b-12d3-a456-426614174001',
         name: 'Test DB',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
         encryptedCredential: null, // No password for discovery tests
       });
 
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(
+      context.prismaMock.dataConnection.findUnique.mockResolvedValue(
         mockConnection,
       );
 
@@ -262,7 +242,7 @@ describe('Discovery (Integration)', () => {
     it('should return 404 for non-existent connection', async () => {
       const contributor = await createMockContributorUser(context);
 
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(null);
+      context.prismaMock.dataConnection.findUnique.mockResolvedValue(null);
 
       await request(context.app.getHttpServer())
         .get(
@@ -278,11 +258,11 @@ describe('Discovery (Integration)', () => {
       const mockConnection = createMockConnection({
         id: '123e4567-e89b-12d3-a456-426614174001',
         name: 'Test DB',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
         encryptedCredential: null, // No password for discovery tests
       });
 
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(
+      context.prismaMock.dataConnection.findUnique.mockResolvedValue(
         mockConnection,
       );
 
@@ -298,41 +278,6 @@ describe('Discovery (Integration)', () => {
     });
   });
 
-  // ==========================================================================
-  // Ownership Isolation
-  // ==========================================================================
-
-  describe('Ownership Isolation', () => {
-    it('should enforce ownership on all discovery endpoints', async () => {
-      const contributor = await createMockContributorUser(context);
-
-      // Mock returns null to simulate other user's connection
-      context.prismaMock.dataConnection.findFirst.mockResolvedValue(null);
-
-      const endpoints = [
-        '/api/connections/123e4567-e89b-12d3-a456-426614174001/databases',
-        '/api/connections/123e4567-e89b-12d3-a456-426614174001/databases/testdb/schemas',
-        '/api/connections/123e4567-e89b-12d3-a456-426614174001/databases/testdb/schemas/public/tables',
-        '/api/connections/123e4567-e89b-12d3-a456-426614174001/databases/testdb/schemas/public/tables/users/columns',
-      ];
-
-      for (const endpoint of endpoints) {
-        await request(context.app.getHttpServer())
-          .get(endpoint)
-          .set(authHeader(contributor.accessToken))
-          .expect(404);
-      }
-
-      // Verify all calls included ownerId filter
-      expect(context.prismaMock.dataConnection.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            ownerId: contributor.id,
-          }),
-        }),
-      );
-    });
-  });
 
   // ==========================================================================
   // Invalid UUID Format

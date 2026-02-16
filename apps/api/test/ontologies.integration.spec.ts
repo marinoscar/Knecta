@@ -73,7 +73,7 @@ describe('Ontologies (Integration)', () => {
         id: '11111111-1111-1111-1111-111111111111',
         name: 'Test Model',
         connectionId: '33333333-3333-3333-3333-333333333333',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
       const mockOntologies = [
@@ -81,13 +81,13 @@ describe('Ontologies (Integration)', () => {
           id: '44444444-4444-4444-4444-444444444444',
           name: 'Ontology 1',
           semanticModelId: mockSemanticModel.id,
-          ownerId: contributor.id,
+          createdByUserId: contributor.id,
         }),
         createMockOntology({
           id: '55555555-5555-5555-5555-555555555555',
           name: 'Ontology 2',
           semanticModelId: mockSemanticModel.id,
-          ownerId: contributor.id,
+          createdByUserId: contributor.id,
         }),
       ];
 
@@ -129,7 +129,7 @@ describe('Ontologies (Integration)', () => {
           name: 'Ready Ontology',
           semanticModelId: '11111111-1111-1111-1111-111111111111',
           status: 'ready',
-          ownerId: contributor.id,
+          createdByUserId: contributor.id,
         }),
       ];
 
@@ -159,7 +159,7 @@ describe('Ontologies (Integration)', () => {
           id: '44444444-4444-4444-4444-444444444444',
           name: 'Sales Ontology',
           semanticModelId: '11111111-1111-1111-1111-111111111111',
-          ownerId: contributor.id,
+          createdByUserId: contributor.id,
         }),
       ];
 
@@ -187,35 +187,6 @@ describe('Ontologies (Integration)', () => {
       );
     });
 
-    it("should only return user's own ontologies (ownership isolation)", async () => {
-      const contributor = await createMockContributorUser(context);
-
-      const mockOntologies = [
-        createMockOntology({
-          id: '44444444-4444-4444-4444-444444444444',
-          name: 'My Ontology',
-          semanticModelId: '11111111-1111-1111-1111-111111111111',
-          ownerId: contributor.id,
-        }),
-      ];
-
-      context.prismaMock.ontology.findMany.mockResolvedValue(mockOntologies);
-      context.prismaMock.ontology.count.mockResolvedValue(1);
-
-      await request(context.app.getHttpServer())
-        .get('/api/ontologies')
-        .set(authHeader(contributor.accessToken))
-        .expect(200);
-
-      // Verify the mock was called with ownerId filter
-      expect(context.prismaMock.ontology.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            ownerId: contributor.id,
-          }),
-        }),
-      );
-    });
   });
 
   // ==========================================================================
@@ -232,7 +203,7 @@ describe('Ontologies (Integration)', () => {
     it('should return 404 for non-existent ontology', async () => {
       const contributor = await createMockContributorUser(context);
 
-      context.prismaMock.ontology.findFirst.mockResolvedValue(null);
+      context.prismaMock.ontology.findUnique.mockResolvedValue(null);
 
       await request(context.app.getHttpServer())
         .get('/api/ontologies/123e4567-e89b-12d3-a456-426614174999')
@@ -247,7 +218,7 @@ describe('Ontologies (Integration)', () => {
         id: '11111111-1111-1111-1111-111111111111',
         name: 'Test Model',
         connectionId: '33333333-3333-3333-3333-333333333333',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
       const mockOntology = createMockOntology({
@@ -255,7 +226,7 @@ describe('Ontologies (Integration)', () => {
         name: 'Test Ontology',
         description: 'Test description',
         semanticModelId: mockSemanticModel.id,
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
       // Include semantic model in response
@@ -267,7 +238,7 @@ describe('Ontologies (Integration)', () => {
         },
       };
 
-      context.prismaMock.ontology.findFirst.mockResolvedValue(
+      context.prismaMock.ontology.findUnique.mockResolvedValue(
         ontologyWithModel,
       );
 
@@ -291,26 +262,6 @@ describe('Ontologies (Integration)', () => {
       });
     });
 
-    it("should return 404 for other user's ontology", async () => {
-      const contributor = await createMockContributorUser(context);
-
-      // Mock returns null because ownerId doesn't match
-      context.prismaMock.ontology.findFirst.mockResolvedValue(null);
-
-      await request(context.app.getHttpServer())
-        .get('/api/ontologies/123e4567-e89b-12d3-a456-426614174001')
-        .set(authHeader(contributor.accessToken))
-        .expect(404);
-
-      // Verify the query included ownerId filter
-      expect(context.prismaMock.ontology.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            ownerId: contributor.id,
-          }),
-        }),
-      );
-    });
   });
 
   // ==========================================================================
@@ -344,7 +295,7 @@ describe('Ontologies (Integration)', () => {
     it('should return 400 if semantic model not found', async () => {
       const contributor = await createMockContributorUser(context);
 
-      context.prismaMock.semanticModel.findFirst.mockResolvedValue(null);
+      context.prismaMock.semanticModel.findUnique.mockResolvedValue(null);
 
       await request(context.app.getHttpServer())
         .post('/api/ontologies')
@@ -364,10 +315,10 @@ describe('Ontologies (Integration)', () => {
         name: 'Test Model',
         connectionId: '33333333-3333-3333-3333-333333333333',
         status: 'generating', // Not ready
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
-      context.prismaMock.semanticModel.findFirst.mockResolvedValue(
+      context.prismaMock.semanticModel.findUnique.mockResolvedValue(
         mockSemanticModel,
       );
 
@@ -389,7 +340,7 @@ describe('Ontologies (Integration)', () => {
         name: 'Test Model',
         connectionId: '33333333-3333-3333-3333-333333333333',
         status: 'ready',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
         model: {
           semantic_model: [
             {
@@ -423,7 +374,7 @@ describe('Ontologies (Integration)', () => {
         status: 'ready',
         nodeCount: 25,
         relationshipCount: 30,
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
       const ontologyWithModel = {
@@ -434,7 +385,7 @@ describe('Ontologies (Integration)', () => {
         },
       };
 
-      context.prismaMock.semanticModel.findFirst.mockResolvedValue(
+      context.prismaMock.semanticModel.findUnique.mockResolvedValue(
         mockSemanticModel,
       );
 
@@ -490,7 +441,7 @@ describe('Ontologies (Integration)', () => {
         name: 'Test Model',
         connectionId: '33333333-3333-3333-3333-333333333333',
         status: 'ready',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
         model: {
           semantic_model: [
             {
@@ -510,10 +461,10 @@ describe('Ontologies (Integration)', () => {
         errorMessage: 'Neo4j connection failed',
         nodeCount: null,
         relationshipCount: null,
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
-      context.prismaMock.semanticModel.findFirst.mockResolvedValue(
+      context.prismaMock.semanticModel.findUnique.mockResolvedValue(
         mockSemanticModel,
       );
 
@@ -577,7 +528,7 @@ describe('Ontologies (Integration)', () => {
     it('should return 404 for non-existent ontology', async () => {
       const contributor = await createMockContributorUser(context);
 
-      context.prismaMock.ontology.findFirst.mockResolvedValue(null);
+      context.prismaMock.ontology.findUnique.mockResolvedValue(null);
 
       await request(context.app.getHttpServer())
         .delete('/api/ontologies/123e4567-e89b-12d3-a456-426614174999')
@@ -592,10 +543,10 @@ describe('Ontologies (Integration)', () => {
         id: '123e4567-e89b-12d3-a456-426614174001',
         name: 'To Delete',
         semanticModelId: '11111111-1111-1111-1111-111111111111',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
-      context.prismaMock.ontology.findFirst.mockResolvedValue(mockOntology);
+      context.prismaMock.ontology.findUnique.mockResolvedValue(mockOntology);
       context.prismaMock.ontology.delete.mockResolvedValue(mockOntology);
       context.prismaMock.auditEvent.create.mockResolvedValue({} as any);
 
@@ -636,7 +587,7 @@ describe('Ontologies (Integration)', () => {
         name: 'Test Ontology',
         semanticModelId: '11111111-1111-1111-1111-111111111111',
         status: 'ready',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
       const mockGraph = {
@@ -665,7 +616,7 @@ describe('Ontologies (Integration)', () => {
         ],
       };
 
-      context.prismaMock.ontology.findFirst.mockResolvedValue(mockOntology);
+      context.prismaMock.ontology.findUnique.mockResolvedValue(mockOntology);
 
       // Mock NeoOntologyService.getGraph
       const mockNeoOntologyService =
@@ -695,10 +646,10 @@ describe('Ontologies (Integration)', () => {
         name: 'Test Ontology',
         semanticModelId: '11111111-1111-1111-1111-111111111111',
         status: 'creating', // Not ready
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
-      context.prismaMock.ontology.findFirst.mockResolvedValue(mockOntology);
+      context.prismaMock.ontology.findUnique.mockResolvedValue(mockOntology);
 
       await request(context.app.getHttpServer())
         .get('/api/ontologies/123e4567-e89b-12d3-a456-426614174001/graph')
@@ -709,7 +660,7 @@ describe('Ontologies (Integration)', () => {
     it('should return 404 for non-existent ontology', async () => {
       const contributor = await createMockContributorUser(context);
 
-      context.prismaMock.ontology.findFirst.mockResolvedValue(null);
+      context.prismaMock.ontology.findUnique.mockResolvedValue(null);
 
       await request(context.app.getHttpServer())
         .get('/api/ontologies/123e4567-e89b-12d3-a456-426614174999/graph')

@@ -455,7 +455,7 @@ export interface CreateMockConnectionOptions {
   encryptedCredential?: string | null;
   useSsl?: boolean;
   options?: any;
-  ownerId: string;
+  createdByUserId?: string | null;
   lastTestedAt?: Date | null;
   lastTestResult?: boolean | null;
   lastTestMessage?: string | null;
@@ -478,7 +478,7 @@ export function createMockConnection(
     encryptedCredential = null,
     useSsl = false,
     options: connOptions = null,
-    ownerId,
+    createdByUserId = null,
     lastTestedAt = null,
     lastTestResult = null,
     lastTestMessage = null,
@@ -498,7 +498,7 @@ export function createMockConnection(
     encryptedCredential,
     useSsl,
     options: connOptions,
-    ownerId,
+    createdByUserId,
     lastTestedAt,
     lastTestResult,
     lastTestMessage,
@@ -524,7 +524,7 @@ export interface CreateMockSemanticModelOptions {
   fieldCount?: number | null;
   relationshipCount?: number | null;
   metricCount?: number | null;
-  ownerId: string;
+  createdByUserId?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -554,7 +554,7 @@ export function createMockSemanticModel(
     fieldCount = 20,
     relationshipCount = 3,
     metricCount = 10,
-    ownerId,
+    createdByUserId = null,
     createdAt = new Date(),
     updatedAt = new Date(),
   } = options;
@@ -572,7 +572,7 @@ export function createMockSemanticModel(
     fieldCount,
     relationshipCount,
     metricCount,
-    ownerId,
+    createdByUserId,
     createdAt,
     updatedAt,
   };
@@ -597,7 +597,7 @@ export interface CreateMockSemanticModelRunOptions {
   errorMessage?: string | null;
   startedAt?: Date | null;
   completedAt?: Date | null;
-  ownerId: string;
+  createdByUserId?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -620,7 +620,7 @@ export function createMockSemanticModelRun(
     errorMessage = null,
     startedAt = null,
     completedAt = null,
-    ownerId,
+    createdByUserId = null,
     createdAt = new Date(),
     updatedAt = new Date(),
   } = options;
@@ -640,7 +640,7 @@ export function createMockSemanticModelRun(
     errorMessage,
     startedAt,
     completedAt,
-    ownerId,
+    createdByUserId,
     createdAt,
     updatedAt,
   };
@@ -659,7 +659,7 @@ export interface CreateMockOntologyOptions {
   nodeCount?: number | null;
   relationshipCount?: number | null;
   errorMessage?: string | null;
-  ownerId: string;
+  createdByUserId?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -676,7 +676,7 @@ export function createMockOntology(
     nodeCount = 25,
     relationshipCount = 30,
     errorMessage = null,
-    ownerId,
+    createdByUserId = null,
     createdAt = new Date(),
     updatedAt = new Date(),
   } = options;
@@ -690,7 +690,7 @@ export function createMockOntology(
     nodeCount,
     relationshipCount,
     errorMessage,
-    ownerId,
+    createdByUserId,
     createdAt,
     updatedAt,
   };

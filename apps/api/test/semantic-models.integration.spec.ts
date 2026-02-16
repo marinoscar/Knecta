@@ -81,7 +81,7 @@ describe('Semantic Models (Integration)', () => {
       const mockConnection = createMockConnection({
         id: '123e4567-e89b-12d3-a456-426614174001',
         name: 'Test DB',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
       const mockModels = [
@@ -89,13 +89,13 @@ describe('Semantic Models (Integration)', () => {
           id: 'sm-uuid-1',
           name: 'Model 1',
           connectionId: mockConnection.id,
-          ownerId: contributor.id,
+          createdByUserId: contributor.id,
         }),
         createMockSemanticModel({
           id: 'sm-uuid-2',
           name: 'Model 2',
           connectionId: mockConnection.id,
-          ownerId: contributor.id,
+          createdByUserId: contributor.id,
         }),
       ];
 
@@ -132,7 +132,7 @@ describe('Semantic Models (Integration)', () => {
           name: 'Ready Model',
           connectionId: 'conn-uuid-1',
           status: 'ready',
-          ownerId: contributor.id,
+          createdByUserId: contributor.id,
         }),
       ];
 
@@ -162,7 +162,7 @@ describe('Semantic Models (Integration)', () => {
           id: 'sm-uuid-1',
           name: 'Sales Model',
           connectionId: 'conn-uuid-1',
-          ownerId: contributor.id,
+          createdByUserId: contributor.id,
         }),
       ];
 
@@ -209,14 +209,14 @@ describe('Semantic Models (Integration)', () => {
       const mockConnection = createMockConnection({
         id: '123e4567-e89b-12d3-a456-426614174001',
         name: 'Test DB',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
       const mockModel = createMockSemanticModel({
         id: '123e4567-e89b-12d3-a456-426614174011',
         name: 'Sales Model',
         connectionId: mockConnection.id,
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
       // Include connection in response
@@ -283,7 +283,7 @@ describe('Semantic Models (Integration)', () => {
         name: 'Old Name',
         description: 'Old description',
         connectionId: '123e4567-e89b-12d3-a456-426614174001',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
       const updatedModel = {
@@ -331,7 +331,7 @@ describe('Semantic Models (Integration)', () => {
         name: 'Test Model',
         description: 'Test',
         connectionId: '123e4567-e89b-12d3-a456-426614174001',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
         modelVersion: 1,
         tableCount: 0,
         fieldCount: 0,
@@ -447,7 +447,7 @@ describe('Semantic Models (Integration)', () => {
         id: '123e4567-e89b-12d3-a456-426614174011',
         name: 'Test Model',
         connectionId: '123e4567-e89b-12d3-a456-426614174001',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
       context.prismaMock.semanticModel.findUnique.mockResolvedValue(
@@ -480,7 +480,7 @@ describe('Semantic Models (Integration)', () => {
         id: '123e4567-e89b-12d3-a456-426614174011',
         name: 'Test Model',
         connectionId: '123e4567-e89b-12d3-a456-426614174001',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
         modelVersion: 1,
       });
 
@@ -549,7 +549,7 @@ describe('Semantic Models (Integration)', () => {
         name: 'Old Name',
         description: 'Old description',
         connectionId: '123e4567-e89b-12d3-a456-426614174001',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
         tableCount: 5,
         fieldCount: 20,
         modelVersion: 1,
@@ -612,7 +612,7 @@ describe('Semantic Models (Integration)', () => {
         id: '123e4567-e89b-12d3-a456-426614174011',
         name: 'To Delete',
         connectionId: '123e4567-e89b-12d3-a456-426614174001',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
       context.prismaMock.semanticModel.findUnique.mockResolvedValue(mockModel);
@@ -739,7 +739,7 @@ describe('Semantic Models (Integration)', () => {
         id: '123e4567-e89b-12d3-a456-426614174011',
         name: 'Sales Model',
         connectionId: '123e4567-e89b-12d3-a456-426614174001',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
         model: {
           semantic_model: [
             {
@@ -814,7 +814,7 @@ describe('Semantic Models (Integration)', () => {
       const mockConnection = createMockConnection({
         id: '123e4567-e89b-12d3-a456-426614174001',
         name: 'Test DB',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
       const mockRun = createMockSemanticModelRun({
@@ -824,7 +824,7 @@ describe('Semantic Models (Integration)', () => {
         selectedSchemas: ['public'],
         selectedTables: ['public.users'],
         status: 'pending',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
       context.prismaMock.dataConnection.findUnique.mockResolvedValue(
@@ -912,7 +912,7 @@ describe('Semantic Models (Integration)', () => {
         connectionId: '123e4567-e89b-12d3-a456-426614174001',
         databaseName: 'testdb',
         status: 'pending',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
       context.prismaMock.semanticModelRun.findUnique.mockResolvedValue(mockRun);
@@ -950,7 +950,7 @@ describe('Semantic Models (Integration)', () => {
         id: '123e4567-e89b-12d3-a456-426614174021',
         connectionId: '123e4567-e89b-12d3-a456-426614174001',
         status: 'pending',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
       const cancelledRun = {
@@ -979,7 +979,7 @@ describe('Semantic Models (Integration)', () => {
         id: '123e4567-e89b-12d3-a456-426614174021',
         connectionId: '123e4567-e89b-12d3-a456-426614174001',
         status: 'completed',
-        ownerId: contributor.id,
+        createdByUserId: contributor.id,
       });
 
       context.prismaMock.semanticModelRun.findUnique.mockResolvedValue(mockRun);

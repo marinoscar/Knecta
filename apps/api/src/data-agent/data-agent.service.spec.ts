@@ -25,10 +25,10 @@ describe('DataAgentService', () => {
     id: mockOntologyId,
     name: 'Test Ontology',
     status: 'ready',
-    ownerId: mockUserId,
+    createdByUserId: mockUserId,
     semanticModelId: 'model-123',
     semanticModel: {
-      ownerId: mockUserId,
+      createdByUserId: mockUserId,
     },
   };
 
@@ -84,14 +84,9 @@ describe('DataAgentService', () => {
       expect(mockPrisma.ontology.findFirst).toHaveBeenCalledWith({
         where: {
           id: mockOntologyId,
-          ownerId: mockUserId,
         },
         include: {
-          semanticModel: {
-            select: {
-              ownerId: true,
-            },
-          },
+          semanticModel: true,
         },
       });
       expect(mockPrisma.dataChat.create).toHaveBeenCalledWith({
