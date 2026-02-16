@@ -10,9 +10,8 @@
 #
 # Prerequisites:
 #   - .env file with all required variables (see .env.example)
-#   - External Docker network 'proxy' exists (docker network create proxy)
 #   - Cloud PostgreSQL accessible from VPS (configured in .env)
-#   - VPS Nginx proxy routes knecta.marin.cr to these containers
+#   - VPS Nginx proxy (host network) routes knecta.marin.cr to localhost ports
 # =============================================================================
 
 services:
@@ -36,6 +35,8 @@ services:
         condition: service_healthy
       sandbox:
         condition: service_healthy
+    ports:
+      - "127.0.0.1:3100:3000"
     restart: unless-stopped
     deploy:
       resources:
@@ -43,7 +44,6 @@ services:
           memory: 512M
     networks:
       - app-network
-      - proxy
 
   # ---------------------------------------------------------------------------
   # Web - React Frontend (nginx:alpine serving static files)
@@ -54,6 +54,8 @@ services:
       dockerfile: Dockerfile
       target: production
     container_name: knecta-web
+    ports:
+      - "127.0.0.1:3101:80"
     restart: unless-stopped
     deploy:
       resources:
@@ -61,7 +63,6 @@ services:
           memory: 128M
     networks:
       - app-network
-      - proxy
 
   # ---------------------------------------------------------------------------
   # Graph Database - Neo4j 5 Community
@@ -119,5 +120,3 @@ services:
 networks:
   app-network:
     driver: bridge
-  proxy:
-    external: true
