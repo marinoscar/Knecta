@@ -24,6 +24,7 @@ export function createExplainerNode(llm: any, sandboxService: SandboxService, em
         stepResults,
         verificationReport,
         state.conversationContext,
+        state.userPreferences,
       );
 
       // Get narrative from LLM

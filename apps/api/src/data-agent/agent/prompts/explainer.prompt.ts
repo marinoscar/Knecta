@@ -6,6 +6,7 @@ export function buildExplainerPrompt(
   stepResults: StepResult[],
   verificationReport: VerificationReport | null,
   conversationContext: string,
+  userPreferences?: Array<{ key: string; value: string }>,
 ): string {
   const resultsSection = stepResults.map((r) => {
     let detail = `### Step ${r.stepId}: ${r.description}`;
@@ -28,6 +29,10 @@ export function buildExplainerPrompt(
     ? '\n\n**IMPORTANT**: The verification found issues. Include appropriate caveats in your response.'
     : '';
 
+  const preferencesSection = userPreferences && userPreferences.length > 0
+    ? `\n## User Preferences\n\nTailor your response considering these user preferences:\n${userPreferences.map((p) => `- **${p.key}**: ${p.value}`).join('\n')}\n`
+    : '';
+
   return `You are a data storyteller. Synthesize the execution results into a clear, well-structured answer.
 
 ## User's Question
@@ -42,7 +47,7 @@ ${resultsSection}
 
 ${verificationSection}
 ${caveatsNote}
-
+${preferencesSection}
 ## Instructions
 
 1. Start with a **direct answer** to the user's question.
