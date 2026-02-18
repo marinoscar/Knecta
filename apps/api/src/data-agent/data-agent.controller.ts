@@ -27,11 +27,82 @@ import { CreateChatDto } from './dto/create-chat.dto';
 import { UpdateChatDto } from './dto/update-chat.dto';
 import { ChatQueryDto } from './dto/chat-query.dto';
 import { SendMessageDto } from './dto/send-message.dto';
+import { CreatePreferenceDto } from './dto/create-preference.dto';
+import { UpdatePreferenceDto } from './dto/update-preference.dto';
+import { PreferenceQueryDto } from './dto/preference-query.dto';
 
 @ApiTags('Data Agent')
 @Controller('data-agent')
 export class DataAgentController {
   constructor(private readonly dataAgentService: DataAgentService) {}
+
+  // ─── Preferences endpoints ───
+
+  @Get('preferences')
+  @Auth({ permissions: [PERMISSIONS.DATA_AGENT_READ] })
+  @ApiOperation({ summary: 'List user data agent preferences' })
+  @ApiQuery({ name: 'ontologyId', required: false, type: String })
+  @ApiQuery({ name: 'scope', required: false, enum: ['global', 'ontology', 'all'] })
+  @ApiResponse({ status: 200, description: 'Preferences returned' })
+  async getPreferences(
+    @Query() query: PreferenceQueryDto,
+    @CurrentUser('id') userId: string,
+  ) {
+    const data = await this.dataAgentService.getPreferences(userId, query.ontologyId, query.scope);
+    return { data };
+  }
+
+  @Post('preferences')
+  @Auth({ permissions: [PERMISSIONS.DATA_AGENT_WRITE] })
+  @ApiOperation({ summary: 'Create or update a data agent preference' })
+  @ApiResponse({ status: 201, description: 'Preference created or updated' })
+  async createPreference(
+    @Body() dto: CreatePreferenceDto,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.dataAgentService.createPreference(userId, dto);
+  }
+
+  @Patch('preferences/:id')
+  @Auth({ permissions: [PERMISSIONS.DATA_AGENT_WRITE] })
+  @ApiOperation({ summary: 'Update a data agent preference value' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Preference updated' })
+  @ApiResponse({ status: 404, description: 'Preference not found' })
+  async updatePreference(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdatePreferenceDto,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.dataAgentService.updatePreference(id, userId, dto);
+  }
+
+  @Delete('preferences/:id')
+  @Auth({ permissions: [PERMISSIONS.DATA_AGENT_WRITE] })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a data agent preference' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiResponse({ status: 204, description: 'Preference deleted' })
+  @ApiResponse({ status: 404, description: 'Preference not found' })
+  async deletePreference(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    await this.dataAgentService.deletePreference(id, userId);
+  }
+
+  @Delete('preferences')
+  @Auth({ permissions: [PERMISSIONS.DATA_AGENT_WRITE] })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Clear all data agent preferences for the user' })
+  @ApiQuery({ name: 'ontologyId', required: false, type: String })
+  @ApiResponse({ status: 204, description: 'Preferences cleared' })
+  async clearPreferences(
+    @Query('ontologyId') ontologyId: string | undefined,
+    @CurrentUser('id') userId: string,
+  ) {
+    await this.dataAgentService.clearPreferences(userId, ontologyId || undefined);
+  }
 
   @Post('chats')
   @Auth({ permissions: [PERMISSIONS.DATA_AGENT_WRITE] })
