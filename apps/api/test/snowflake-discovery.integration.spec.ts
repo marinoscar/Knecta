@@ -6,19 +6,18 @@
  */
 
 import { SnowflakeDriver } from '../src/connections/drivers/snowflake.driver';
-import { ConnectionParams } from '../src/connections/drivers/driver.interface';
 
 // ---------------------------------------------------------------------------
 // Mock snowflake-sdk at module level
 // ---------------------------------------------------------------------------
 
-const mockDestroy = jest.fn((cb: (err: Error | null) => void) => cb(null));
+const mockDestroy = jest.fn((cb) => cb(null));
 
 /**
  * Build a mock statement object whose getColumns() returns column-name objects
  * matching the query type.
  */
-function buildMockStmt(columnNames: string[]) {
+function buildMockStmt(columnNames) {
   return {
     getColumns: () => columnNames.map((name) => ({ getName: () => name })),
   };
@@ -29,15 +28,7 @@ function buildMockStmt(columnNames: string[]) {
  * mock rows + columns.
  */
 const mockExecute = jest.fn(
-  (opts: {
-    sqlText: string;
-    binds?: unknown[];
-    complete: (
-      err: Error | null,
-      stmt: { getColumns(): Array<{ getName(): string }> },
-      rows: Record<string, unknown>[] | undefined,
-    ) => void;
-  }) => {
+  (opts) => {
     const { sqlText, complete } = opts;
 
     // ------------------------------------------------------------------
@@ -234,7 +225,7 @@ const mockExecute = jest.fn(
 );
 
 const mockConnect = jest.fn(
-  (cb: (err: Error | null, conn: unknown) => void) => {
+  (cb) => {
     // Return the same mock connection object as "conn"
     cb(null, mockConnectionObj);
   },
@@ -257,7 +248,7 @@ jest.mock('snowflake-sdk', () => ({
 // Test params
 // ---------------------------------------------------------------------------
 
-const testParams: ConnectionParams = {
+const testParams = {
   host: 'test.snowflakecomputing.com',
   port: 443,
   username: 'testuser',
@@ -275,7 +266,7 @@ const testParams: ConnectionParams = {
 // ---------------------------------------------------------------------------
 
 describe('SnowflakeDriver (mocked integration)', () => {
-  let driver: SnowflakeDriver;
+  let driver;
 
   beforeEach(() => {
     driver = new SnowflakeDriver();
@@ -283,20 +274,12 @@ describe('SnowflakeDriver (mocked integration)', () => {
 
     // Re-apply default mock implementation after clearAllMocks
     mockConnect.mockImplementation(
-      (cb: (err: Error | null, conn: unknown) => void) => {
+      (cb) => {
         cb(null, mockConnectionObj);
       },
     );
     mockExecute.mockImplementation(
-      (opts: {
-        sqlText: string;
-        binds?: unknown[];
-        complete: (
-          err: Error | null,
-          stmt: { getColumns(): Array<{ getName(): string }> },
-          rows: Record<string, unknown>[] | undefined,
-        ) => void;
-      }) => {
+      (opts) => {
         const { sqlText, complete } = opts;
 
         if (sqlText === 'SELECT 1') {
@@ -460,7 +443,7 @@ describe('SnowflakeDriver (mocked integration)', () => {
       },
     );
     mockDestroy.mockImplementation(
-      (cb: (err: Error | null) => void) => cb(null),
+      (cb) => cb(null),
     );
     mockCreateConnection.mockReturnValue(mockConnectionObj);
   });
@@ -480,7 +463,7 @@ describe('SnowflakeDriver (mocked integration)', () => {
     });
 
     it('should return error without throwing when account is missing', async () => {
-      const paramsWithoutAccount: ConnectionParams = {
+      const paramsWithoutAccount = {
         ...testParams,
         options: {},
       };
@@ -494,7 +477,7 @@ describe('SnowflakeDriver (mocked integration)', () => {
 
     it('should return error result when connection fails', async () => {
       mockConnect.mockImplementationOnce(
-        (cb: (err: Error | null, conn: unknown) => void) => {
+        (cb) => {
           cb(new Error('Invalid credentials'), null);
         },
       );
@@ -508,11 +491,8 @@ describe('SnowflakeDriver (mocked integration)', () => {
 
     it('should return error result when execute fails after connect', async () => {
       mockExecute.mockImplementationOnce(
-        (opts: {
-          sqlText: string;
-          complete: (err: Error | null, stmt: unknown, rows: unknown) => void;
-        }) => {
-          opts.complete(new Error('Query failed'), null as never, undefined);
+        (opts) => {
+          opts.complete(new Error('Query failed'), null, undefined);
         },
       );
 
@@ -544,7 +524,7 @@ describe('SnowflakeDriver (mocked integration)', () => {
 
       const executeCalls = mockExecute.mock.calls;
       const showDbCall = executeCalls.find(([opts]) =>
-        (opts.sqlText as string).trim().toUpperCase().startsWith('SHOW DATABASES'),
+        opts.sqlText.trim().toUpperCase().startsWith('SHOW DATABASES'),
       );
       expect(showDbCall).toBeDefined();
     });
@@ -598,13 +578,13 @@ describe('SnowflakeDriver (mocked integration)', () => {
 
       const usersTable = result.find((t) => t.name === 'USERS');
       expect(usersTable).toBeDefined();
-      expect(usersTable!.type).toBe('TABLE');
-      expect(usersTable!.rowCountEstimate).toBe(1000);
+      expect(usersTable.type).toBe('TABLE');
+      expect(usersTable.rowCountEstimate).toBe(1000);
 
       const viewTable = result.find((t) => t.name === 'USER_VIEW');
       expect(viewTable).toBeDefined();
-      expect(viewTable!.type).toBe('VIEW');
-      expect(viewTable!.rowCountEstimate).toBeUndefined();
+      expect(viewTable.type).toBe('VIEW');
+      expect(viewTable.rowCountEstimate).toBeUndefined();
     });
 
     it('should include schema and database on every TableInfo', async () => {
@@ -641,19 +621,19 @@ describe('SnowflakeDriver (mocked integration)', () => {
 
       const idCol = result.find((c) => c.name === 'ID');
       expect(idCol).toBeDefined();
-      expect(idCol!.dataType).toBe('NUMBER');
-      expect(idCol!.nativeType).toBe('NUMBER');
-      expect(idCol!.isNullable).toBe(false);
-      expect(idCol!.numericPrecision).toBe(38);
-      expect(idCol!.numericScale).toBe(0);
-      expect(idCol!.comment).toBe('Primary key');
+      expect(idCol.dataType).toBe('NUMBER');
+      expect(idCol.nativeType).toBe('NUMBER');
+      expect(idCol.isNullable).toBe(false);
+      expect(idCol.numericPrecision).toBe(38);
+      expect(idCol.numericScale).toBe(0);
+      expect(idCol.comment).toBe('Primary key');
 
       const emailCol = result.find((c) => c.name === 'EMAIL');
       expect(emailCol).toBeDefined();
-      expect(emailCol!.dataType).toBe('VARCHAR');
-      expect(emailCol!.isNullable).toBe(true);
-      expect(emailCol!.maxLength).toBe(255);
-      expect(emailCol!.numericPrecision).toBeUndefined();
+      expect(emailCol.dataType).toBe('VARCHAR');
+      expect(emailCol.isNullable).toBe(true);
+      expect(emailCol.maxLength).toBe(255);
+      expect(emailCol.numericPrecision).toBeUndefined();
     });
 
     it('should mark ID as primary key based on SHOW PRIMARY KEYS result', async () => {
@@ -665,10 +645,10 @@ describe('SnowflakeDriver (mocked integration)', () => {
       );
 
       const idCol = result.find((c) => c.name === 'ID');
-      expect(idCol!.isPrimaryKey).toBe(true);
+      expect(idCol.isPrimaryKey).toBe(true);
 
       const emailCol = result.find((c) => c.name === 'EMAIL');
-      expect(emailCol!.isPrimaryKey).toBe(false);
+      expect(emailCol.isPrimaryKey).toBe(false);
     });
 
     it('should destroy the connection after listing columns', async () => {
@@ -702,14 +682,7 @@ describe('SnowflakeDriver (mocked integration)', () => {
     it('should group multiple column pairs under a single constraint', async () => {
       // Override to return two rows for the same constraint (composite FK)
       mockExecute.mockImplementationOnce(
-        (opts: {
-          sqlText: string;
-          complete: (
-            err: Error | null,
-            stmt: { getColumns(): Array<{ getName(): string }> },
-            rows: Record<string, unknown>[] | undefined,
-          ) => void;
-        }) => {
+        (opts) => {
           opts.complete(
             null,
             buildMockStmt([
@@ -754,14 +727,7 @@ describe('SnowflakeDriver (mocked integration)', () => {
 
     it('should return empty array when no foreign keys exist', async () => {
       mockExecute.mockImplementationOnce(
-        (opts: {
-          sqlText: string;
-          complete: (
-            err: Error | null,
-            stmt: { getColumns(): Array<{ getName(): string }> },
-            rows: Record<string, unknown>[] | undefined,
-          ) => void;
-        }) => {
+        (opts) => {
           opts.complete(null, buildMockStmt(['fk_name']), []);
         },
       );
@@ -808,8 +774,8 @@ describe('SnowflakeDriver (mocked integration)', () => {
 
       const executeCalls = mockExecute.mock.calls;
       const sampleCall = executeCalls.find(([opts]) =>
-        (opts.sqlText as string).includes('SELECT *') &&
-        (opts.sqlText as string).includes('LIMIT 3'),
+        opts.sqlText.includes('SELECT *') &&
+        opts.sqlText.includes('LIMIT 3'),
       );
       expect(sampleCall).toBeDefined();
     });
@@ -865,7 +831,7 @@ describe('SnowflakeDriver (mocked integration)', () => {
       expect(mockExecute.mock.calls.length).toBeGreaterThanOrEqual(2);
 
       const sqlTexts = mockExecute.mock.calls.map(
-        ([opts]) => opts.sqlText as string,
+        ([opts]) => opts.sqlText,
       );
       const hasStatsQuery = sqlTexts.some((s) => s.includes('COUNT(DISTINCT'));
       const hasSampleQuery = sqlTexts.some((s) => s.includes('SELECT DISTINCT'));
@@ -911,14 +877,7 @@ describe('SnowflakeDriver (mocked integration)', () => {
     it('should respect the maxRows limit', async () => {
       // Override execute to return 5 rows
       mockExecute.mockImplementationOnce(
-        (opts: {
-          sqlText: string;
-          complete: (
-            err: Error | null,
-            stmt: { getColumns(): Array<{ getName(): string }> },
-            rows: Record<string, unknown>[] | undefined,
-          ) => void;
-        }) => {
+        (opts) => {
           opts.complete(
             null,
             buildMockStmt(['ID']),
@@ -993,7 +952,7 @@ describe('SnowflakeDriver (mocked integration)', () => {
   describe('connection error handling', () => {
     it('should propagate connection failure from listDatabases', async () => {
       mockConnect.mockImplementationOnce(
-        (cb: (err: Error | null, conn: unknown) => void) => {
+        (cb) => {
           cb(new Error('Network unreachable'), null);
         },
       );
@@ -1005,7 +964,7 @@ describe('SnowflakeDriver (mocked integration)', () => {
 
     it('should propagate connection failure from listSchemas', async () => {
       mockConnect.mockImplementationOnce(
-        (cb: (err: Error | null, conn: unknown) => void) => {
+        (cb) => {
           cb(new Error('Authentication failed'), null);
         },
       );
@@ -1017,15 +976,8 @@ describe('SnowflakeDriver (mocked integration)', () => {
 
     it('should propagate execute failure from listTables', async () => {
       mockExecute.mockImplementationOnce(
-        (opts: {
-          sqlText: string;
-          complete: (
-            err: Error | null,
-            stmt: { getColumns(): Array<{ getName(): string }> },
-            rows: Record<string, unknown>[] | undefined,
-          ) => void;
-        }) => {
-          opts.complete(new Error('Schema not found'), null as never, undefined);
+        (opts) => {
+          opts.complete(new Error('Schema not found'), null, undefined);
         },
       );
 
@@ -1035,7 +987,7 @@ describe('SnowflakeDriver (mocked integration)', () => {
     });
 
     it('should require account identifier to build a connection', async () => {
-      const paramsWithoutAccount: ConnectionParams = {
+      const paramsWithoutAccount = {
         ...testParams,
         options: {},
       };

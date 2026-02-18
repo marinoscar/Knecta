@@ -284,6 +284,52 @@ describe('ConnectionsPage', () => {
     });
   });
 
+  describe('Snowflake Connection', () => {
+    it('shows Snowflake chip with info color for a Snowflake connection', async () => {
+      server.use(
+        http.get('*/api/connections', () => {
+          return HttpResponse.json({
+            data: {
+              items: [
+                {
+                  id: 'conn-sf-1',
+                  name: 'Test Snowflake',
+                  description: 'Snowflake warehouse',
+                  dbType: 'snowflake',
+                  host: 'xy12345.us-east-1.snowflakecomputing.com',
+                  port: 443,
+                  databaseName: 'ANALYTICS',
+                  username: 'svcuser',
+                  hasCredential: true,
+                  useSsl: true,
+                  options: { account: 'xy12345.us-east-1', warehouse: 'COMPUTE_WH', role: 'ANALYST', schema: 'PUBLIC' },
+                  lastTestedAt: null,
+                  lastTestResult: null,
+                  lastTestMessage: null,
+                  createdAt: '2024-01-01T00:00:00.000Z',
+                  updatedAt: '2024-01-01T00:00:00.000Z',
+                },
+              ],
+              total: 1,
+              page: 1,
+              pageSize: 20,
+              totalPages: 1,
+            },
+          });
+        }),
+      );
+
+      render(<ConnectionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Snowflake')).toBeInTheDocument();
+      });
+
+      const chip = screen.getByText('Snowflake').closest('.MuiChip-root');
+      expect(chip).toHaveClass('MuiChip-colorInfo');
+    });
+  });
+
   describe('Connection Status', () => {
     it('displays "Connected" status for successful test', async () => {
       server.use(
