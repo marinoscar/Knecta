@@ -987,11 +987,36 @@ To ensure 100% accuracy of database field metadata, the agent uses a hybrid appr
 - Matches each field to discovered `ColumnInfo` (case-insensitive)
 - Injects into field's `ai_context` object:
   - `data_type` — Generic type (e.g., "integer", "varchar", "timestamp")
-  - `native_type` — Database-specific type (e.g., "int4", "timestamptz", "varchar(255)")
-  - `is_nullable` — Boolean from schema
   - `is_primary_key` — Boolean from schema
+  - `sample_data` — Array of distinct representative values (eligible columns only, see rules below)
 - Handles string → object conversion, null creation, preserves existing properties
 - Skips calculated/expression fields that don't match columns
+
+##### Sample Data Injection
+
+`sample_data` is injected for short text columns only. The `isEligibleForSampleData()` function determines eligibility:
+
+**Eligible column types:**
+- `text`, `varchar`, `char` types where the column schema `maxLength` is defined AND `maxLength < 50`
+
+**Ineligible column types (never injected):**
+- Numbers, boolean, bit, JSON, UUID/GUID, blob, dates, and unlimited text (`text` with no `maxLength`)
+
+**Collection rules:**
+- Requires at least 5 distinct non-null values; injects empty `[]` if fewer are available
+- Each value is truncated to 25 characters
+- Cap: max 30 eligible columns per table to limit database queries
+
+**Ordering — `detectRecencyColumn()` helper:**
+- Checks column names for a recency signal: `updated_at`, `modified_at`, `last_modified`, `updated_date`, `created_at`, `created_date`, `createdat`, `updatedat`
+- The candidate column must be a date, time, or timestamp type
+- Fallback: integer `version` column
+- If a recency column is found, values are fetched with `ORDER BY <recency_col> DESC` to prefer values from recent rows
+- If no recency column exists, values are fetched in any order
+
+**Implementation:**
+- `getDistinctColumnValues()` method on `DiscoveryService` handles cross-database SQL to collect distinct values
+- Called per eligible column during the `discover-and-generate` node, after LLM generation
 
 #### Stage 2: Relationship Column Types
 `injectRelationshipDataTypes()` utility (same file):
@@ -1003,9 +1028,9 @@ To ensure 100% accuracy of database field metadata, the agent uses a hybrid appr
   ai_context:
     column_types:
       from_columns:
-        customer_id: { data_type: "integer", native_type: "int4" }
+        customer_id: { data_type: "integer" }
       to_columns:
-        id: { data_type: "integer", native_type: "int4" }
+        id: { data_type: "integer" }
   ```
 
 **Benefits:**
@@ -1014,6 +1039,7 @@ To ensure 100% accuracy of database field metadata, the agent uses a hybrid appr
 - **100% accuracy** from database system catalogs
 - **Preserves LLM-generated** semantic context
 - **Downstream SQL correctness** (Data Agent sees accurate types)
+- **Improved column understanding** (Data Agent sees real sample values for short text columns, improving filter and WHERE clause generation)
 
 ### LangGraph State Graph
 
