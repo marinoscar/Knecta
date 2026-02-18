@@ -27,6 +27,8 @@ export function getDiscoveryDriver(dbType: string): DiscoveryDriver {
   switch (dbType) {
     case 'postgresql':
       return new PostgreSQLDriver() as DiscoveryDriver;
+    case 'snowflake':
+      return new SnowflakeDriver() as DiscoveryDriver;
     default:
       throw new BadRequestException(`Schema discovery not yet implemented for ${dbType}`);
   }
