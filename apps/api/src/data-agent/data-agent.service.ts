@@ -264,7 +264,7 @@ export class DataAgentService {
     messageId: string,
     content: string,
     metadata: any,
-    status: 'complete' | 'failed',
+    status: 'complete' | 'failed' | 'clarification_needed',
   ): Promise<DataChatMessage> {
     const message = await this.prisma.dataChatMessage.update({
       where: { id: messageId },

@@ -28,7 +28,12 @@ export interface DataAgentGraphDeps {
 }
 
 // ─── Conditional routing after planner ───
-function routeAfterPlanner(state: DataAgentStateType): 'navigator' | 'executor' {
+function routeAfterPlanner(state: DataAgentStateType): 'navigator' | 'executor' | '__end__' {
+  // Check if clarification is needed — terminate graph early
+  if (state.plan?.shouldClarify && state.plan.clarificationQuestions?.length > 0) {
+    return '__end__';
+  }
+
   if (state.plan?.complexity === 'simple') {
     return 'executor';
   }
@@ -73,6 +78,7 @@ export function buildDataAgentGraph(deps: DataAgentGraphDeps) {
     .addConditionalEdges('planner', routeAfterPlanner, {
       navigator: 'navigator',
       executor: 'executor',
+      __end__: END,
     })
     .addEdge('navigator', 'sql_builder')
     .addEdge('sql_builder', 'executor')

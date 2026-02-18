@@ -125,7 +125,7 @@ export class DataAgentAgentService {
 
     // ── Step 4: Load conversation history (last 10 messages) ──
     const previousMessages = await this.prisma.dataChatMessage.findMany({
-      where: { chatId, status: 'complete' },
+      where: { chatId, status: { in: ['complete', 'clarification_needed'] } },
       orderBy: { createdAt: 'desc' },
       take: 10,
     });
@@ -195,6 +195,52 @@ export class DataAgentAgentService {
         relevantDatasets: datasetNames,
         relevantDatasetDetails,
       });
+
+      // ── Check if clarification was requested (graph terminated early at planner) ──
+      if (finalState.plan?.shouldClarify && finalState.plan.clarificationQuestions?.length > 0) {
+        const questions = finalState.plan.clarificationQuestions;
+
+        // Build human-readable content
+        const clarificationContent =
+          'I have a few questions before I can answer accurately:\n\n' +
+          questions.map((q: { question: string; assumption: string }, i: number) => `${i + 1}. **${q.question}**\n   *If not specified, I\u2019ll assume: ${q.assumption}*`).join('\n\n');
+
+        // Persist traces
+        const traces = tracer.getTraces();
+        if (traces.length > 0) {
+          this.dataAgentService.persistTraces(messageId, traces)
+            .catch((err) => this.logger.error(`Failed to persist LLM traces: ${err.message}`));
+        }
+
+        const metadata: DataAgentMessageMetadata = {
+          toolCalls: finalState.toolCalls || [],
+          tokensUsed: finalState.tokensUsed || { prompt: 0, completion: 0, total: 0 },
+          datasetsUsed: datasetNames,
+          plan: finalState.plan,
+          clarificationQuestions: questions,
+          revisionsUsed: 0,
+          durationMs: Date.now() - startedAt,
+          startedAt,
+          llmCallCount: traces.length,
+        };
+
+        await this.dataAgentService.updateAssistantMessage(
+          messageId,
+          clarificationContent,
+          metadata,
+          'clarification_needed',
+        );
+
+        onEvent({ type: 'clarification_requested', questions });
+        onEvent({
+          type: 'message_complete',
+          content: clarificationContent,
+          metadata,
+          status: 'clarification_needed',
+        });
+
+        return;  // Early exit — don't process explainer output
+      }
 
       // ── Step 6: Persist final response ──
       const explainerOutput = finalState.explainerOutput;
