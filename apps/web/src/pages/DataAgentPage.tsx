@@ -125,6 +125,22 @@ export default function DataAgentPage() {
     }
   }, [chatId, deleteChat, navigate]);
 
+  const handleClarificationAnswer = useCallback(
+    (originalQuestion: string, clarification: string) => {
+      sendMessage(`${originalQuestion}\n\nClarification: ${clarification}`);
+    },
+    [sendMessage],
+  );
+
+  const handleProceedWithAssumptions = useCallback(
+    (originalQuestion: string, assumptions: string) => {
+      sendMessage(
+        `${originalQuestion}\n\nProceed with these assumptions: ${assumptions}`,
+      );
+    },
+    [sendMessage],
+  );
+
   // Auto-open insights panel when streaming starts (large screens only)
   useEffect(() => {
     if (isStreaming && isLargeScreen) {
@@ -181,6 +197,8 @@ export default function DataAgentPage() {
               onDelete={handleDeleteCurrentChat}
               insightsPanelOpen={insightsPanelOpen}
               onToggleInsightsPanel={() => setInsightsPanelOpen((prev) => !prev)}
+              onClarificationAnswer={handleClarificationAnswer}
+              onProceedWithAssumptions={handleProceedWithAssumptions}
             />
             <ChatInput
               onSend={sendMessage}
