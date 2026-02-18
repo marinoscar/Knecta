@@ -57,7 +57,10 @@ ${revisionSection}
    - **Pilot SQL**: A lightweight probe (LIMIT 10) to verify the query structure works
    - **Full SQL**: The complete query without artificial LIMIT (unless the step requires one)
 4. Use appropriate SQL dialect for ${databaseType}.
-5. Handle NULLs explicitly (COALESCE, IS NOT NULL, etc.).
-6. Use DATE_TRUNC for time-based groupings when applicable.
-7. Include column aliases that match the expected output description.`;
+5. Dialect notes:
+   - PostgreSQL: Use double-quoted identifiers, \`::type\` for casts, \`ILIKE\` for case-insensitive matching.
+   - Snowflake: Identifiers are case-insensitive (stored uppercase). Use double-quoted identifiers to preserve case. Supports \`LIMIT\`, \`DATE_TRUNC\`, \`ILIKE\`, \`::type\` casts (similar to PostgreSQL). Use \`FLATTEN()\` for semi-structured data.
+6. Handle NULLs explicitly (COALESCE, IS NOT NULL, etc.).
+7. Use DATE_TRUNC for time-based groupings when applicable.
+8. Include column aliases that match the expected output description.`;
 }
