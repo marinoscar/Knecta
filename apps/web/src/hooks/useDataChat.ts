@@ -139,6 +139,23 @@ export function useDataChat(): UseDataChatResult {
                     );
                     break;
 
+                  case 'clarification_requested':
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === assistantMessage.id
+                          ? {
+                              ...m,
+                              status: 'clarification_needed' as const,
+                              metadata: {
+                                ...m.metadata,
+                                clarificationQuestions: event.questions,
+                              },
+                            }
+                          : m,
+                      ),
+                    );
+                    break;
+
                   case 'message_complete':
                     setMessages((prev) =>
                       prev.map((m) =>
@@ -146,7 +163,7 @@ export function useDataChat(): UseDataChatResult {
                           ? {
                               ...m,
                               content: event.content || m.content,
-                              status: 'complete' as const,
+                              status: ((event.status as any) || 'complete') as DataChatMessage['status'],
                               metadata: event.metadata as any,
                             }
                           : m,

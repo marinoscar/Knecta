@@ -433,8 +433,9 @@ export interface DataChatMessage {
     startedAt?: number;
     stepResults?: Array<{ stepId: number; description: string; strategy: string; sqlResult?: { rowCount: number; columns: string[]; data: string }; pythonResult?: { stdout: string; charts: string[] }; error?: string }>;
     joinPlan?: { relevantDatasets: Array<{ name: string; description: string; source: string; yaml?: string }>; joinPaths: Array<{ datasets: string[]; edges: Array<{ fromDataset: string; toDataset: string; fromColumns: string[]; toColumns: string[]; relationshipName: string }> }>; notes: string };
+    clarificationQuestions?: Array<{ question: string; assumption: string }>;
   };
-  status: 'generating' | 'complete' | 'failed';
+  status: 'generating' | 'complete' | 'failed' | 'clarification_needed';
   createdAt: string;
 }
 
@@ -464,7 +465,10 @@ export interface DataAgentStreamEvent {
     | 'tool_end'
     | 'tool_error'
     | 'llm_call_start'
-    | 'llm_call_end';
+    | 'llm_call_end'
+    | 'clarification_requested'
+    | 'preference_suggested'
+    | 'preference_auto_saved';
   name?: string;
   args?: Record<string, unknown>;
   result?: string;
@@ -493,4 +497,9 @@ export interface DataAgentStreamEvent {
   completionTokens?: number;
   totalTokens?: number;
   durationMs?: number;
+  // Clarification / preference fields
+  questions?: Array<{ question: string; assumption: string }>;
+  suggestions?: Array<{ key: string; value: string; question: string }>;
+  preferences?: Array<{ key: string; value: string }>;
+  status?: string;
 }
