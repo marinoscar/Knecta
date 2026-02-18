@@ -42,6 +42,7 @@ model User {
   semanticModelRuns         SemanticModelRun[] @relation("UserSemanticModelRuns")
   ontologies                Ontology[]       @relation("UserOntologies")
   dataChats                 DataChat[]       @relation("UserDataChats")
+  dataAgentPreferences      DataAgentPreference[] @relation("UserDataAgentPreferences")
 
   @@map("users")
 }
@@ -438,7 +439,8 @@ model Ontology {
   // Relations
   createdByUser User?         @relation("UserOntologies", fields: [createdByUserId], references: [id], onDelete: SetNull)
   semanticModel SemanticModel @relation("SemanticModelOntologies", fields: [semanticModelId], references: [id], onDelete: Cascade)
-  dataChats     DataChat[]    @relation("OntologyDataChats")
+  dataChats            DataChat[]            @relation("OntologyDataChats")
+  dataAgentPreferences DataAgentPreference[] @relation("OntologyDataAgentPreferences")
 
   @@index([createdByUserId])
   @@index([semanticModelId])
@@ -515,4 +517,28 @@ model LlmTrace {
   @@index([messageId])
   @@index([messageId, phase])
   @@map("llm_traces")
+}
+
+// =============================================================================
+// Data Agent Preferences
+// =============================================================================
+
+model DataAgentPreference {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  ontologyId String?  @map("ontology_id") @db.Uuid
+  key        String   @db.VarChar(255)
+  value      String   @db.Text
+  source     String   @default("manual") @db.VarChar(20)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user     User      @relation("UserDataAgentPreferences", fields: [userId], references: [id], onDelete: Cascade)
+  ontology Ontology? @relation("OntologyDataAgentPreferences", fields: [ontologyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ontologyId, key], name: "user_ontology_key_unique")
+  @@index([userId])
+  @@index([ontologyId])
+  @@map("data_agent_preferences")
 }
