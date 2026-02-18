@@ -8,6 +8,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateChatDto } from './dto/create-chat.dto';
 import { UpdateChatDto } from './dto/update-chat.dto';
 import { ChatQueryDto } from './dto/chat-query.dto';
+import { CreatePreferenceDto } from './dto/create-preference.dto';
+import { UpdatePreferenceDto } from './dto/update-preference.dto';
 import { DataChat, DataChatMessage } from '@prisma/client';
 import { CollectedTrace } from './agent/types';
 
@@ -375,5 +377,114 @@ export class DataAgentService {
       where: { messageId },
       orderBy: { callIndex: 'asc' },
     });
+  }
+
+  // ─── Preferences CRUD ───
+
+  async getPreferences(userId: string, ontologyId?: string, scope?: string) {
+    const where: any = { userId };
+
+    if (scope === 'global') {
+      where.ontologyId = null;
+    } else if (scope === 'ontology' && ontologyId) {
+      where.ontologyId = ontologyId;
+    } else if (ontologyId) {
+      // 'all' scope with ontologyId: return global + that ontology's prefs
+      where.OR = [
+        { ontologyId: null },
+        { ontologyId },
+      ];
+    }
+    // If no ontologyId and scope is 'all', return everything for the user
+
+    return this.prisma.dataAgentPreference.findMany({
+      where,
+      orderBy: [{ ontologyId: 'asc' }, { key: 'asc' }],
+    });
+  }
+
+  async getEffectivePreferences(
+    userId: string,
+    ontologyId: string,
+  ): Promise<Array<{ key: string; value: string; source: string }>> {
+    // Get both global (ontologyId=null) and ontology-scoped preferences.
+    // Ontology-scoped overrides global for the same key.
+    const prefs = await this.prisma.dataAgentPreference.findMany({
+      where: {
+        userId,
+        OR: [
+          { ontologyId: null },
+          { ontologyId },
+        ],
+      },
+    });
+
+    const map = new Map<string, { key: string; value: string; source: string }>();
+    // Globals first (so ontology-scoped can override)
+    for (const p of prefs.filter((p) => !p.ontologyId)) {
+      map.set(p.key, { key: p.key, value: p.value, source: p.source });
+    }
+    // Ontology-scoped override
+    for (const p of prefs.filter((p) => p.ontologyId)) {
+      map.set(p.key, { key: p.key, value: p.value, source: p.source });
+    }
+    return [...map.values()];
+  }
+
+  async createPreference(userId: string, dto: CreatePreferenceDto) {
+    // Use upsert to handle duplicate (user_id, ontology_id, key)
+    return this.prisma.dataAgentPreference.upsert({
+      where: {
+        user_ontology_key_unique: {
+          userId,
+          ontologyId: dto.ontologyId ?? null,
+          key: dto.key,
+        },
+      },
+      update: {
+        value: dto.value,
+        source: dto.source || 'manual',
+      },
+      create: {
+        userId,
+        ontologyId: dto.ontologyId ?? null,
+        key: dto.key,
+        value: dto.value,
+        source: dto.source || 'manual',
+      },
+    });
+  }
+
+  async updatePreference(id: string, userId: string, dto: UpdatePreferenceDto) {
+    const pref = await this.prisma.dataAgentPreference.findFirst({
+      where: { id, userId },
+    });
+    if (!pref) {
+      throw new NotFoundException('Preference not found');
+    }
+
+    return this.prisma.dataAgentPreference.update({
+      where: { id },
+      data: { value: dto.value },
+    });
+  }
+
+  async deletePreference(id: string, userId: string): Promise<void> {
+    const pref = await this.prisma.dataAgentPreference.findFirst({
+      where: { id, userId },
+    });
+    if (!pref) {
+      throw new NotFoundException('Preference not found');
+    }
+
+    await this.prisma.dataAgentPreference.delete({ where: { id } });
+  }
+
+  async clearPreferences(userId: string, ontologyId?: string): Promise<void> {
+    const where: any = { userId };
+    if (ontologyId) {
+      where.ontologyId = ontologyId;
+    }
+    await this.prisma.dataAgentPreference.deleteMany({ where });
   }
 }
