@@ -26,6 +26,8 @@ interface ChatViewProps {
   onDelete: () => Promise<void>;
   insightsPanelOpen: boolean;
   onToggleInsightsPanel: () => void;
+  onClarificationAnswer?: (originalQuestion: string, response: string) => void;
+  onProceedWithAssumptions?: (originalQuestion: string, assumptions: string) => void;
 }
 
 export function ChatView({
@@ -37,6 +39,8 @@ export function ChatView({
   onDelete,
   insightsPanelOpen,
   onToggleInsightsPanel,
+  onClarificationAnswer,
+  onProceedWithAssumptions,
 }: ChatViewProps) {
   const theme = useTheme();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -178,7 +182,27 @@ export function ChatView({
           <Box sx={{ maxWidth: 900, mx: 'auto' }}>
             {messages.map((message, index) => (
               <Box key={message.id}>
-                <ChatMessage message={message} />
+                <ChatMessage
+                  message={message}
+                  isStreaming={isStreaming}
+                  onClarificationAnswer={(response) => {
+                    const prevUserMsg = index > 0 ? messages[index - 1] : null;
+                    const originalQuestion =
+                      prevUserMsg?.role === 'user' ? prevUserMsg.content : '';
+                    onClarificationAnswer?.(originalQuestion, response);
+                  }}
+                  onProceedWithAssumptions={() => {
+                    const prevUserMsg = index > 0 ? messages[index - 1] : null;
+                    const originalQuestion =
+                      prevUserMsg?.role === 'user' ? prevUserMsg.content : '';
+                    const assumptions = (
+                      message.metadata?.clarificationQuestions || []
+                    )
+                      .map((q) => q.assumption)
+                      .join('; ');
+                    onProceedWithAssumptions?.(originalQuestion, assumptions);
+                  }}
+                />
                 {/* Show phase indicator for the current streaming assistant message */}
                 {message.role === 'assistant' &&
                   message.status === 'generating' &&

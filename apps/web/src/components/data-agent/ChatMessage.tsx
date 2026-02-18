@@ -6,9 +6,13 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { DataChatMessage } from '../../types';
 import { getDataTableComponents } from './DataTable';
+import { ClarificationCard } from './ClarificationCard';
 
 interface ChatMessageProps {
   message: DataChatMessage;
+  onClarificationAnswer?: (response: string) => void;
+  onProceedWithAssumptions?: () => void;
+  isStreaming?: boolean;
 }
 
 function TypingIndicator() {
@@ -95,7 +99,12 @@ function CodeBlock({ language, code }: { language?: string; code: string }) {
   );
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export function ChatMessage({
+  message,
+  onClarificationAnswer,
+  onProceedWithAssumptions,
+  isStreaming,
+}: ChatMessageProps) {
   const theme = useTheme();
   const isUser = message.role === 'user';
 
@@ -246,6 +255,17 @@ export function ChatMessage({ message }: ChatMessageProps) {
             {message.content}
           </ReactMarkdown>
         )}
+
+        {/* Clarification card for messages awaiting clarification */}
+        {message.status === 'clarification_needed' &&
+          message.metadata?.clarificationQuestions && (
+            <ClarificationCard
+              questions={message.metadata.clarificationQuestions}
+              onAnswer={(response) => onClarificationAnswer?.(response)}
+              onProceedWithAssumptions={() => onProceedWithAssumptions?.()}
+              disabled={isStreaming}
+            />
+          )}
 
         {/* Verification and lineage info for completed messages */}
         {message.status === 'complete' && message.metadata?.verificationReport && (
