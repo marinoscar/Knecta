@@ -2,6 +2,7 @@ export function buildPlannerPrompt(
   conversationContext: string,
   relevantDatasets: string[],
   relevantDatasetDetails?: Array<{ name: string; description: string; source: string; yaml: string }>,
+  userPreferences?: Array<{ key: string; value: string }>,
 ): string {
   let datasetsSection: string;
   if (relevantDatasetDetails && relevantDatasetDetails.length > 0) {
@@ -14,6 +15,10 @@ export function buildPlannerPrompt(
   } else {
     datasetsSection = 'No datasets were pre-matched. The navigator will discover relevant tables.';
   }
+
+  const preferencesSection = userPreferences && userPreferences.length > 0
+    ? `\n## User Preferences\n\nThe user has established these preferences. Use them to avoid unnecessary clarification questions and to inform your analysis:\n\n${userPreferences.map(p => `- **${p.key}**: ${p.value}`).join('\n')}\n`
+    : '';
 
   return `You are a data analysis planner. Your job is to decompose the user's question into a structured execution plan.
 
@@ -41,6 +46,25 @@ Analyze the question and produce a structured plan with ordered sub-tasks. Each 
 6. Be specific about what columns, metrics, and dimensions are relevant.
 7. Include acceptance checks that the verifier should run.
 
+## Clarification Policy
+
+You MUST set \`shouldClarify\` to true only when the question has **critical ambiguities** that would lead to a significantly different analysis.
+
+**Ask for clarification when:**
+- The question references an ambiguous metric that maps to multiple possible calculations (e.g., "revenue" could be gross or net)
+- A critical time window, grouping, or filter is missing AND cannot be reasonably assumed from context
+- The question could be interpreted in fundamentally different ways leading to different SQL queries
+
+**Do NOT ask for clarification when:**
+- Reasonable defaults exist (e.g., "recent" → last 30 days, "all" → no filter)
+- The previous conversation context already provides the answer
+- User preferences already cover the ambiguity
+- The ambiguity is minor and the assumption is safe
+- The question is about schema exploration or simple lookups
+
+When \`shouldClarify\` is false, set \`clarificationQuestions\` to an empty array.
+When \`shouldClarify\` is true, provide 1-3 focused questions. Each question must have both a \`question\` and an \`assumption\`.
+${preferencesSection}
 ## Available Datasets
 
 ${datasetsSection}
