@@ -7,13 +7,11 @@ import {
 import { resetPrismaMock, prismaMock } from './mocks/prisma.mock';
 import { setupBaseMocks, setupMockUserList } from './fixtures/mock-setup.helper';
 import {
-  createMockTestUser,
   createMockAdminUser,
   createMockViewerUser,
   createMockContributorUser,
   authHeader,
 } from './helpers/auth-mock.helper';
-import { createMockUser, mockRoles } from './fixtures/test-data.factory';
 
 describe('Users (Integration)', () => {
   let context: TestContext;
@@ -65,46 +63,6 @@ describe('Users (Integration)', () => {
       expect(response.body.data.items).toHaveLength(3);
     });
 
-    // Requires more complex mock setup for findMany with skip/take parameters
-    it.skip('should return correct pagination with page and limit params', async () => {
-      const admin = await createMockAdminUser(context);
-
-      setupMockUserList([
-        { email: admin.email, roleName: 'admin' },
-        { email: 'user1@example.com', roleName: 'viewer' },
-        { email: 'user2@example.com', roleName: 'contributor' },
-      ]);
-
-      const response = await request(context.app.getHttpServer())
-        .get('/api/users?page=1&pageSize=2')
-        .set(authHeader(admin.accessToken))
-        .expect(200);
-
-      expect(response.body.data.total).toBe(3);
-      expect(response.body.data.items).toHaveLength(2); // Limited by pageSize
-    });
-
-    // Requires mock to properly filter by userRoles.some
-    it.skip('should filter by role', async () => {
-      const admin = await createMockAdminUser(context);
-
-      setupMockUserList([
-        { email: admin.email, roleName: 'admin' },
-        { email: 'viewer1@example.com', roleName: 'viewer' },
-        { email: 'viewer2@example.com', roleName: 'viewer' },
-        { email: 'contributor@example.com', roleName: 'contributor' },
-      ]);
-
-      const response = await request(context.app.getHttpServer())
-        .get('/api/users?role=viewer')
-        .set(authHeader(admin.accessToken))
-        .expect(200);
-
-      expect(response.body.data.total).toBe(2);
-      expect(response.body.data.items).toHaveLength(2);
-      expect(response.body.data.items[0].roles).toContain('viewer');
-    });
-
     describe('isActive filter', () => {
       it('should return ALL users when isActive parameter is omitted', async () => {
         const admin = await createMockAdminUser(context);
@@ -132,45 +90,6 @@ describe('Users (Integration)', () => {
         expect(emails).toContain('inactive2@example.com');
       });
 
-      // Requires mock to properly handle isActive filter
-      it.skip('should filter active users when isActive=true', async () => {
-        const admin = await createMockAdminUser(context);
-
-        setupMockUserList([
-          { email: admin.email, roleName: 'admin', isActive: true },
-          { email: 'active@example.com', isActive: true },
-          { email: 'inactive@example.com', isActive: false },
-        ]);
-
-        const response = await request(context.app.getHttpServer())
-          .get('/api/users?isActive=true')
-          .set(authHeader(admin.accessToken))
-          .expect(200);
-
-        expect(response.body.data.total).toBe(2);
-        expect(response.body.data.items.every((u: any) => u.isActive === true)).toBe(true);
-      });
-
-      // Requires mock to properly handle isActive filter
-      it.skip('should filter inactive users when isActive=false', async () => {
-        const admin = await createMockAdminUser(context);
-
-        setupMockUserList([
-          { email: admin.email, roleName: 'admin', isActive: true },
-          { email: 'active@example.com', isActive: true },
-          { email: 'inactive1@example.com', isActive: false },
-          { email: 'inactive2@example.com', isActive: false },
-        ]);
-
-        const response = await request(context.app.getHttpServer())
-          .get('/api/users?isActive=false')
-          .set(authHeader(admin.accessToken))
-          .expect(200);
-
-        expect(response.body.data.total).toBe(2);
-        expect(response.body.data.items.every((u: any) => u.isActive === false)).toBe(true);
-      });
-
       it('should reject invalid isActive values', async () => {
         const admin = await createMockAdminUser(context);
 
@@ -181,81 +100,6 @@ describe('Users (Integration)', () => {
       });
     });
 
-    // Requires mock to properly handle OR clause search
-    it.skip('should search by email with search param', async () => {
-      const admin = await createMockAdminUser(context);
-
-      setupMockUserList([
-        { email: admin.email, roleName: 'admin' },
-        { email: 'john.doe@example.com', roleName: 'viewer' },
-        { email: 'jane.smith@example.com', roleName: 'viewer' },
-      ]);
-
-      const response = await request(context.app.getHttpServer())
-        .get('/api/users?search=john')
-        .set(authHeader(admin.accessToken))
-        .expect(200);
-
-      expect(response.body.data.total).toBe(1);
-      expect(response.body.data.items[0].email).toBe('john.doe@example.com');
-    });
-
-    // Requires mock to properly handle OR clause search
-    it.skip('should search by displayName with search param', async () => {
-      const admin = await createMockAdminUser(context);
-
-      setupMockUserList([
-        { email: admin.email, roleName: 'admin' },
-        { email: 'user1@example.com', roleName: 'viewer', displayName: 'John Doe' },
-        { email: 'user2@example.com', roleName: 'viewer', displayName: 'Jane Smith' },
-      ]);
-
-      const response = await request(context.app.getHttpServer())
-        .get('/api/users?search=Jane')
-        .set(authHeader(admin.accessToken))
-        .expect(200);
-
-      expect(response.body.data.total).toBe(1);
-      expect(response.body.data.items[0].displayName).toBe('Jane Smith');
-    });
-
-    // Requires mock to properly handle orderBy
-    it.skip('should sort by email ascending', async () => {
-      const admin = await createMockAdminUser(context);
-
-      setupMockUserList([
-        { email: 'charlie@example.com', roleName: 'viewer' },
-        { email: 'alice@example.com', roleName: 'viewer' },
-        { email: 'bob@example.com', roleName: 'viewer' },
-      ]);
-
-      const response = await request(context.app.getHttpServer())
-        .get('/api/users?sortBy=email&sortOrder=asc')
-        .set(authHeader(admin.accessToken))
-        .expect(200);
-
-      expect(response.body.data.items[0].email).toBe('alice@example.com');
-    });
-
-    // Requires mock to properly handle orderBy
-    it.skip('should sort by createdAt descending', async () => {
-      const admin = await createMockAdminUser(context);
-
-      const oldDate = new Date('2023-01-01');
-      const newDate = new Date('2024-01-01');
-
-      setupMockUserList([
-        { email: 'old@example.com', roleName: 'viewer', createdAt: oldDate },
-        { email: 'new@example.com', roleName: 'viewer', createdAt: newDate },
-      ]);
-
-      const response = await request(context.app.getHttpServer())
-        .get('/api/users?sortBy=createdAt&sortOrder=desc')
-        .set(authHeader(admin.accessToken))
-        .expect(200);
-
-      expect(response.body.data.items[0].email).toBe('new@example.com');
-    });
   });
 
   describe('GET /api/users/:id', () => {
@@ -352,36 +196,6 @@ describe('Users (Integration)', () => {
         .expect(403);
     });
 
-    // Requires user.update mock to handle include parameter properly
-    it.skip('should update user for admin', async () => {
-      const admin = await createMockAdminUser(context);
-      const viewer = await createMockViewerUser(context, 'test@example.com');
-
-      const response = await request(context.app.getHttpServer())
-        .patch(`/api/users/${viewer.id}`)
-        .set(authHeader(admin.accessToken))
-        .send({ displayName: 'Updated Name' })
-        .expect(200);
-
-      expect(response.body.data.displayName).toBe('Updated Name');
-      expect(response.body.data.id).toBe(viewer.id);
-    });
-
-    // Requires user.update mock to handle include parameter properly
-    it.skip('should update isActive status', async () => {
-      const admin = await createMockAdminUser(context);
-      const viewer = await createMockViewerUser(context, 'test@example.com');
-
-      const response = await request(context.app.getHttpServer())
-        .patch(`/api/users/${viewer.id}`)
-        .set(authHeader(admin.accessToken))
-        .send({ isActive: false })
-        .expect(200);
-
-      expect(response.body.data.isActive).toBe(false);
-      expect(response.body.data.id).toBe(viewer.id);
-    });
-
     it('should create audit event on update', async () => {
       const admin = await createMockAdminUser(context);
       const viewer = await createMockViewerUser(context, 'test@example.com');
@@ -415,17 +229,6 @@ describe('Users (Integration)', () => {
         .expect(400);
     });
 
-    // Requires user.update mock to handle self-modification prevention
-    it.skip('should return 403 when admin tries to deactivate themselves', async () => {
-      const admin = await createMockAdminUser(context);
-
-      await request(context.app.getHttpServer())
-        .patch(`/api/users/${admin.id}`)
-        .set(authHeader(admin.accessToken))
-        .send({ isActive: false })
-        .expect(403);
-    });
-
     it('should return 404 for non-existent user', async () => {
       const admin = await createMockAdminUser(context);
       const nonExistentId = '123e4567-e89b-12d3-a456-426614174999';
@@ -438,124 +241,4 @@ describe('Users (Integration)', () => {
     });
   });
 
-  // Role update tests require complex transaction mocking with role validation
-  describe.skip('PUT /api/users/:id/roles', () => {
-    it('should return 401 if not authenticated', async () => {
-      await request(context.app.getHttpServer())
-        .put('/api/users/123e4567-e89b-12d3-a456-426614174000/roles')
-        .send({ roleNames: ['viewer'] })
-        .expect(401);
-    });
-
-    it('should return 403 if user lacks rbac:manage permission', async () => {
-      const contributor = await createMockContributorUser(context);
-      const viewer = await createMockViewerUser(context);
-
-      await request(context.app.getHttpServer())
-        .put(`/api/users/${viewer.id}/roles`)
-        .set(authHeader(contributor.accessToken))
-        .send({ roleNames: ['admin'] })
-        .expect(403);
-    });
-
-    it('should update roles for admin', async () => {
-      const admin = await createMockAdminUser(context);
-      const viewer = await createMockViewerUser(context, 'test@example.com');
-
-      // Mock role.findMany to return the contributor role
-      prismaMock.role.findMany.mockResolvedValue([mockRoles.contributor] as any);
-
-      const response = await request(context.app.getHttpServer())
-        .put(`/api/users/${viewer.id}/roles`)
-        .set(authHeader(admin.accessToken))
-        .send({ roleNames: ['contributor'] })
-        .expect(200);
-
-      expect(response.body.data.roles).toContain('contributor');
-      expect(response.body.data.id).toBe(viewer.id);
-    });
-
-    it('should create audit event when updating roles', async () => {
-      const admin = await createMockAdminUser(context);
-      const viewer = await createMockViewerUser(context, 'test@example.com');
-
-      prismaMock.role.findMany.mockResolvedValue([mockRoles.contributor] as any);
-
-      const response = await request(context.app.getHttpServer())
-        .put(`/api/users/${viewer.id}/roles`)
-        .set(authHeader(admin.accessToken))
-        .send({ roleNames: ['contributor'] })
-        .expect(200);
-
-      // Verify audit event was created (mock was called)
-      expect(prismaMock.auditEvent.create).toHaveBeenCalled();
-      expect(response.body.data.roles).toContain('contributor');
-    });
-
-    it('should return 400 for invalid role names', async () => {
-      const admin = await createMockAdminUser(context);
-      const viewer = await createMockViewerUser(context, 'test@example.com');
-
-      // Mock role.findMany to return empty array (invalid roles)
-      prismaMock.role.findMany.mockResolvedValue([]);
-
-      await request(context.app.getHttpServer())
-        .put(`/api/users/${viewer.id}/roles`)
-        .set(authHeader(admin.accessToken))
-        .send({ roleNames: ['invalid-role'] })
-        .expect(400);
-    });
-
-    it('should return 400 when roleNames is empty', async () => {
-      const admin = await createMockAdminUser(context);
-      const viewer = await createMockViewerUser(context, 'test@example.com');
-
-      await request(context.app.getHttpServer())
-        .put(`/api/users/${viewer.id}/roles`)
-        .set(authHeader(admin.accessToken))
-        .send({ roleNames: [] })
-        .expect(400);
-    });
-
-    it('should return 403 when admin tries to remove their own admin role', async () => {
-      const admin = await createMockAdminUser(context);
-
-      prismaMock.role.findMany.mockResolvedValue([mockRoles.viewer] as any);
-
-      await request(context.app.getHttpServer())
-        .put(`/api/users/${admin.id}/roles`)
-        .set(authHeader(admin.accessToken))
-        .send({ roleNames: ['viewer'] })
-        .expect(403);
-    });
-
-    it('should allow admin to update their own roles as long as admin is included', async () => {
-      const admin = await createMockAdminUser(context);
-
-      prismaMock.role.findMany.mockResolvedValue([
-        mockRoles.admin,
-        mockRoles.contributor,
-      ] as any);
-
-      const response = await request(context.app.getHttpServer())
-        .put(`/api/users/${admin.id}/roles`)
-        .set(authHeader(admin.accessToken))
-        .send({ roleNames: ['admin', 'contributor'] })
-        .expect(200);
-
-      expect(response.body.data.roles).toContain('admin');
-      expect(response.body.data.roles).toContain('contributor');
-    });
-
-    it('should return 404 for non-existent user', async () => {
-      const admin = await createMockAdminUser(context);
-      const nonExistentId = '123e4567-e89b-12d3-a456-426614174999';
-
-      await request(context.app.getHttpServer())
-        .put(`/api/users/${nonExistentId}/roles`)
-        .set(authHeader(admin.accessToken))
-        .send({ roleNames: ['viewer'] })
-        .expect(404);
-    });
-  });
 });
