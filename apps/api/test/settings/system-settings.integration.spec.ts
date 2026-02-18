@@ -7,14 +7,12 @@ import {
 import { resetPrismaMock } from '../mocks/prisma.mock';
 import { setupBaseMocks } from '../fixtures/mock-setup.helper';
 import {
-  createMockTestUser,
   createMockAdminUser,
   createMockViewerUser,
   authHeader,
 } from '../helpers/auth-mock.helper';
 import {
   DEFAULT_SYSTEM_SETTINGS,
-  SystemSettingsValue,
 } from '../../src/common/types/settings.types';
 
 describe('System Settings Integration', () => {
@@ -66,90 +64,6 @@ describe('System Settings Integration', () => {
     });
 
     // Note: ETag header not currently implemented in controller
-  });
-
-  describe.skip('PUT /api/system-settings', () => {
-    const newSettings: SystemSettingsValue = {
-      ui: { allowUserThemeOverride: false },
-      features: { newFeature: true },
-    };
-
-    it('should return 401 without auth', async () => {
-      await request(context.app.getHttpServer())
-        .put('/api/system-settings')
-        .send(newSettings)
-        .expect(401);
-    });
-
-    it('should return 403 for users without system_settings:write permission', async () => {
-      const viewer = await createMockViewerUser(context);
-
-      await request(context.app.getHttpServer())
-        .put('/api/system-settings')
-        .set(authHeader(viewer.accessToken))
-        .send(newSettings)
-        .expect(403);
-    });
-
-    it('should replace settings for admin', async () => {
-      const admin = await createMockAdminUser(context);
-
-      context.prismaMock.systemSettings.upsert.mockResolvedValue({
-        id: 'settings-1',
-        key: 'global',
-        value: newSettings as any,
-        version: 2,
-        updatedAt: new Date(),
-        updatedByUserId: admin.id,
-        updatedByUser: { id: admin.id, email: admin.email },
-      });
-
-      context.prismaMock.auditEvent.create.mockResolvedValue({} as any);
-
-      const response = await request(context.app.getHttpServer())
-        .put('/api/system-settings')
-        .set(authHeader(admin.accessToken))
-        .send(newSettings)
-        .expect(200);
-
-      expect(response.body.data).toMatchObject({
-        ui: newSettings.ui,
-        features: newSettings.features,
-        version: 2,
-      });
-    });
-
-    // Note: ETag header not currently implemented in controller
-
-    it('should return 400 with invalid settings structure', async () => {
-      const admin = await createMockAdminUser(context);
-
-      const invalidSettings = {
-        ui: { allowUserThemeOverride: 'not-a-boolean' },
-        features: {},
-      };
-
-      await request(context.app.getHttpServer())
-        .put('/api/system-settings')
-        .set(authHeader(admin.accessToken))
-        .send(invalidSettings)
-        .expect(400);
-    });
-
-    it('should return 400 with missing required fields', async () => {
-      const admin = await createMockAdminUser(context);
-
-      const incompleteSettings = {
-        // Missing ui field
-        features: {},
-      };
-
-      await request(context.app.getHttpServer())
-        .put('/api/system-settings')
-        .set(authHeader(admin.accessToken))
-        .send(incompleteSettings)
-        .expect(400);
-    });
   });
 
   describe('PATCH /api/system-settings', () => {
