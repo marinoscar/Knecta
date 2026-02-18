@@ -291,6 +291,57 @@ export class DataAgentAgentService {
         metadata,
       });
 
+      // ── Step 7: Auto-capture preference from clarification follow-ups ──
+      // If the previous assistant message was a clarification, the user implicitly confirmed
+      // the stated assumptions by proceeding. Capture them as preferences based on the mode.
+      const prevMessages = await this.prisma.dataChatMessage.findMany({
+        where: { chatId, status: 'clarification_needed' },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+      });
+
+      if (prevMessages.length > 0) {
+        const prevClarification = prevMessages[0];
+        const prevMeta = prevClarification.metadata as any;
+
+        if (prevMeta?.clarificationQuestions?.length > 0) {
+          const autoCapturePref = effectivePreferences.find((p) => p.key === 'auto_capture_mode');
+          const autoCaptureMode = autoCapturePref?.value || 'auto';
+
+          if (autoCaptureMode === 'auto') {
+            for (const q of prevMeta.clarificationQuestions) {
+              try {
+                await this.dataAgentService.createPreference(userId, {
+                  ontologyId: ontology.id,
+                  key: q.question,
+                  value: q.assumption,
+                  source: 'auto_captured',
+                });
+              } catch (err) {
+                this.logger.warn(`Failed to auto-capture preference: ${(err as Error).message}`);
+              }
+            }
+            onEvent({
+              type: 'preference_auto_saved',
+              preferences: prevMeta.clarificationQuestions.map((q: any) => ({
+                key: q.question,
+                value: q.assumption,
+              })),
+            });
+          } else if (autoCaptureMode === 'ask') {
+            onEvent({
+              type: 'preference_suggested',
+              suggestions: prevMeta.clarificationQuestions.map((q: any) => ({
+                key: q.question,
+                value: q.assumption,
+                question: q.question,
+              })),
+            });
+          }
+          // 'off' → do nothing
+        }
+      }
+
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Agent execution failed';
       const errorStack = error instanceof Error ? error.stack : undefined;
