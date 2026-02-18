@@ -30,6 +30,13 @@ const PlanArtifactSchema = z.object({
     assumption: z.string(),
   })).describe('Ambiguities found and assumptions made'),
   acceptanceChecks: z.array(z.string()).describe('Checks the verifier should run to validate results'),
+  shouldClarify: z.boolean().describe(
+    'Set to true ONLY when the question has critical ambiguities that would significantly change the analysis result. Do NOT set true for minor ambiguities where reasonable defaults exist.'
+  ),
+  clarificationQuestions: z.array(z.object({
+    question: z.string().describe('A specific, clear question to ask the user'),
+    assumption: z.string().describe('What the agent will assume if the user does not answer'),
+  })).max(3).describe('Up to 3 clarification questions. Only populated when shouldClarify is true. Empty array when shouldClarify is false.'),
   steps: z.array(PlanStepSchema).describe('Ordered sub-tasks to execute'),
 });
 
@@ -86,6 +93,8 @@ export function createPlannerNode(llm: any, emit: EmitFn, tracer: DataAgentTrace
           grain: 'unknown',
           ambiguities: [],
           acceptanceChecks: [],
+          shouldClarify: false,
+          clarificationQuestions: [],
           steps: [{
             id: 1,
             description: state.userQuestion,

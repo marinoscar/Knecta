@@ -26,6 +26,8 @@ export interface PlanArtifact {
   grain: string;
   ambiguities: Array<{ question: string; assumption: string }>;
   acceptanceChecks: string[];
+  shouldClarify: boolean;
+  clarificationQuestions: Array<{ question: string; assumption: string }>;
   steps: PlanStep[];
 }
 
@@ -147,7 +149,10 @@ export type DataAgentEventType =
   | 'step_complete'
   | 'llm_call_start'
   | 'llm_call_end'
-  | 'token_update';
+  | 'token_update'
+  | 'clarification_requested'
+  | 'preference_suggested'
+  | 'preference_auto_saved';
 
 // ─── Message Metadata ───
 
@@ -160,6 +165,7 @@ export interface DataAgentMessageMetadata {
   stepResults?: StepResult[];
   verificationReport?: { passed: boolean; checks: VerificationCheck[] };
   dataLineage?: DataLineage;
+  clarificationQuestions?: Array<{ question: string; assumption: string }>;
   revisionsUsed: number;
   durationMs?: number;
   startedAt?: number;
