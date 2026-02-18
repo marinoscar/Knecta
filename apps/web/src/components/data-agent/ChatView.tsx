@@ -12,7 +12,12 @@ import {
   Button,
   useTheme,
 } from '@mui/material';
-import { Delete as DeleteIcon, Edit as EditIcon, Analytics as AnalyticsIcon } from '@mui/icons-material';
+import {
+  Delete as DeleteIcon,
+  Edit as EditIcon,
+  Analytics as AnalyticsIcon,
+  Tune as TuneIcon,
+} from '@mui/icons-material';
 import { ChatMessage } from './ChatMessage';
 import { PhaseIndicator } from './PhaseIndicator';
 import type { DataChat, DataChatMessage, DataAgentStreamEvent } from '../../types';
@@ -28,6 +33,7 @@ interface ChatViewProps {
   onToggleInsightsPanel: () => void;
   onClarificationAnswer?: (originalQuestion: string, response: string) => void;
   onProceedWithAssumptions?: (originalQuestion: string, assumptions: string) => void;
+  onOpenPreferences?: () => void;
 }
 
 export function ChatView({
@@ -41,6 +47,7 @@ export function ChatView({
   onToggleInsightsPanel,
   onClarificationAnswer,
   onProceedWithAssumptions,
+  onOpenPreferences,
 }: ChatViewProps) {
   const theme = useTheme();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -140,6 +147,15 @@ export function ChatView({
           )}
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          {onOpenPreferences && (
+            <IconButton
+              onClick={onOpenPreferences}
+              size="small"
+              title="Agent Preferences"
+            >
+              <TuneIcon />
+            </IconButton>
+          )}
           <IconButton
             onClick={onToggleInsightsPanel}
             color={insightsPanelOpen ? 'primary' : 'default'}

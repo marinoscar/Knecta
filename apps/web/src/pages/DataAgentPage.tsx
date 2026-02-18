@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Box, Alert, useTheme, Drawer, useMediaQuery } from '@mui/material';
+import { Box, Alert, useTheme, Drawer, useMediaQuery, Snackbar } from '@mui/material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChatSidebar } from '../components/data-agent/ChatSidebar';
 import { ChatView } from '../components/data-agent/ChatView';
@@ -7,8 +7,11 @@ import { ChatInput } from '../components/data-agent/ChatInput';
 import { WelcomeScreen } from '../components/data-agent/WelcomeScreen';
 import { NewChatDialog } from '../components/data-agent/NewChatDialog';
 import { AgentInsightsPanel } from '../components/data-agent/AgentInsightsPanel';
+import { PreferencesDialog } from '../components/data-agent/PreferencesDialog';
+import { PreferenceSuggestionBanner } from '../components/data-agent/PreferenceSuggestionBanner';
 import { useDataAgent } from '../hooks/useDataAgent';
 import { useDataChat } from '../hooks/useDataChat';
+import { useAgentPreferences } from '../hooks/useAgentPreferences';
 import { useLlmProviders } from '../hooks/useLlmProviders';
 import { useUserSettings } from '../hooks/useUserSettings';
 
@@ -18,6 +21,8 @@ export default function DataAgentPage() {
   const [newChatDialogOpen, setNewChatDialogOpen] = useState(false);
   const [pendingSuggestion, setPendingSuggestion] = useState<string | null>(null);
   const [insightsPanelOpen, setInsightsPanelOpen] = useState(false);
+  const [preferencesDialogOpen, setPreferencesDialogOpen] = useState(false);
+  const [autoSavedSnackbarOpen, setAutoSavedSnackbarOpen] = useState(false);
   const theme = useTheme();
   const isLargeScreen = useMediaQuery(theme.breakpoints.up('lg'));
   const isMediumScreen = useMediaQuery(theme.breakpoints.between('md', 'lg'));
@@ -41,12 +46,26 @@ export default function DataAgentPage() {
     isLoading: chatLoading,
     isStreaming,
     streamEvents,
+    preferenceSuggestions,
+    autoSavedPreferences,
     error: chatError,
     loadChat,
     sendMessage,
     changeProvider,
     clearError,
+    clearPreferenceSuggestions,
+    clearAutoSavedPreferences,
   } = useDataChat();
+
+  const {
+    preferences,
+    isLoading: prefsLoading,
+    fetchPreferences,
+    addPreference,
+    editPreference,
+    removePreference,
+    clearAll: clearPreferences,
+  } = useAgentPreferences();
 
   // Fetch chats on mount
   useEffect(() => {
@@ -59,6 +78,24 @@ export default function DataAgentPage() {
       loadChat(chatId);
     }
   }, [chatId, loadChat]);
+
+  // Load preferences when chat's ontology is available
+  useEffect(() => {
+    if (chat?.ontologyId) {
+      fetchPreferences(chat.ontologyId);
+    }
+  }, [chat?.ontologyId, fetchPreferences]);
+
+  // Show snackbar when preferences are auto-saved
+  useEffect(() => {
+    if (autoSavedPreferences.length > 0) {
+      setAutoSavedSnackbarOpen(true);
+      // Also refresh the preferences list so dialog stays up-to-date
+      if (chat?.ontologyId) {
+        fetchPreferences(chat.ontologyId);
+      }
+    }
+  }, [autoSavedPreferences, chat?.ontologyId, fetchPreferences]);
 
   const handleNewChat = useCallback(() => {
     setNewChatDialogOpen(true);
@@ -141,6 +178,20 @@ export default function DataAgentPage() {
     [sendMessage],
   );
 
+  const handleAcceptSuggestion = useCallback(
+    async (key: string, value: string) => {
+      await addPreference({
+        ontologyId: chat?.ontologyId ?? null,
+        key,
+        value,
+        source: 'auto_captured',
+      });
+      // Remove this suggestion from the list
+      clearPreferenceSuggestions();
+    },
+    [addPreference, chat?.ontologyId, clearPreferenceSuggestions],
+  );
+
   // Auto-open insights panel when streaming starts (large screens only)
   useEffect(() => {
     if (isStreaming && isLargeScreen) {
@@ -199,7 +250,16 @@ export default function DataAgentPage() {
               onToggleInsightsPanel={() => setInsightsPanelOpen((prev) => !prev)}
               onClarificationAnswer={handleClarificationAnswer}
               onProceedWithAssumptions={handleProceedWithAssumptions}
+              onOpenPreferences={() => setPreferencesDialogOpen(true)}
             />
+            {/* Preference suggestion banner sits above the chat input */}
+            {preferenceSuggestions.length > 0 && (
+              <PreferenceSuggestionBanner
+                suggestions={preferenceSuggestions}
+                onAccept={handleAcceptSuggestion}
+                onDismiss={clearPreferenceSuggestions}
+              />
+            )}
             <ChatInput
               onSend={sendMessage}
               isStreaming={isStreaming}
@@ -259,6 +319,31 @@ export default function DataAgentPage() {
         onCreated={handleChatCreated}
         providers={providers}
         defaultProvider={defaultProvider}
+      />
+
+      {/* Preferences Dialog */}
+      <PreferencesDialog
+        open={preferencesDialogOpen}
+        onClose={() => setPreferencesDialogOpen(false)}
+        ontologyId={chat?.ontologyId ?? undefined}
+        ontologyName={chat?.ontology?.name}
+        preferences={preferences}
+        onAdd={addPreference}
+        onEdit={editPreference}
+        onDelete={removePreference}
+        onClearAll={clearPreferences}
+        isLoading={prefsLoading}
+      />
+
+      {/* Auto-saved preferences snackbar */}
+      <Snackbar
+        open={autoSavedSnackbarOpen}
+        autoHideDuration={4000}
+        onClose={() => {
+          setAutoSavedSnackbarOpen(false);
+          clearAutoSavedPreferences();
+        }}
+        message={`${autoSavedPreferences.length} preference${autoSavedPreferences.length !== 1 ? 's' : ''} auto-saved`}
       />
     </Box>
   );

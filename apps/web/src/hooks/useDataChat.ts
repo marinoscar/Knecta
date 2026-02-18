@@ -3,18 +3,28 @@ import { getDataChat, sendDataAgentMessage, updateDataChat } from '../services/a
 import { api } from '../services/api';
 import type { DataChat, DataChatMessage, DataAgentStreamEvent } from '../types';
 
+export interface PreferenceSuggestion {
+  key: string;
+  value: string;
+  question: string;
+}
+
 interface UseDataChatResult {
   chat: DataChat | null;
   messages: DataChatMessage[];
   isLoading: boolean;
   isStreaming: boolean;
   streamEvents: DataAgentStreamEvent[];
+  preferenceSuggestions: PreferenceSuggestion[];
+  autoSavedPreferences: Array<{ key: string; value: string }>;
   error: string | null;
   loadChat: (id: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   changeProvider: (provider: string) => Promise<void>;
   cancelStream: () => void;
   clearError: () => void;
+  clearPreferenceSuggestions: () => void;
+  clearAutoSavedPreferences: () => void;
 }
 
 export function useDataChat(): UseDataChatResult {
@@ -23,6 +33,8 @@ export function useDataChat(): UseDataChatResult {
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamEvents, setStreamEvents] = useState<DataAgentStreamEvent[]>([]);
+  const [preferenceSuggestions, setPreferenceSuggestions] = useState<PreferenceSuggestion[]>([]);
+  const [autoSavedPreferences, setAutoSavedPreferences] = useState<Array<{ key: string; value: string }>>([]);
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -48,6 +60,8 @@ export function useDataChat(): UseDataChatResult {
 
       setError(null);
       setStreamEvents([]);
+      setPreferenceSuggestions([]);
+      setAutoSavedPreferences([]);
 
       try {
         // Step 1: Send message to backend (creates user + assistant placeholder)
@@ -185,6 +199,20 @@ export function useDataChat(): UseDataChatResult {
                     );
                     setError(event.message || 'Agent error');
                     break;
+
+                  case 'preference_suggested':
+                    if (event.suggestions && Array.isArray(event.suggestions)) {
+                      setPreferenceSuggestions(event.suggestions as PreferenceSuggestion[]);
+                    }
+                    break;
+
+                  case 'preference_auto_saved':
+                    if (event.preferences && Array.isArray(event.preferences)) {
+                      setAutoSavedPreferences(
+                        event.preferences as Array<{ key: string; value: string }>,
+                      );
+                    }
+                    break;
                 }
               } catch {
                 // Ignore malformed SSE data
@@ -224,17 +252,25 @@ export function useDataChat(): UseDataChatResult {
 
   const clearError = useCallback(() => setError(null), []);
 
+  const clearPreferenceSuggestions = useCallback(() => setPreferenceSuggestions([]), []);
+
+  const clearAutoSavedPreferences = useCallback(() => setAutoSavedPreferences([]), []);
+
   return {
     chat,
     messages,
     isLoading,
     isStreaming,
     streamEvents,
+    preferenceSuggestions,
+    autoSavedPreferences,
     error,
     loadChat,
     sendMessage,
     changeProvider,
     cancelStream,
     clearError,
+    clearPreferenceSuggestions,
+    clearAutoSavedPreferences,
   };
 }
