@@ -8,25 +8,27 @@
 4. [Phase Descriptions](#phase-descriptions)
 5. [Sub-Task Decomposition](#sub-task-decomposition)
 6. [Conditional Routing](#conditional-routing)
-7. [State Schema](#state-schema)
-8. [Tool Definitions](#tool-definitions)
-9. [SSE Streaming](#sse-streaming)
-10. [Message Metadata](#message-metadata)
-11. [Database Schema](#database-schema)
-12. [API Endpoints](#api-endpoints)
-13. [Security](#security)
-14. [RBAC Permissions](#rbac-permissions)
-15. [Embedding Service](#embedding-service)
-16. [Neo4j Vector Search](#neo4j-vector-search)
-17. [Docker Python Sandbox](#docker-python-sandbox)
-18. [Frontend Components](#frontend-components)
-19. [Model Selection](#model-selection)
-20. [Configuration](#configuration)
-21. [Token Usage Tracking](#token-usage-tracking)
-22. [LLM Interaction Tracing](#llm-interaction-tracing)
-23. [File Inventory](#file-inventory)
-24. [Testing](#testing)
-25. [Packages](#packages)
+7. [Clarifying Questions](#clarifying-questions)
+8. [User Preferences / Memory](#user-preferences--memory)
+9. [State Schema](#state-schema)
+10. [Tool Definitions](#tool-definitions)
+11. [SSE Streaming](#sse-streaming)
+12. [Message Metadata](#message-metadata)
+13. [Database Schema](#database-schema)
+14. [API Endpoints](#api-endpoints)
+15. [Security](#security)
+16. [RBAC Permissions](#rbac-permissions)
+17. [Embedding Service](#embedding-service)
+18. [Neo4j Vector Search](#neo4j-vector-search)
+19. [Docker Python Sandbox](#docker-python-sandbox)
+20. [Frontend Components](#frontend-components)
+21. [Model Selection](#model-selection)
+22. [Configuration](#configuration)
+23. [Token Usage Tracking](#token-usage-tracking)
+24. [LLM Interaction Tracing](#llm-interaction-tracing)
+25. [File Inventory](#file-inventory)
+26. [Testing](#testing)
+27. [Packages](#packages)
 
 ---
 
@@ -38,6 +40,8 @@ The Data Agent feature enables natural language querying and analysis of data th
 
 - **Multi-Phase Analytical Pipeline**: 6 specialized phases (Planner, Navigator, SQL Builder, Executor, Verifier, Explainer) with structured artifacts
 - **Sub-Task Decomposition**: Complex questions automatically broken into ordered execution steps with dependencies
+- **Clarifying Questions**: Planner detects critical ambiguities and requests user clarification before running the expensive pipeline, saving compute and improving accuracy
+- **User Preferences / Memory**: Persistent per-user preferences (global and ontology-scoped) injected into prompts, reducing repeated clarifications and tailoring responses over time
 - **Intelligent Dataset Discovery**: Vector similarity search + graph relationship navigation for join path discovery
 - **Semantic Model as Source of Truth**: Full YAML schemas from the semantic model are injected into every phase, ensuring column names, types, and expressions match the authoritative model
 - **Mandatory Verification Gate**: Python-based validation of SQL results with automatic revision loops
@@ -155,6 +159,7 @@ The Data Agent uses a multi-service architecture combining NestJS backend, Neo4j
 - **DataAgentService**: CRUD operations for chats and messages
 - **DataAgentAgentService**: StateGraph creation and execution (replaces ReAct agent)
 - **AgentStreamController**: SSE streaming endpoint
+- **PreferencesService**: CRUD and effective preference resolution for user preferences
 - **EmbeddingService**: Multi-provider embedding generation (OpenAI)
 - **NeoVectorService**: Vector index management and similarity search
 - **NeoOntologyService**: Relationship navigation and join path discovery (NEW methods)
@@ -164,12 +169,15 @@ The Data Agent uses a multi-service architecture combining NestJS backend, Neo4j
 #### Frontend Components
 - **DataAgentPage**: Full-page layout with sidebar + chat area
 - **ChatSidebar**: Conversation list with search, grouping, rename/delete
-- **ChatView**: Message display with PhaseIndicator showing 6-phase progress
-- **ChatMessage**: Individual message bubble with verification badge and data lineage
+- **ChatView**: Message display with PhaseIndicator showing 6-phase progress; Tune icon for PreferencesDialog
+- **ChatMessage**: Individual message bubble with verification badge, data lineage, and inline ClarificationCard
 - **PhaseIndicator**: MUI Stepper showing current phase (NEW)
 - **ToolCallAccordion**: Collapsible tool execution display grouped by phase + step (UPDATED)
 - **ChatInput**: Auto-resize textarea with Enter to send, ModelSelector for provider selection
 - **ModelSelector**: Compact MUI Select showing enabled providers
+- **ClarificationCard**: Inline card for clarifying questions with Answer / Proceed options (NEW)
+- **PreferencesDialog**: Two-tab dialog for managing global and ontology-scoped preferences (NEW)
+- **PreferenceSuggestionBanner**: Per-suggestion save/dismiss banner for ask-mode auto-capture (NEW)
 - **WelcomeScreen**: Empty state with suggestion cards
 - **NewChatDialog**: Ontology selection for new chats
 
@@ -192,11 +200,12 @@ The Data Agent uses a custom LangGraph StateGraph with 6 specialized phase nodes
 START
   |
   v
-[Planner] ────────────────────────────────────────┐
-  |                                                |
-  | (analytical)                                   | (simple: schema questions,
-  |                                                |  conversational queries)
-  v                                                v
+[Planner] ─────────────────────────────────────────────────────┐
+  |                                       |                     |
+  | (analytical)                          | (clarify)           | (simple: schema
+  |                                       v                     |  questions, convo)
+  |                                     [END]                   |
+  |                               clarification_needed          v
 [Navigator] ───> [SQL Builder] ───> [Executor] <──┘
                                         |
                                         v
@@ -218,11 +227,13 @@ START
 1. **Structured Artifacts**: Each phase emits a typed artifact (PlanArtifact, JoinPlanArtifact, QuerySpec[], etc.) stored in state
 2. **Sub-Task Decomposition**: Planner ALWAYS decomposes questions into ordered steps with strategies (sql, python, sql_then_python)
 3. **Short-Circuit Path**: Simple questions (schema exploration, conversational) skip Navigator/SQL Builder/Verifier
-4. **Mandatory Verification**: All analytical queries require Python validation; failures trigger Navigator or SQL Builder revision
-5. **Progressive Execution**: SQL steps run pilot query (10 rows) before full query to catch errors early
-6. **Join Path Discovery**: Navigator uses Neo4j `shortestPath` algorithm to find RELATES_TO paths between datasets
-7. **No ReAct Loop in Main Graph**: Only Navigator uses mini-ReAct (max 8 iterations); other phases are single LLM calls with structured output
-8. **Semantic Model YAML as First-Class Data**: The YAML from the semantic model (stored on Neo4j Dataset nodes) is the authoritative schema. It flows through the entire pipeline: pre-fetched for Planner, carried in JoinPlanArtifact for Navigator/SQL Builder, and passed to Executor repair and Python generation prompts. No phase guesses column names.
+4. **Clarification Early Exit**: When the Planner detects critical unresolvable ambiguity, it returns `__end__` before running any expensive phases; conversation resumes with context on the next invocation
+5. **User Preferences Injection**: Global and ontology-scoped preferences are loaded before graph execution and injected into Planner and Explainer prompts; ontology-scoped overrides global for the same key
+6. **Mandatory Verification**: All analytical queries require Python validation; failures trigger Navigator or SQL Builder revision
+7. **Progressive Execution**: SQL steps run pilot query (10 rows) before full query to catch errors early
+8. **Join Path Discovery**: Navigator uses Neo4j `shortestPath` algorithm to find RELATES_TO paths between datasets
+9. **No ReAct Loop in Main Graph**: Only Navigator uses mini-ReAct (max 8 iterations); other phases are single LLM calls with structured output
+10. **Semantic Model YAML as First-Class Data**: The YAML from the semantic model (stored on Neo4j Dataset nodes) is the authoritative schema. It flows through the entire pipeline: pre-fetched for Planner, carried in JoinPlanArtifact for Navigator/SQL Builder, and passed to Executor repair and Python generation prompts. No phase guesses column names.
 
 ---
 
@@ -1116,6 +1127,442 @@ These fields are passed to the retried phase via state, allowing it to adjust be
 
 ---
 
+## Clarifying Questions
+
+### Overview
+
+Before running the expensive multi-phase pipeline (Navigator, SQL Builder, Executor, Verifier), the Planner can decide to ask the user for clarification. This avoids wasting compute on queries where the intent is genuinely ambiguous, and produces better answers by gathering critical information upfront.
+
+Clarification is only requested for true ambiguities that would significantly change the result. When reasonable defaults, prior conversation context, or stored user preferences can resolve uncertainty, the Planner proceeds without asking.
+
+### How It Works
+
+1. The Planner's structured output includes two new fields: `shouldClarify: boolean` and `clarificationQuestions: Array<{ question: string; assumption: string }>` (maximum 3 questions)
+2. When `shouldClarify === true` and at least one question is present, the `routeAfterPlanner` function returns `__end__`, terminating the graph early without executing any further phases
+3. The agent service emits a `clarification_requested` SSE event containing the questions array, then finalizes the assistant message with `status: 'clarification_needed'`
+4. The frontend renders a `ClarificationCard` inline in the chat, displaying each question alongside its default assumption
+5. The user responds via one of two actions:
+   - **Answer**: Sends a new message composed of the original question plus the user's answers to each clarifying question
+   - **Proceed with assumptions**: Sends a new message composed of the original question plus the list of default assumptions
+6. On the next invocation, the Planner receives the clarification as part of its conversation context and proceeds through the full pipeline normally
+
+### Planner Prompt Policy
+
+The Planner system prompt instructs the LLM to ask for clarification ONLY when:
+- There is a critical ambiguity that would materially change which datasets are queried, which metrics are computed, or how results are interpreted
+- The ambiguity cannot be resolved from conversation history, dataset schemas, or stored user preferences
+- The question is genuinely open-ended (not resolvable by a reasonable default assumption)
+
+Examples of ambiguities that warrant clarification:
+- "Analyze sales" — unclear time window when no prior context exists and multiple plausible windows exist
+- "Compare regions" — unclear which regions are relevant when the dataset contains dozens
+
+Examples that do NOT warrant clarification:
+- "Show me top customers" — reasonable to default to revenue, last 12 months
+- "Why is Houston underperforming?" — reasonable to default to revenue vs. peer stores comparison
+
+### Updated PlanArtifact Fields
+
+The `PlanArtifact` produced by the Planner gains two new optional fields:
+
+```typescript
+{
+  complexity: 'simple' | 'analytical',
+  intent: string,
+  metrics: string[],
+  dimensions: string[],
+  timeWindow: string | null,
+  filters: string[],
+  grain: string,
+  ambiguities: Array<{ question: string; assumption: string }>,
+  acceptanceChecks: string[],
+  steps: Array<{
+    id: number,
+    description: string,
+    strategy: 'sql' | 'python' | 'sql_then_python',
+    dependsOn: number[],
+    datasets: string[],
+    expectedOutput: string,
+  }>,
+  // NEW FIELDS:
+  shouldClarify: boolean,                           // true = terminate early and ask user
+  clarificationQuestions: Array<{                   // max 3 questions
+    question: string,                               // The question to ask the user
+    assumption: string,                             // The default assumption if user proceeds without answering
+  }>,
+}
+```
+
+### Updated routeAfterPlanner Logic
+
+```typescript
+function routeAfterPlanner(state: DataAgentStateType): 'navigator' | 'executor' | '__end__' {
+  const plan = state.plan;
+
+  // Early termination: ask for clarification before running expensive pipeline
+  if (plan?.shouldClarify && plan.clarificationQuestions?.length > 0) {
+    return '__end__';
+  }
+
+  if (plan?.complexity === 'simple') {
+    return 'executor';  // Skip Navigator, SQL Builder, Verifier
+  }
+  return 'navigator';   // Full analytical pipeline
+}
+```
+
+### New Message Status
+
+| Status | Description |
+|--------|-------------|
+| `clarification_needed` | The agent has paused and is waiting for user clarification before proceeding |
+
+The assistant message is stored in the database with `status: 'clarification_needed'` and `content` set to a formatted representation of the questions. This allows the conversation history to reflect the clarification exchange.
+
+### New SSE Event
+
+```typescript
+// Emitted when the Planner decides clarification is needed
+event: clarification_requested
+data: {
+  type: 'clarification_requested',
+  questions: Array<{
+    question: string,   // The question for the user
+    assumption: string, // Default assumption if user proceeds without answering
+  }>
+}
+```
+
+### Frontend: ClarificationCard
+
+**Location**: `apps/web/src/components/data-agent/ClarificationCard.tsx`
+
+Rendered inline within the chat message area when a `clarification_needed` message is received.
+
+**Features**:
+- Displays each question with its default assumption below
+- "Answer" button: Opens a response textarea pre-populated with the original question, allowing the user to type answers before sending
+- "Proceed with assumptions" button: Immediately sends a new message that includes the original question plus all default assumptions listed
+- Visually distinct from regular assistant messages (uses an info-style card with a question mark icon)
+
+**Props**:
+```typescript
+interface ClarificationCardProps {
+  questions: Array<{ question: string; assumption: string }>;
+  originalQuestion: string;
+  onAnswer: (combinedMessage: string) => void;
+  onProceed: (combinedMessage: string) => void;
+  disabled?: boolean;  // True while a new response is generating
+}
+```
+
+---
+
+## User Preferences / Memory
+
+### Overview
+
+Users can store persistent preferences that are injected into the Planner and Explainer prompts on every invocation. Preferences accumulate over time, improving response quality and reducing the frequency of clarifying questions. Two scopes are supported:
+
+- **Global preferences** (`ontology_id = NULL`): Apply across all conversations regardless of ontology
+- **Ontology-scoped preferences** (`ontology_id = <uuid>`): Apply only to conversations using that specific ontology
+
+When both a global and an ontology-scoped preference share the same key, the ontology-scoped value takes precedence.
+
+### Database Table
+
+**Table**: `data_agent_preferences`
+
+```sql
+CREATE TABLE data_agent_preferences (
+  id           UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  ontology_id  UUID          REFERENCES ontologies(id) ON DELETE CASCADE,  -- NULL = global
+  key          VARCHAR(255)  NOT NULL,
+  value        TEXT          NOT NULL,
+  source       VARCHAR(20)   NOT NULL DEFAULT 'manual',  -- 'manual' or 'auto_captured'
+  created_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+
+  UNIQUE (user_id, ontology_id, key)
+);
+
+CREATE INDEX idx_data_agent_preferences_user_id ON data_agent_preferences(user_id);
+CREATE INDEX idx_data_agent_preferences_ontology_id ON data_agent_preferences(ontology_id);
+```
+
+**Columns**:
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | UUID | Primary key |
+| `user_id` | UUID | FK to `users`, CASCADE delete |
+| `ontology_id` | UUID (nullable) | FK to `ontologies`, CASCADE delete. NULL = global scope |
+| `key` | VARCHAR(255) | Preference name (e.g., `default_time_window`, `preferred_output_format`) |
+| `value` | TEXT | Preference value (e.g., `last 12 months`, `bullet points`) |
+| `source` | VARCHAR(20) | `manual` (user-created) or `auto_captured` (saved from clarification answer) |
+| `created_at` | TIMESTAMPTZ | Creation timestamp |
+| `updated_at` | TIMESTAMPTZ | Last update timestamp |
+
+**Unique constraint**: `(user_id, ontology_id, key)` — one value per key per user per scope. NULL ontology_id is treated as a distinct value by PostgreSQL, so a user can have both a global and an ontology-scoped preference with the same key.
+
+### Effective Preference Resolution
+
+When the agent executes, it loads all preferences for the current user and combines them:
+
+```typescript
+// 1. Load global preferences (ontologyId = null)
+const globalPrefs = await prisma.dataAgentPreference.findMany({
+  where: { userId, ontologyId: null },
+});
+
+// 2. Load ontology-scoped preferences
+const ontologyPrefs = await prisma.dataAgentPreference.findMany({
+  where: { userId, ontologyId },
+});
+
+// 3. Merge: ontology-scoped overrides global for same key
+const effectivePrefs = new Map(globalPrefs.map(p => [p.key, p.value]));
+for (const pref of ontologyPrefs) {
+  effectivePrefs.set(pref.key, pref.value);
+}
+```
+
+The resulting merged map is passed to both `buildPlannerPrompt()` and `buildExplainerPrompt()`.
+
+### Prompt Injection
+
+Preferences are injected as a "User Preferences" section in the system prompts for two phases:
+
+**Planner prompt injection**:
+```
+## User Preferences
+
+The following preferences have been stored by the user. Use them to:
+- Avoid unnecessary clarifying questions (treat these as resolved ambiguities)
+- Inform which datasets, time windows, or metrics to prioritize
+- Apply any formatting or output preferences to your plan
+
+Preferences:
+- default_time_window: last 12 months
+- preferred_grain: monthly
+- currency_format: USD millions
+```
+
+**Explainer prompt injection**:
+```
+## User Preferences
+
+Apply the following user preferences when formatting your narrative response:
+- preferred_output_format: bullet points with a summary table
+- chart_preference: bar charts for comparisons, line charts for trends
+```
+
+### API Endpoints
+
+All endpoints are under `/api/data-agent/preferences` and require `data_agent:read` or `data_agent:write` permission.
+
+#### GET /api/data-agent/preferences
+
+List preferences for the current user.
+
+**Query Parameters**:
+- `ontologyId` (UUID, optional): Filter by ontology. Omit to include all scopes.
+- `scope` (enum: `global` | `ontology` | `all`, default: `all`): Filter by scope. `global` returns only null-ontologyId preferences; `ontology` requires `ontologyId` parameter.
+
+**Response (200)**:
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "userId": "uuid",
+      "ontologyId": null,
+      "key": "default_time_window",
+      "value": "last 12 months",
+      "source": "manual",
+      "createdAt": "2026-02-01T10:00:00Z",
+      "updatedAt": "2026-02-01T10:00:00Z"
+    },
+    {
+      "id": "uuid",
+      "userId": "uuid",
+      "ontologyId": "uuid",
+      "key": "preferred_grain",
+      "value": "monthly",
+      "source": "auto_captured",
+      "createdAt": "2026-02-05T14:30:00Z",
+      "updatedAt": "2026-02-05T14:30:00Z"
+    }
+  ]
+}
+```
+
+#### POST /api/data-agent/preferences
+
+Create or upsert a preference. If a preference with the same `(userId, ontologyId, key)` already exists, its value is updated (upsert behavior).
+
+**Permission**: `data_agent:write`
+
+**Request Body**:
+```json
+{
+  "ontologyId": "uuid",       // Optional: null or omit for global scope
+  "key": "default_time_window",
+  "value": "last 12 months",
+  "source": "manual"          // Optional: defaults to 'manual'
+}
+```
+
+**Response (201)**:
+```json
+{
+  "data": {
+    "id": "uuid",
+    "userId": "uuid",
+    "ontologyId": "uuid",
+    "key": "default_time_window",
+    "value": "last 12 months",
+    "source": "manual",
+    "createdAt": "2026-02-01T10:00:00Z",
+    "updatedAt": "2026-02-01T10:00:00Z"
+  }
+}
+```
+
+#### PATCH /api/data-agent/preferences/:id
+
+Update the value of a specific preference.
+
+**Permission**: `data_agent:write` (owner only)
+
+**Request Body**:
+```json
+{
+  "value": "last 6 months"
+}
+```
+
+**Response (200)**: Updated preference object.
+
+#### DELETE /api/data-agent/preferences/:id
+
+Delete a single preference by ID.
+
+**Permission**: `data_agent:write` (owner only)
+
+**Response (204)**: No content.
+
+#### DELETE /api/data-agent/preferences
+
+Clear preferences in bulk.
+
+**Permission**: `data_agent:write`
+
+**Query Parameters**:
+- `ontologyId` (UUID, optional): Clear only preferences scoped to this ontology. Omit to clear ALL preferences for the current user (global + all ontology-scoped).
+
+**Response (204)**: No content.
+
+### Auto-Capture from Clarifications
+
+When the user answers a clarifying question, the agent can automatically save that answer as an ontology-scoped preference to avoid asking the same question in future conversations. This behavior is controlled by the `auto_capture_mode` global preference (stored with key `auto_capture_mode`):
+
+| Value | Behavior |
+|-------|----------|
+| `off` | Never auto-capture. Clarification answers are used only for the current query. |
+| `auto` (default) | Automatically save clarification answers as ontology-scoped preferences with `source: 'auto_captured'`. Emits `preference_auto_saved` SSE event so the user sees a snackbar notification. |
+| `ask` | Emit `preference_suggested` SSE event for each potential preference. The frontend shows a `PreferenceSuggestionBanner` with per-suggestion Save/Dismiss actions. |
+
+**Auto-capture key naming**: The agent derives a preference key from the clarifying question using a simple slug (e.g., "What time window should I use for analysis?" → `default_time_window`). The Planner prompt provides the mapping from clarification question to preference key.
+
+### Cascade Delete Behavior
+
+- When an **ontology is deleted**, all preferences scoped to that ontology (`ontology_id = <ontology_uuid>`) are automatically removed via the database `ON DELETE CASCADE` constraint.
+- When a **user is deleted**, all preferences belonging to that user are automatically removed.
+- **Global preferences are never affected** by ontology deletion.
+
+### New SSE Events
+
+Three new SSE events are added to support the preferences feature:
+
+```typescript
+// Emitted in 'ask' mode when clarification answers could be saved as preferences
+event: preference_suggested
+data: {
+  type: 'preference_suggested',
+  suggestions: Array<{
+    key: string,       // Preference key (e.g., 'default_time_window')
+    value: string,     // Suggested preference value (user's answer)
+    question: string,  // The original clarifying question this answers
+  }>
+}
+
+// Emitted in 'auto' mode when preferences have been automatically saved
+event: preference_auto_saved
+data: {
+  type: 'preference_auto_saved',
+  preferences: Array<{
+    key: string,    // Saved preference key
+    value: string,  // Saved preference value
+  }>
+}
+```
+
+### Frontend UI
+
+#### PreferencesDialog
+
+**Location**: `apps/web/src/components/data-agent/PreferencesDialog.tsx`
+
+Accessible via a Tune icon button in the chat header area (next to the ModelSelector or chat name).
+
+**Features**:
+- **Two tabs**: Global and Ontology (the ontology tab is only shown when a chat with an associated ontology is active)
+- **Auto-capture mode toggle**: Switch between `off`, `auto`, and `ask` modes. Displayed as a labeled toggle group at the top of the dialog.
+- **Preference list**: Each preference shown as a row with key, value, source badge (`manual` or `auto`), and Delete action
+- **Add preference form**: Inline form with key and value text fields + Save button
+- **Edit preference**: Click on a preference value to edit it inline
+
+**Props**:
+```typescript
+interface PreferencesDialogProps {
+  open: boolean;
+  onClose: () => void;
+  ontologyId: string | null;  // null when no active ontology
+}
+```
+
+#### PreferenceSuggestionBanner
+
+**Location**: `apps/web/src/components/data-agent/PreferenceSuggestionBanner.tsx`
+
+Shown below a completed assistant message when a `preference_suggested` SSE event is received (only in `ask` mode).
+
+**Features**:
+- Displays a compact banner with each suggested preference key and value
+- Per-suggestion **Save** and **Dismiss** buttons
+- Dismissed suggestions are removed from the banner; saved suggestions trigger a `POST /api/data-agent/preferences` call
+- The banner disappears when all suggestions are either saved or dismissed
+
+**Props**:
+```typescript
+interface PreferenceSuggestionBannerProps {
+  suggestions: Array<{ key: string; value: string; question: string }>;
+  ontologyId: string;
+  onSave: (key: string, value: string) => Promise<void>;
+  onDismiss: (key: string) => void;
+}
+```
+
+#### Snackbar Notification (preference_auto_saved)
+
+When `preference_auto_saved` is received in `auto` mode, the `useDataChat` hook triggers a snackbar notification (via MUI `Snackbar` + `Alert`) listing the keys that were saved. The snackbar auto-dismisses after 5 seconds.
+
+**Example notification text**: "2 preferences saved: default_time_window, preferred_grain"
+
+---
+
 ## State Schema
 
 The agent uses LangGraph `Annotation.Root` state following the pattern from `apps/api/src/semantic-models/agent/state.ts`:
@@ -1432,6 +1879,9 @@ The agent streams execution progress via Server-Sent Events (SSE) using the same
 | `token_update` | `{ phase: string, tokensUsed: { prompt: number, completion: number, total: number } }` | All phase nodes | Per-phase token usage report |
 | `llm_call_start` | `{ phase, callIndex, stepId?, purpose, provider, model, structuredOutput, promptSummary }` | All phase nodes | LLM call started |
 | `llm_call_end` | `{ phase, callIndex, stepId?, purpose, durationMs, promptTokens, completionTokens, totalTokens, responsePreview, toolCallCount }` | All phase nodes | LLM call completed |
+| `clarification_requested` | `{ questions: Array<{ question: string, assumption: string }> }` | Planner (via agent service) | Agent needs user clarification before proceeding |
+| `preference_suggested` | `{ suggestions: Array<{ key: string, value: string, question: string }> }` | Agent service (ask mode) | Preferences suggested for user to save |
+| `preference_auto_saved` | `{ preferences: Array<{ key: string, value: string }> }` | Agent service (auto mode) | Preferences automatically saved from clarification |
 
 ### SSE Event Examples
 
@@ -1587,6 +2037,12 @@ interface DataAgentMessageMetadata {
 
   // Execution state
   claimed?: boolean;
+
+  // Clarification state (when status = 'clarification_needed')
+  clarificationQuestions?: Array<{
+    question: string;
+    assumption: string;
+  }>;
 }
 ```
 
@@ -1632,8 +2088,8 @@ model DataChatMessage {
   chatId    String   @map("chat_id") @db.Uuid
   role      String   @db.VarChar(20)  // 'user' or 'assistant'
   content   String   @db.Text
-  metadata  Json?    // Extended with phase artifacts
-  status    String   @default("complete") @db.VarChar(20)  // 'generating', 'complete', 'failed'
+  metadata  Json?    // Extended with phase artifacts and clarification questions
+  status    String   @default("complete") @db.VarChar(20)  // 'generating', 'complete', 'failed', 'clarification_needed'
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   // Relations
@@ -1643,9 +2099,29 @@ model DataChatMessage {
   @@index([createdAt])
   @@map("data_chat_messages")
 }
+
+model DataAgentPreference {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  ontologyId String?   @map("ontology_id") @db.Uuid  // null = global scope
+  key        String    @db.VarChar(255)
+  value      String    @db.Text
+  source     String    @default("manual") @db.VarChar(20)  // 'manual' or 'auto_captured'
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user     User      @relation("UserDataAgentPreferences", fields: [userId], references: [id], onDelete: Cascade)
+  ontology Ontology? @relation("OntologyDataAgentPreferences", fields: [ontologyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ontologyId, key])
+  @@index([userId])
+  @@index([ontologyId])
+  @@map("data_agent_preferences")
+}
 ```
 
-No schema changes required for multi-phase architecture (metadata structure extended but JSONB is flexible).
+The `DataAgentPreference` model requires a new migration. The `DataChatMessage.status` column gains the `clarification_needed` value (no migration required — the column is a plain VARCHAR with no database-level enum constraint).
 
 ---
 
@@ -1879,7 +2355,107 @@ POST /api/data-agent/stream/:messageId
 2. POST to `/api/data-agent/stream/:messageId`
 3. Backend executes StateGraph and streams phase/step/tool events
 4. Frontend updates UI in real-time
-5. On completion, message status set to 'complete' with full metadata
+5. On completion, message status set to 'complete' with full metadata. If clarification is needed, status is set to 'clarification_needed' and the stream ends after emitting `clarification_requested`
+
+---
+
+### 8. List Preferences
+
+```http
+GET /api/data-agent/preferences
+```
+
+**Permission:** `data_agent:read`
+
+**Query Parameters:**
+- `ontologyId` (UUID, optional): Filter to a specific ontology scope
+- `scope` (enum: `global` | `ontology` | `all`, default: `all`): Scope filter. `ontology` requires `ontologyId`.
+
+**Response (200):**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "userId": "uuid",
+      "ontologyId": null,
+      "key": "default_time_window",
+      "value": "last 12 months",
+      "source": "manual",
+      "createdAt": "2026-02-01T10:00:00Z",
+      "updatedAt": "2026-02-01T10:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+### 9. Create or Upsert Preference
+
+```http
+POST /api/data-agent/preferences
+```
+
+**Permission:** `data_agent:write`
+
+**Request Body:**
+```json
+{
+  "ontologyId": "uuid",
+  "key": "default_time_window",
+  "value": "last 12 months",
+  "source": "manual"
+}
+```
+
+**Response (201):** Created or updated preference object.
+
+---
+
+### 10. Update Preference
+
+```http
+PATCH /api/data-agent/preferences/:id
+```
+
+**Permission:** `data_agent:write` (owner only)
+
+**Request Body:**
+```json
+{
+  "value": "last 6 months"
+}
+```
+
+**Response (200):** Updated preference object.
+
+---
+
+### 11. Delete Preference
+
+```http
+DELETE /api/data-agent/preferences/:id
+```
+
+**Permission:** `data_agent:write` (owner only)
+
+**Response (204):** No content.
+
+---
+
+### 12. Clear Preferences (Bulk)
+
+```http
+DELETE /api/data-agent/preferences
+```
+
+**Permission:** `data_agent:write`
+
+**Query Parameters:**
+- `ontologyId` (UUID, optional): Clear only preferences for this ontology. Omit to clear ALL preferences (global + all ontology-scoped) for the current user.
+
+**Response (204):** No content.
 
 ---
 
@@ -1928,8 +2504,8 @@ POST /api/data-agent/stream/:messageId
 
 | Permission | Roles | Description |
 |------------|-------|-------------|
-| `data_agent:read` | Viewer, Contributor, Admin | View own chats and messages |
-| `data_agent:write` | Contributor, Admin | Create chats, send messages |
+| `data_agent:read` | Viewer, Contributor, Admin | View own chats, messages, and preferences |
+| `data_agent:write` | Contributor, Admin | Create chats, send messages, manage preferences |
 | `data_agent:delete` | Contributor, Admin | Delete own chats |
 
 ### Dependency Permissions
@@ -2238,6 +2814,80 @@ interface LlmTraceDialogProps {
 7. **Error Display**: Shows error message with red background if LLM call failed
 
 **Syntax Highlighting**: Uses `react-syntax-highlighter` with `tomorrow` theme for code/JSON display.
+
+---
+
+### ClarificationCard (NEW)
+
+Inline card component rendered in the chat when a `clarification_needed` message is received.
+
+**Location**: `apps/web/src/components/data-agent/ClarificationCard.tsx`
+
+**Features**:
+- Displays each clarifying question with its default assumption below in a styled list
+- "Answer" button: Opens a response area pre-populated with the original question; user types answers then sends
+- "Proceed with assumptions" button: Immediately sends a combined message with the original question and all default assumptions appended
+- Visually distinct from regular assistant messages (info-style card, question mark icon)
+- Disabled while a response is being generated
+
+**Props**:
+```typescript
+interface ClarificationCardProps {
+  questions: Array<{ question: string; assumption: string }>;
+  originalQuestion: string;
+  onAnswer: (combinedMessage: string) => void;
+  onProceed: (combinedMessage: string) => void;
+  disabled?: boolean;
+}
+```
+
+---
+
+### PreferencesDialog (NEW)
+
+Dialog for managing user preferences, accessible via a Tune icon button in the chat header.
+
+**Location**: `apps/web/src/components/data-agent/PreferencesDialog.tsx`
+
+**Features**:
+- Two tabs: "Global" and "Ontology" (ontology tab visible only when a chat with an ontology is active)
+- Auto-capture mode toggle group (`off` / `auto` / `ask`) at the top of the dialog
+- List of existing preferences with key, value, source badge, and Delete action
+- Inline add form with key and value fields
+- Inline edit by clicking a preference value
+- Calls `POST /api/data-agent/preferences` for add/upsert, `PATCH` for edit, `DELETE` for removal
+
+**Props**:
+```typescript
+interface PreferencesDialogProps {
+  open: boolean;
+  onClose: () => void;
+  ontologyId: string | null;
+}
+```
+
+---
+
+### PreferenceSuggestionBanner (NEW)
+
+Banner shown below a completed assistant message when `preference_suggested` is received in `ask` mode.
+
+**Location**: `apps/web/src/components/data-agent/PreferenceSuggestionBanner.tsx`
+
+**Features**:
+- Compact banner with each suggested preference key and value
+- Per-suggestion Save (calls `POST /api/data-agent/preferences`) and Dismiss actions
+- Disappears when all suggestions are saved or dismissed
+
+**Props**:
+```typescript
+interface PreferenceSuggestionBannerProps {
+  suggestions: Array<{ key: string; value: string; question: string }>;
+  ontologyId: string;
+  onSave: (key: string, value: string) => Promise<void>;
+  onDismiss: (key: string) => void;
+}
+```
 
 ---
 
@@ -2639,6 +3289,10 @@ CONVERSATION_HISTORY_LIMIT=10  # Last N messages for context
 | `apps/api/src/data-agent/agent/tools/index.ts` | Rebuilt: barrel export for 6 tools |
 | `apps/api/src/data-agent/agent/utils/token-tracker.ts` | Token usage extraction from LangChain responses |
 | `apps/api/src/data-agent/agent/utils/data-agent-tracer.ts` | DataAgentTracer class for LLM interaction tracing |
+| `apps/api/src/data-agent/preferences/preferences.controller.ts` | REST controller for user preferences CRUD |
+| `apps/api/src/data-agent/preferences/preferences.service.ts` | Business logic for preference management and effective resolution |
+| `apps/api/src/data-agent/preferences/preferences.dto.ts` | Zod-based DTOs for preferences API |
+| `apps/api/src/data-agent/preferences/preferences.service.spec.ts` | Unit tests for preferences service |
 
 ### Modified Backend Files
 
@@ -2663,6 +3317,10 @@ CONVERSATION_HISTORY_LIMIT=10  # Last N messages for context
 | `apps/web/src/components/settings/DefaultProviderSettings.tsx` | User UI for default provider preference |
 | `apps/web/src/hooks/useElapsedTimer.ts` | Live elapsed timer hook |
 | `apps/web/src/hooks/useLlmProviders.ts` | Hook for fetching enabled providers and user default |
+| `apps/web/src/components/data-agent/ClarificationCard.tsx` | Inline card for asking clarifying questions |
+| `apps/web/src/components/data-agent/PreferencesDialog.tsx` | Dialog for managing user preferences (global + ontology scoped) |
+| `apps/web/src/components/data-agent/PreferenceSuggestionBanner.tsx` | Banner for saving suggested preferences in ask mode |
+| `apps/web/src/hooks/useDataAgentPreferences.ts` | Hook for preferences CRUD and effective resolution |
 
 ### Modified Frontend Files
 
@@ -2675,8 +3333,11 @@ CONVERSATION_HISTORY_LIMIT=10  # Last N messages for context
 | `apps/web/src/components/data-agent/ChatInput.tsx` | Integrate ModelSelector for provider selection |
 | `apps/web/src/components/data-agent/NewChatDialog.tsx` | Integrate ModelSelector with user default pre-selection |
 | `apps/web/src/components/data-agent/ToolCallAccordion.tsx` | Group tool calls by phase + stepId |
-| `apps/web/src/components/data-agent/ChatMessage.tsx` | Show verification badge + data lineage footer |
+| `apps/web/src/components/data-agent/ChatMessage.tsx` | Show verification badge, data lineage footer, and inline ClarificationCard for clarification_needed messages |
 | `apps/api/src/llm/llm.service.ts` | Updated with `LlmModelConfig` for per-provider config with reasoning levels |
+| `apps/web/src/hooks/useDataChat.ts` | Handle clarification_requested, preference_suggested, preference_auto_saved SSE events |
+| `apps/web/src/components/data-agent/ChatView.tsx` | Add Tune icon button for PreferencesDialog; show PreferenceSuggestionBanner after preference_suggested event |
+| `apps/web/src/types/index.ts` | Extend DataAgentStreamEvent with clarification and preference event types; add clarification_needed status |
 
 ### Deleted Files
 
