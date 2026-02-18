@@ -138,6 +138,121 @@ export class DiscoveryService {
   }
 
   /**
+   * Get distinct text values for a single column, optionally preferring values
+   * from recent rows by ordering an auxiliary timestamp/sequence column DESC
+   * before de-duplicating.
+   */
+  async getDistinctColumnValues(
+    connectionId: string,
+    database: string,
+    schema: string,
+    table: string,
+    column: string,
+    orderByColumn?: string,
+    limit: number = 5,
+  ): Promise<string[]> {
+    const { params, dbType } = await this.getConnectionParams(connectionId);
+    const driver = getDiscoveryDriver(dbType);
+
+    // ------------------------------------------------------------------
+    // Identifier quoting helpers
+    // ------------------------------------------------------------------
+    const sanitize = (id: string): string => id.replace(/[^a-zA-Z0-9_]/g, '');
+
+    const quote = (id: string): string => {
+      const s = sanitize(id);
+      switch (dbType) {
+        case 'mysql':
+        case 'databricks':
+          return `\`${s}\``;
+        case 'mssql':
+          return `[${s}]`;
+        default:
+          // postgresql, snowflake
+          return `"${s}"`;
+      }
+    };
+
+    // Build a fully-qualified table reference (2-part or 3-part)
+    const tableRef = (dbType === 'snowflake' || dbType === 'databricks')
+      ? `${quote(database)}.${quote(schema)}.${quote(table)}`
+      : `${quote(schema)}.${quote(table)}`;
+
+    // Per-dialect column cast to text
+    const castCol = (col: string): string => {
+      const q = quote(col);
+      switch (dbType) {
+        case 'postgresql':
+          return `${q}::text`;
+        case 'snowflake':
+          return `${q}::VARCHAR`;
+        case 'mysql':
+          return `CAST(${q} AS CHAR(250))`;
+        case 'mssql':
+          return `CAST(${q} AS NVARCHAR(250))`;
+        case 'databricks':
+          return `CAST(${q} AS STRING)`;
+        default:
+          return `${q}::text`;
+      }
+    };
+
+    // ------------------------------------------------------------------
+    // Build SQL
+    // ------------------------------------------------------------------
+    const quotedCol = quote(column);
+    const castedCol = castCol(column);
+    let sql: string;
+
+    if (dbType === 'mssql') {
+      if (orderByColumn) {
+        const quotedOrderBy = quote(orderByColumn);
+        sql = `SELECT DISTINCT TOP ${limit} ${castCol(column)} AS value
+FROM (
+  SELECT TOP 100 ${quotedCol}, ${quotedOrderBy}
+  FROM ${tableRef}
+  WHERE ${quotedCol} IS NOT NULL
+  ORDER BY ${quotedOrderBy} DESC
+) sub`;
+      } else {
+        sql = `SELECT DISTINCT TOP ${limit} ${castCol(column)} AS value
+FROM ${tableRef}
+WHERE ${quotedCol} IS NOT NULL`;
+      }
+    } else {
+      if (orderByColumn) {
+        const quotedOrderBy = quote(orderByColumn);
+        sql = `SELECT DISTINCT ${castedCol} AS value
+FROM (
+  SELECT ${quotedCol}, ${quotedOrderBy}
+  FROM ${tableRef}
+  WHERE ${quotedCol} IS NOT NULL
+  ORDER BY ${quotedOrderBy} DESC
+  LIMIT 100
+) sub
+LIMIT ${limit}`;
+      } else {
+        sql = `SELECT DISTINCT ${castedCol} AS value
+FROM ${tableRef}
+WHERE ${quotedCol} IS NOT NULL
+LIMIT ${limit}`;
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // Execute and extract
+    // ------------------------------------------------------------------
+    const result = await driver.executeReadOnlyQuery(params, sql, limit);
+    const values = result.rows.map(row => String(row[0]));
+
+    this.logger.log(
+      `Retrieved ${values.length} distinct values for column ${column} in table ${table} for connection ${connectionId}`,
+    );
+
+    return values;
+  }
+
+  /**
    * Get connection params for a connection
    */
   private async getConnectionParams(

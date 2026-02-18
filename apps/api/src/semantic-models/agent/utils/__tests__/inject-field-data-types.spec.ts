@@ -1,4 +1,4 @@
-import { injectFieldDataTypes, injectRelationshipDataTypes } from '../inject-field-data-types';
+import { injectFieldDataTypes, injectRelationshipDataTypes, isEligibleForSampleData } from '../inject-field-data-types';
 import { OSIDialect, OSIAIContext } from '../../osi/types';
 
 // Test Data Helpers
@@ -42,7 +42,7 @@ function createTestDataset() {
 }
 
 describe('injectFieldDataTypes', () => {
-  it('should inject data_type and native_type for matching columns', () => {
+  it('should inject data_type and is_primary_key for matching columns', () => {
     const dataset = createTestDataset();
     const columns = createTestColumns();
 
@@ -50,11 +50,11 @@ describe('injectFieldDataTypes', () => {
 
     const idField = dataset.fields![0];
     expect((idField.ai_context as OSIAIContext).data_type).toBe('integer');
-    expect((idField.ai_context as OSIAIContext).native_type).toBe('int4');
+    expect((idField.ai_context as OSIAIContext).is_primary_key).toBe(true);
 
     const nameField = dataset.fields![1];
     expect((nameField.ai_context as OSIAIContext).data_type).toBe('varchar');
-    expect((nameField.ai_context as OSIAIContext).native_type).toBe('varchar(255)');
+    expect((nameField.ai_context as OSIAIContext).is_primary_key).toBe(false);
   });
 
   it('should handle case-insensitive column name matching', () => {
@@ -67,7 +67,7 @@ describe('injectFieldDataTypes', () => {
 
     const idField = dataset.fields![0];
     expect((idField.ai_context as OSIAIContext).data_type).toBe('integer');
-    expect((idField.ai_context as OSIAIContext).native_type).toBe('int4');
+    expect((idField.ai_context as OSIAIContext).is_primary_key).toBe(true);
   });
 
   it('should skip fields that do not match any column (calculated expression fields)', () => {
@@ -99,7 +99,7 @@ describe('injectFieldDataTypes', () => {
     expect(typeof idField.ai_context).toBe('object');
     expect((idField.ai_context as OSIAIContext).instructions).toBe('This is a string context');
     expect((idField.ai_context as OSIAIContext).data_type).toBe('integer');
-    expect((idField.ai_context as OSIAIContext).native_type).toBe('int4');
+    expect((idField.ai_context as OSIAIContext).is_primary_key).toBe(true);
   });
 
   it('should create ai_context object when it is null/undefined', () => {
@@ -112,7 +112,7 @@ describe('injectFieldDataTypes', () => {
     const idField = dataset.fields![0];
     expect(idField.ai_context).toBeDefined();
     expect((idField.ai_context as OSIAIContext).data_type).toBe('integer');
-    expect((idField.ai_context as OSIAIContext).native_type).toBe('int4');
+    expect((idField.ai_context as OSIAIContext).is_primary_key).toBe(true);
   });
 
   it('should preserve existing ai_context properties', () => {
@@ -127,21 +127,19 @@ describe('injectFieldDataTypes', () => {
     expect((idField.ai_context as OSIAIContext).synonyms).toEqual(['identifier', 'pk']);
     expect((idField.ai_context as OSIAIContext).instructions).toBe('Primary key field');
     expect((idField.ai_context as OSIAIContext).data_type).toBe('integer');
-    expect((idField.ai_context as OSIAIContext).native_type).toBe('int4');
+    expect((idField.ai_context as OSIAIContext).is_primary_key).toBe(true);
   });
 
-  it('should inject is_nullable and is_primary_key', () => {
+  it('should inject is_primary_key', () => {
     const dataset = createTestDataset();
     const columns = createTestColumns();
 
     injectFieldDataTypes(dataset, columns);
 
     const idField = dataset.fields![0];
-    expect((idField.ai_context as OSIAIContext).is_nullable).toBe(false);
     expect((idField.ai_context as OSIAIContext).is_primary_key).toBe(true);
 
     const nameField = dataset.fields![1];
-    expect((nameField.ai_context as OSIAIContext).is_nullable).toBe(true);
     expect((nameField.ai_context as OSIAIContext).is_primary_key).toBe(false);
   });
 
@@ -168,6 +166,164 @@ describe('injectFieldDataTypes', () => {
   });
 });
 
+describe('isEligibleForSampleData', () => {
+  it('should return true for varchar with maxLength < 50', () => {
+    expect(isEligibleForSampleData({ name: 'status', dataType: 'varchar', nativeType: 'varchar(30)', isNullable: true, isPrimaryKey: false, maxLength: 30 })).toBe(true);
+  });
+
+  it('should return true for character varying with maxLength < 50', () => {
+    expect(isEligibleForSampleData({ name: 'code', dataType: 'character varying', nativeType: 'varchar(20)', isNullable: true, isPrimaryKey: false, maxLength: 20 })).toBe(true);
+  });
+
+  it('should return true for nvarchar with maxLength < 50', () => {
+    expect(isEligibleForSampleData({ name: 'label', dataType: 'nvarchar', nativeType: 'nvarchar(45)', isNullable: true, isPrimaryKey: false, maxLength: 45 })).toBe(true);
+  });
+
+  it('should return true for char with maxLength < 50', () => {
+    expect(isEligibleForSampleData({ name: 'flag', dataType: 'char', nativeType: 'char(2)', isNullable: true, isPrimaryKey: false, maxLength: 2 })).toBe(true);
+  });
+
+  it('should return false for varchar with maxLength >= 50', () => {
+    expect(isEligibleForSampleData({ name: 'description', dataType: 'varchar', nativeType: 'varchar(255)', isNullable: true, isPrimaryKey: false, maxLength: 255 })).toBe(false);
+  });
+
+  it('should return false for varchar without maxLength', () => {
+    expect(isEligibleForSampleData({ name: 'notes', dataType: 'varchar', nativeType: 'varchar', isNullable: true, isPrimaryKey: false })).toBe(false);
+  });
+
+  it('should return false for text type (unlimited)', () => {
+    expect(isEligibleForSampleData({ name: 'body', dataType: 'text', nativeType: 'text', isNullable: true, isPrimaryKey: false })).toBe(false);
+  });
+
+  it('should return false for integer', () => {
+    expect(isEligibleForSampleData({ name: 'id', dataType: 'integer', nativeType: 'int4', isNullable: false, isPrimaryKey: true })).toBe(false);
+  });
+
+  it('should return false for boolean', () => {
+    expect(isEligibleForSampleData({ name: 'active', dataType: 'boolean', nativeType: 'bool', isNullable: false, isPrimaryKey: false })).toBe(false);
+  });
+
+  it('should return false for json', () => {
+    expect(isEligibleForSampleData({ name: 'metadata', dataType: 'json', nativeType: 'json', isNullable: true, isPrimaryKey: false })).toBe(false);
+  });
+
+  it('should return false for uuid', () => {
+    expect(isEligibleForSampleData({ name: 'ref', dataType: 'uuid', nativeType: 'uuid', isNullable: false, isPrimaryKey: false })).toBe(false);
+  });
+
+  it('should return false for date', () => {
+    expect(isEligibleForSampleData({ name: 'created', dataType: 'date', nativeType: 'date', isNullable: true, isPrimaryKey: false })).toBe(false);
+  });
+
+  it('should return false for timestamp', () => {
+    expect(isEligibleForSampleData({ name: 'ts', dataType: 'timestamp', nativeType: 'timestamptz', isNullable: true, isPrimaryKey: false })).toBe(false);
+  });
+
+  it('should return false for bytea', () => {
+    expect(isEligibleForSampleData({ name: 'data', dataType: 'bytea', nativeType: 'bytea', isNullable: true, isPrimaryKey: false })).toBe(false);
+  });
+});
+
+describe('sample_data injection', () => {
+  it('should inject sample_data for eligible columns when sampleDataMap is provided', () => {
+    const dataset = createTestDataset();
+    // Add a short varchar field to the test data
+    dataset.fields!.push({
+      name: 'status',
+      expression: { dialects: [{ dialect: 'ANSI_SQL' as OSIDialect, expression: 'status' }] },
+      ai_context: { synonyms: ['state'] },
+    });
+    const columns = [
+      ...createTestColumns(),
+      { name: 'status', dataType: 'varchar', nativeType: 'varchar(20)', isNullable: true, isPrimaryKey: false, maxLength: 20 },
+    ];
+    const sampleDataMap = new Map<string, string[]>();
+    sampleDataMap.set('status', ['active', 'pending', 'inactive', 'archived', 'draft', 'extra']);
+
+    injectFieldDataTypes(dataset, columns, sampleDataMap);
+
+    const statusField = dataset.fields![4];
+    const ctx = statusField.ai_context as OSIAIContext;
+    expect(ctx.sample_data).toBeDefined();
+    expect(ctx.sample_data).toHaveLength(5); // max 5
+    expect(ctx.sample_data).toEqual(['active', 'pending', 'inactive', 'archived', 'draft']);
+  });
+
+  it('should truncate sample values to 25 characters', () => {
+    const dataset = createTestDataset();
+    dataset.fields!.push({
+      name: 'code',
+      expression: { dialects: [{ dialect: 'ANSI_SQL' as OSIDialect, expression: 'code' }] },
+      ai_context: { synonyms: ['identifier'] },
+    });
+    const columns = [
+      ...createTestColumns(),
+      { name: 'code', dataType: 'varchar', nativeType: 'varchar(40)', isNullable: true, isPrimaryKey: false, maxLength: 40 },
+    ];
+    const sampleDataMap = new Map<string, string[]>();
+    sampleDataMap.set('code', ['abcdefghijklmnopqrstuvwxyz1234567890']);
+
+    injectFieldDataTypes(dataset, columns, sampleDataMap);
+
+    const codeField = dataset.fields![4];
+    const ctx = codeField.ai_context as OSIAIContext;
+    expect(ctx.sample_data).toEqual(['abcdefghijklmnopqrstuvwxy']); // 25 chars
+  });
+
+  it('should inject empty array for eligible column with no sample data', () => {
+    const dataset = createTestDataset();
+    dataset.fields!.push({
+      name: 'status',
+      expression: { dialects: [{ dialect: 'ANSI_SQL' as OSIDialect, expression: 'status' }] },
+      ai_context: { synonyms: ['state'] },
+    });
+    const columns = [
+      ...createTestColumns(),
+      { name: 'status', dataType: 'varchar', nativeType: 'varchar(20)', isNullable: true, isPrimaryKey: false, maxLength: 20 },
+    ];
+    const sampleDataMap = new Map<string, string[]>();
+    // No entry for 'status' in the map
+
+    injectFieldDataTypes(dataset, columns, sampleDataMap);
+
+    const statusField = dataset.fields![4];
+    const ctx = statusField.ai_context as OSIAIContext;
+    expect(ctx.sample_data).toEqual([]);
+  });
+
+  it('should not inject sample_data for ineligible columns', () => {
+    const dataset = createTestDataset();
+    const columns = createTestColumns();
+    const sampleDataMap = new Map<string, string[]>();
+    sampleDataMap.set('id', ['1', '2', '3', '4', '5']);
+
+    injectFieldDataTypes(dataset, columns, sampleDataMap);
+
+    // 'id' is integer, not eligible
+    const idField = dataset.fields![0];
+    expect((idField.ai_context as OSIAIContext).sample_data).toBeUndefined();
+  });
+
+  it('should not inject sample_data when sampleDataMap is not provided', () => {
+    const dataset = createTestDataset();
+    // Add eligible field
+    dataset.fields!.push({
+      name: 'status',
+      expression: { dialects: [{ dialect: 'ANSI_SQL' as OSIDialect, expression: 'status' }] },
+      ai_context: { synonyms: ['state'] },
+    });
+    const columns = [
+      ...createTestColumns(),
+      { name: 'status', dataType: 'varchar', nativeType: 'varchar(20)', isNullable: true, isPrimaryKey: false, maxLength: 20 },
+    ];
+
+    injectFieldDataTypes(dataset, columns); // no sampleDataMap
+
+    const statusField = dataset.fields![4];
+    expect((statusField.ai_context as OSIAIContext).sample_data).toBeUndefined();
+  });
+});
+
 describe('injectRelationshipDataTypes', () => {
   function createTestDatasets() {
     return [
@@ -182,7 +338,6 @@ describe('injectRelationshipDataTypes', () => {
             ai_context: {
               synonyms: ['order_id'],
               data_type: 'integer',
-              native_type: 'int4',
             } as OSIAIContext,
           },
           {
@@ -191,7 +346,6 @@ describe('injectRelationshipDataTypes', () => {
             ai_context: {
               synonyms: ['cust_id'],
               data_type: 'integer',
-              native_type: 'int4',
             } as OSIAIContext,
           },
         ],
@@ -207,7 +361,6 @@ describe('injectRelationshipDataTypes', () => {
             ai_context: {
               synonyms: ['customer_id'],
               data_type: 'integer',
-              native_type: 'int4',
             } as OSIAIContext,
           },
         ],
@@ -240,12 +393,10 @@ describe('injectRelationshipDataTypes', () => {
     expect(ctx.column_types.from_columns).toBeDefined();
     expect(ctx.column_types.from_columns.customer_id).toEqual({
       data_type: 'integer',
-      native_type: 'int4',
     });
     expect(ctx.column_types.to_columns).toBeDefined();
     expect(ctx.column_types.to_columns.id).toEqual({
       data_type: 'integer',
-      native_type: 'int4',
     });
   });
 
@@ -321,7 +472,6 @@ describe('injectRelationshipDataTypes', () => {
     expect(ctx.column_types?.to_columns).toBeDefined();
     expect(ctx.column_types?.to_columns?.id).toEqual({
       data_type: 'integer',
-      native_type: 'int4',
     });
   });
 
@@ -337,7 +487,6 @@ describe('injectRelationshipDataTypes', () => {
     const datasets = createTestDatasets();
     // Remove data_type from one field
     delete (datasets[0].fields![0].ai_context as any).data_type;
-    delete (datasets[0].fields![0].ai_context as any).native_type;
 
     const relationships = [
       {

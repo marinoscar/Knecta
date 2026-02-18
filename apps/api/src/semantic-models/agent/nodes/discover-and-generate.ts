@@ -7,7 +7,7 @@ import { ColumnInfo, ForeignKeyInfo, ColumnStatsResult } from '../../../connecti
 import { OSIDataset, OSIMetric } from '../osi/types';
 import { buildGenerateDatasetPrompt } from '../prompts/generate-dataset-prompt';
 import { extractJson, extractTokenUsage } from '../utils';
-import { injectFieldDataTypes } from '../utils/inject-field-data-types';
+import { injectFieldDataTypes, isEligibleForSampleData } from '../utils/inject-field-data-types';
 import { Logger } from '@nestjs/common';
 
 const logger = new Logger('DiscoverAndGenerate');
@@ -66,6 +66,36 @@ function selectColumnsForStats(
 
   // Cap at 10
   return Array.from(selected).slice(0, 10);
+}
+
+/**
+ * Detect a recency column (updated_at, created_at, etc.) for ordering sample data.
+ * Returns the column name if found, undefined otherwise.
+ */
+function detectRecencyColumn(columns: ColumnInfo[]): string | undefined {
+  const RECENCY_PATTERNS = [
+    'updated_at', 'modified_at', 'last_modified', 'updated_date',
+    'created_at', 'created_date', 'createdat', 'updatedat',
+  ];
+  const DATE_TYPES = new Set([
+    'date', 'timestamp', 'timestamp without time zone',
+    'timestamp with time zone', 'datetime', 'datetime2',
+    'smalldatetime', 'timestamp_ntz', 'timestamp_ltz', 'timestamp_tz',
+  ]);
+
+  for (const pattern of RECENCY_PATTERNS) {
+    const match = columns.find(
+      c => c.name.toLowerCase() === pattern
+        && DATE_TYPES.has(c.dataType.toLowerCase()),
+    );
+    if (match) return match.name;
+  }
+  // Fallback: check for integer 'version' column
+  const versionCol = columns.find(
+    c => c.name.toLowerCase() === 'version'
+      && ['integer', 'int', 'bigint', 'smallint', 'number'].includes(c.dataType.toLowerCase()),
+  );
+  return versionCol?.name;
 }
 
 export function createDiscoverAndGenerateNode(
@@ -147,6 +177,35 @@ export function createDiscoverAndGenerateNode(
           }
         }
 
+        // 5. Collect sample data for eligible text columns
+        const eligibleCols = columns
+          .filter(c => isEligibleForSampleData(c))
+          .slice(0, 30);
+
+        const recencyColumn = detectRecencyColumn(columns);
+
+        const sampleDataMap = new Map<string, string[]>();
+        for (const col of eligibleCols) {
+          // Reuse from columnStats if already fetched
+          if (columnStats.has(col.name)) {
+            sampleDataMap.set(
+              col.name.toLowerCase(),
+              columnStats.get(col.name)!.sampleValues.map(v => String(v)),
+            );
+            continue;
+          }
+          try {
+            const values = await discoveryService.getDistinctColumnValues(
+              connectionId, databaseName, schemaName, tableName,
+              col.name, recencyColumn, 5,
+            );
+            sampleDataMap.set(col.name.toLowerCase(), values);
+          } catch (err) {
+            logger.warn(`Failed to get sample values for ${tableFQN}.${col.name}: ${err}`);
+            sampleDataMap.set(col.name.toLowerCase(), []);
+          }
+        }
+
         // --- Phase: Generate ---
         tableStatus[i].status = 'generating';
         emitProgress({
@@ -215,7 +274,7 @@ export function createDiscoverAndGenerateNode(
         const metrics = (parsed.metrics || []) as OSIMetric[];
 
         // Programmatically inject data types from discovery (source of truth)
-        injectFieldDataTypes(dataset, columns);
+        injectFieldDataTypes(dataset, columns, sampleDataMap);
 
         datasets.push(dataset);
         allMetrics.push(metrics);

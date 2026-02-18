@@ -2,9 +2,28 @@ import { OSIDataset, OSIRelationship, OSIAIContext } from '../osi/types';
 import { ColumnInfo } from '../../../connections/drivers/driver.interface';
 
 /**
- * Programmatically inject data_type and native_type from ColumnInfo into each
+ * Determine if a column is eligible for sample_data injection.
+ * Only short text/string columns qualify.
+ */
+export function isEligibleForSampleData(col: ColumnInfo): boolean {
+  const dt = col.dataType.toLowerCase();
+
+  // Only text/string types with a defined short maxLength
+  const TEXT_TYPES = new Set([
+    'character varying', 'varchar', 'nvarchar',
+    'char', 'nchar', 'character', 'string',
+  ]);
+
+  if (!TEXT_TYPES.has(dt)) return false;
+  if (col.maxLength == null) return false;
+  return col.maxLength < 50;
+}
+
+/**
+ * Programmatically inject data_type and sample_data from ColumnInfo into each
  * field's ai_context. This ensures the Data Agent has accurate type information
  * for SQL generation without relying on the LLM to include it.
+ * For eligible short text columns, sample_data is injected from the provided map.
  *
  * Mutates the dataset in place for efficiency.
  * Only injects if the field name matches a column name (case-insensitive).
@@ -12,6 +31,7 @@ import { ColumnInfo } from '../../../connections/drivers/driver.interface';
 export function injectFieldDataTypes(
   dataset: OSIDataset,
   columns: ColumnInfo[],
+  sampleDataMap?: Map<string, string[]>,
 ): void {
   if (!dataset.fields || dataset.fields.length === 0) return;
 
@@ -34,12 +54,18 @@ export function injectFieldDataTypes(
       } as OSIAIContext;
     }
 
-    // Inject data_type and native_type
+    // Inject data_type and is_primary_key
     const ctx = field.ai_context as OSIAIContext;
     ctx.data_type = col.dataType;
-    ctx.native_type = col.nativeType;
-    ctx.is_nullable = col.isNullable;
     ctx.is_primary_key = col.isPrimaryKey;
+
+    // Inject sample_data for eligible text columns
+    if (sampleDataMap && isEligibleForSampleData(col)) {
+      const raw = sampleDataMap.get(col.name.toLowerCase()) || [];
+      ctx.sample_data = raw
+        .map(v => String(v).substring(0, 25))
+        .slice(0, 5);
+    }
   }
 }
 
@@ -59,18 +85,17 @@ export function injectRelationshipDataTypes(
 ): void {
   if (!relationships || relationships.length === 0) return;
 
-  // Build lookup: datasetName -> fieldName -> { data_type, native_type }
-  const datasetFieldTypes = new Map<string, Map<string, { data_type: string; native_type: string }>>();
+  // Build lookup: datasetName -> fieldName -> { data_type }
+  const datasetFieldTypes = new Map<string, Map<string, { data_type: string }>>();
 
   for (const ds of datasets) {
-    const fieldMap = new Map<string, { data_type: string; native_type: string }>();
+    const fieldMap = new Map<string, { data_type: string }>();
     if (ds.fields) {
       for (const field of ds.fields) {
         const ctx = field.ai_context as OSIAIContext | undefined;
         if (ctx && typeof ctx === 'object' && ctx.data_type) {
           fieldMap.set(field.name.toLowerCase(), {
             data_type: ctx.data_type as string,
-            native_type: (ctx.native_type as string) || '',
           });
         }
       }
@@ -84,10 +109,10 @@ export function injectRelationshipDataTypes(
     if (!fromFields && !toFields) continue;
 
     // Build column_types object
-    const columnTypes: Record<string, Record<string, { data_type: string; native_type: string }>> = {};
+    const columnTypes: Record<string, Record<string, { data_type: string }>> = {};
 
     if (fromFields && rel.from_columns) {
-      const fromColumnTypes: Record<string, { data_type: string; native_type: string }> = {};
+      const fromColumnTypes: Record<string, { data_type: string }> = {};
       for (const colName of rel.from_columns) {
         const typeInfo = fromFields.get(colName.toLowerCase());
         if (typeInfo) {
@@ -100,7 +125,7 @@ export function injectRelationshipDataTypes(
     }
 
     if (toFields && rel.to_columns) {
-      const toColumnTypes: Record<string, { data_type: string; native_type: string }> = {};
+      const toColumnTypes: Record<string, { data_type: string }> = {};
       for (const colName of rel.to_columns) {
         const typeInfo = toFields.get(colName.toLowerCase());
         if (typeInfo) {
