@@ -35,6 +35,12 @@ export const DataAgentState = Annotation.Root({
     default: () => [],
   }),
 
+  // ─── User Preferences ───
+  userPreferences: Annotation<Array<{ key: string; value: string; source: string }>>({
+    reducer: (_, next) => next,
+    default: () => [],
+  }),
+
   // ─── Phase Artifacts ───
   plan: Annotation<PlanArtifact | null>({
     reducer: (_, next) => next,

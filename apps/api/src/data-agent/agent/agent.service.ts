@@ -123,6 +123,13 @@ export class DataAgentAgentService {
       ? await this.neoOntologyService.getDatasetsByNames(ontology.id, datasetNames)
       : [];
 
+    // ── Step 4b: Load user preferences for this ontology ──
+    const effectivePreferences = await this.dataAgentService.getEffectivePreferences(
+      userId,
+      ontology.id,
+    );
+    this.logger.log(`Loaded ${effectivePreferences.length} user preferences`);
+
     // ── Step 4: Load conversation history (last 10 messages) ──
     const previousMessages = await this.prisma.dataChatMessage.findMany({
       where: { chatId, status: { in: ['complete', 'clarification_needed'] } },
@@ -194,6 +201,7 @@ export class DataAgentAgentService {
         conversationContext,
         relevantDatasets: datasetNames,
         relevantDatasetDetails,
+        userPreferences: effectivePreferences,
       });
 
       // ── Check if clarification was requested (graph terminated early at planner) ──
