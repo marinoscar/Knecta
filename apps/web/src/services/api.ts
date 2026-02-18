@@ -562,3 +562,55 @@ export async function getMessageTraces(
 ): Promise<LlmTraceRecord[]> {
   return api.get<LlmTraceRecord[]>(`/data-agent/chats/${chatId}/messages/${messageId}/traces`);
 }
+
+// ============================================================================
+// Data Agent Preferences API
+// ============================================================================
+
+export interface AgentPreference {
+  id: string;
+  userId: string;
+  ontologyId: string | null;
+  key: string;
+  value: string;
+  source: 'manual' | 'auto_captured';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getAgentPreferences(
+  ontologyId?: string,
+  scope?: 'global' | 'ontology' | 'all',
+): Promise<AgentPreference[]> {
+  const params = new URLSearchParams();
+  if (ontologyId) params.set('ontologyId', ontologyId);
+  if (scope) params.set('scope', scope);
+  const qs = params.toString();
+  // api.get already unwraps { data: ... } via the TransformInterceptor handling in request()
+  return api.get<AgentPreference[]>(`/data-agent/preferences${qs ? `?${qs}` : ''}`);
+}
+
+export async function createAgentPreference(data: {
+  ontologyId?: string | null;
+  key: string;
+  value: string;
+  source?: 'manual' | 'auto_captured';
+}): Promise<AgentPreference> {
+  return api.post<AgentPreference>('/data-agent/preferences', data);
+}
+
+export async function updateAgentPreference(
+  id: string,
+  data: { value: string },
+): Promise<AgentPreference> {
+  return api.patch<AgentPreference>(`/data-agent/preferences/${id}`, data);
+}
+
+export async function deleteAgentPreference(id: string): Promise<void> {
+  return api.delete<void>(`/data-agent/preferences/${id}`);
+}
+
+export async function clearAgentPreferences(ontologyId?: string): Promise<void> {
+  const params = ontologyId ? `?ontologyId=${ontologyId}` : '';
+  return api.delete<void>(`/data-agent/preferences${params}`);
+}
