@@ -114,6 +114,21 @@ export const mockPermissions = {
     name: 'ontologies:delete',
     description: 'Delete ontologies',
   },
+  dataAgentRead: {
+    id: randomUUID(),
+    name: 'data_agent:read',
+    description: 'Read data agent resources',
+  },
+  dataAgentWrite: {
+    id: randomUUID(),
+    name: 'data_agent:write',
+    description: 'Write data agent resources',
+  },
+  dataAgentDelete: {
+    id: randomUUID(),
+    name: 'data_agent:delete',
+    description: 'Delete data agent resources',
+  },
 };
 
 export const mockRoles = {
@@ -416,6 +431,9 @@ export const rolePermissionsMap = {
     mockPermissions.ontologiesRead,
     mockPermissions.ontologiesWrite,
     mockPermissions.ontologiesDelete,
+    mockPermissions.dataAgentRead,
+    mockPermissions.dataAgentWrite,
+    mockPermissions.dataAgentDelete,
   ],
   contributor: [
     mockPermissions.userSettingsRead,
@@ -431,11 +449,15 @@ export const rolePermissionsMap = {
     mockPermissions.ontologiesRead,
     mockPermissions.ontologiesWrite,
     mockPermissions.ontologiesDelete,
+    mockPermissions.dataAgentRead,
+    mockPermissions.dataAgentWrite,
+    mockPermissions.dataAgentDelete,
   ],
   viewer: [
     mockPermissions.userSettingsRead,
     mockPermissions.userSettingsWrite,
     mockPermissions.ontologiesRead,
+    mockPermissions.dataAgentRead,
   ],
 };
 
@@ -691,6 +713,47 @@ export function createMockOntology(
     relationshipCount,
     errorMessage,
     createdByUserId,
+    createdAt,
+    updatedAt,
+  };
+}
+
+// ============================================================================
+// Data Agent Preference Factory
+// ============================================================================
+
+export interface CreateMockDataAgentPreferenceOptions {
+  id?: string;
+  userId: string;
+  ontologyId?: string | null;
+  key?: string;
+  value?: string;
+  source?: 'manual' | 'auto_captured';
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export function createMockDataAgentPreference(
+  options: CreateMockDataAgentPreferenceOptions,
+): any {
+  const {
+    id = randomUUID(),
+    userId,
+    ontologyId = null,
+    key = 'output_format',
+    value = 'table',
+    source = 'manual',
+    createdAt = new Date(),
+    updatedAt = new Date(),
+  } = options;
+
+  return {
+    id,
+    userId,
+    ontologyId,
+    key,
+    value,
+    source,
     createdAt,
     updatedAt,
   };
