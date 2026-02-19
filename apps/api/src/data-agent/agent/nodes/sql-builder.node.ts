@@ -79,6 +79,27 @@ export function createSqlBuilderNode(
       const querySpecs: QuerySpec[] = response.parsed.queries;
       const nodeTokens = extractTokenUsage(response.raw);
 
+      // ── Column validation against YAML schemas (defense-in-depth) ──
+      const knownColumns = new Set<string>();
+      for (const ds of enrichedJoinPlan.relevantDatasets) {
+        // Extract field names from YAML using simple regex
+        const fieldMatches = ds.yaml.matchAll(/^\s*-?\s*name:\s*(\S+)/gm);
+        for (const match of fieldMatches) {
+          knownColumns.add(match[1].toLowerCase());
+        }
+      }
+
+      // Warn if expectedColumns reference unknown fields
+      if (knownColumns.size > 0) {
+        for (const qs of querySpecs) {
+          for (const col of qs.expectedColumns) {
+            if (!knownColumns.has(col.toLowerCase())) {
+              qs.notes += qs.notes ? ` WARNING: "${col}" not found in YAML schemas.` : `WARNING: "${col}" not found in YAML schemas.`;
+            }
+          }
+        }
+      }
+
       emit({ type: 'phase_artifact', phase: 'sql_builder', artifact: querySpecs });
       emit({ type: 'token_update', phase: 'sql_builder', tokensUsed: nodeTokens });
       emit({ type: 'phase_complete', phase: 'sql_builder' });

@@ -62,5 +62,8 @@ ${revisionSection}
    - Snowflake: Identifiers are case-insensitive (stored uppercase). Use double-quoted identifiers to preserve case. Supports \`LIMIT\`, \`DATE_TRUNC\`, \`ILIKE\`, \`::type\` casts (similar to PostgreSQL). Use \`FLATTEN()\` for semi-structured data.
 6. Handle NULLs explicitly (COALESCE, IS NOT NULL, etc.).
 7. Use DATE_TRUNC for time-based groupings when applicable.
-8. Include column aliases that match the expected output description.`;
+8. Include column aliases that match the expected output description.
+9. CRITICAL: You are FORBIDDEN from guessing or inventing column names not in the YAML schemas above.
+10. CRITICAL: You are FORBIDDEN from fabricating join conditions not listed in the Join Paths section above.
+11. If a needed column or join is not available in the schemas, generate a query using only what IS available and add a note explaining what is missing.`;
 }

@@ -6,7 +6,7 @@ export function buildExecutorRepairPrompt(
   datasetSchemas?: string,
 ): string {
   const schemaSection = datasetSchemas
-    ? `\n## Dataset Schemas (from semantic model)\n\nUse these column names and types to fix the SQL:\n\n${datasetSchemas}\n`
+    ? `\n## Dataset Schemas (from semantic model)\n\nUse these column names and types to fix the SQL. CRITICAL: Use ONLY column names that appear in these schemas. Do NOT invent or guess column names.\n\n${datasetSchemas}\n`
     : '';
 
   return `The following SQL query failed during execution. Fix it and return ONLY the corrected SQL query (no markdown fences, no explanation).
