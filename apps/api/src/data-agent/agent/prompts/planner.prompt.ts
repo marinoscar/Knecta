@@ -40,12 +40,73 @@ Analyze the question and produce a structured plan with ordered sub-tasks. Each 
 ## Guidelines
 
 1. ALWAYS decompose into sub-tasks, even for simple questions (a simple question may have just 1 step).
-2. Use "python" strategy for: statistical analysis, visualization/charts, complex calculations, data transformations that SQL can't handle well.
+2. Use "python" strategy for: statistical analysis, complex calculations, data transformations that SQL can't handle well.
 3. Use "sql_then_python" when you need to query data AND then do analysis/visualization on the results.
 4. Use "sql" for straightforward data retrieval and aggregation.
 5. Order steps so that dependencies are resolved first.
 6. Be specific about what columns, metrics, and dimensions are relevant.
 7. Include acceptance checks that the verifier should run.
+
+## Visualization Guidance
+
+You MUST include a visualization step (with chartType set) when any of these conditions apply:
+
+1. **Explicit Request**: User explicitly requests a chart, graph, plot, visualization, or visual representation
+   - "show me a chart of...", "plot the trend...", "visualize the breakdown..."
+
+2. **Comparisons**: Question involves comparing values across categories
+   - Examples: "compare revenue by region", "which product sells more", "rank stores by profit"
+   - **chartType: "bar"** (use horizontal layout for rankings/top N)
+
+3. **Trends Over Time**: Question involves temporal patterns or time series
+   - Examples: "how did sales change this year", "monthly revenue trend", "growth over quarters"
+   - **chartType: "line"**
+
+4. **Proportions/Composition**: Question involves parts of a whole or percentage breakdown
+   - Examples: "breakdown of expenses by category", "market share distribution", "what percent..."
+   - **chartType: "pie"** (ONLY if result has ≤6 categories; otherwise use bar chart)
+
+5. **Correlations**: Question involves relationship between two numeric variables
+   - Examples: "relationship between price and sales", "does discount affect quantity", "correlation..."
+   - **chartType: "scatter"**
+
+6. **Rankings/Top N**: Question asks for top/bottom N items by some metric
+   - Examples: "top 10 customers", "best performing products", "worst regions"
+   - **chartType: "bar"** with layout: "horizontal"
+
+### Strategy Selection with chartType
+
+When adding a visualization step, choose strategy based on data availability:
+
+- **"sql_then_python" + chartType**: Data must be queried from database first
+  - SQL executes normally, but Python sandbox is SKIPPED
+  - Executor uses structured LLM output to generate ChartSpec from SQL results
+  - Example: "Compare Q4 revenue by region" → SQL query + bar chart generation
+
+- **"python" + chartType**: Visualization depends only on prior step results (no new SQL)
+  - No SQL execution, no Python sandbox
+  - Executor generates ChartSpec directly from prior stepResults
+  - Example: Step 1 gets raw data, Step 2 (strategy: python, chartType: bar) visualizes it
+
+### When NOT to Add Visualization
+
+Do NOT add a visualization step when:
+
+- User asks for a specific number or single-value lookup ("what is total revenue?")
+- Result is a single row or scalar value (no distribution to visualize)
+- User asks a schema exploration question ("what tables exist?", "show me columns")
+- Question is purely analytical without comparative/trend/composition aspects
+- Result set is too large (>100 categories) — summarize with top N + "Other" instead
+
+### Chart Type Decision Tree
+
+```
+Is it a comparison across categories? → bar (vertical or horizontal)
+Is it a trend over time? → line
+Is it a part-of-whole (≤6 categories)? → pie
+Is it a correlation between two variables? → scatter
+Is it a ranking/top N? → bar (horizontal layout)
+```
 
 ## CRITICAL: Ontology as Source of Truth
 The datasets listed in "Available Datasets" below come from a semantic search and may not be complete. The Navigator phase will query the full ontology to verify what is available.
