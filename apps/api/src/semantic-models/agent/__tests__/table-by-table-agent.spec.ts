@@ -602,3 +602,417 @@ describe('createAssembleModelNode', () => {
     await expect(node(state)).resolves.toBeDefined();
   });
 });
+
+// Parallel Discover and Generate Tests
+describe('createDiscoverAndGenerateNode (parallel processing)', () => {
+  const createMockDiscoveryService = () => ({
+    listColumns: jest.fn(),
+    getForeignKeys: jest.fn(),
+    getSampleData: jest.fn(),
+    getColumnStats: jest.fn(),
+    getDistinctColumnValues: jest.fn(),
+  });
+
+  const createMockSemanticModelsService = () => ({
+    updateRunProgress: jest.fn().mockResolvedValue(undefined),
+  });
+
+  const createMockLLM = () => ({
+    invoke: jest.fn(),
+  });
+
+  const createMockColumns = (tableName: string): ColumnInfo[] => [
+    {
+      name: 'id',
+      dataType: 'integer',
+      nativeType: 'int4',
+      isNullable: false,
+      isPrimaryKey: true,
+    },
+    {
+      name: 'name',
+      dataType: 'character varying',
+      nativeType: 'varchar',
+      isNullable: true,
+      isPrimaryKey: false,
+    },
+  ];
+
+  const createValidLLMResponse = (tableName: string) => ({
+    content: JSON.stringify({
+      dataset: {
+        name: tableName.replace('.', '_'),
+        source: `mydb.${tableName}`,
+        primary_key: ['id'],
+        description: `Dataset for ${tableName}`,
+        fields: [
+          {
+            name: 'id',
+            expression: { dialects: [{ dialect: 'ANSI_SQL', expression: 'id' }] },
+            label: 'ID',
+            description: 'Primary key',
+            ai_context: { synonyms: ['identifier'] },
+          },
+          {
+            name: 'name',
+            expression: { dialects: [{ dialect: 'ANSI_SQL', expression: 'name' }] },
+            label: 'Name',
+            description: 'Name field',
+            ai_context: { synonyms: ['title', 'label'] },
+          },
+        ],
+        ai_context: { synonyms: [tableName] },
+      },
+      metrics: [],
+    }),
+    usage_metadata: {
+      input_tokens: 100,
+      output_tokens: 50,
+      total_tokens: 150,
+    },
+  });
+
+  const createMockState = (tables: string[]) => ({
+    connectionId: 'test-conn',
+    userId: 'test-user',
+    databaseName: 'mydb',
+    selectedSchemas: ['public'],
+    selectedTables: tables,
+    runId: 'run-123',
+    modelName: 'Test Model',
+    instructions: null,
+    datasets: [],
+    foreignKeys: [],
+    tableMetrics: [],
+    failedTables: [],
+    relationships: [],
+    modelMetrics: [],
+    modelAiContext: { synonyms: [], instructions: '' },
+    semanticModel: null,
+    tokensUsed: { prompt: 0, completion: 0, total: 0 },
+    semanticModelId: null,
+    osiSpecText: '',
+    error: null,
+  });
+
+  let originalEnvValue: string | undefined;
+
+  beforeEach(() => {
+    // Save original env var
+    originalEnvValue = process.env.SEMANTIC_MODEL_CONCURRENCY;
+  });
+
+  afterEach(() => {
+    // Restore env var
+    if (originalEnvValue === undefined) {
+      delete process.env.SEMANTIC_MODEL_CONCURRENCY;
+    } else {
+      process.env.SEMANTIC_MODEL_CONCURRENCY = originalEnvValue;
+    }
+  });
+
+  it('should process multiple tables in parallel', async () => {
+    const mockDiscovery = createMockDiscoveryService();
+    const mockService = createMockSemanticModelsService();
+    const mockLLM = createMockLLM();
+    const mockEmit = jest.fn();
+
+    const tables = ['public.table1', 'public.table2', 'public.table3'];
+
+    // Mock discovery responses
+    mockDiscovery.listColumns.mockResolvedValue({ data: createMockColumns('table1') });
+    mockDiscovery.getForeignKeys.mockResolvedValue({ data: [] });
+    mockDiscovery.getSampleData.mockResolvedValue({ data: { columns: ['id', 'name'], rows: [[1, 'test']] } });
+    mockDiscovery.getColumnStats.mockResolvedValue({ data: { sampleValues: ['test'], distinctCount: 1, nullCount: 0 } });
+    mockDiscovery.getDistinctColumnValues.mockResolvedValue(['test']);
+
+    // Mock LLM responses with slight delay to verify parallel execution
+    mockLLM.invoke.mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      return createValidLLMResponse('table1');
+    });
+
+    const { createDiscoverAndGenerateNode } = require('../nodes/discover-and-generate');
+    const node = createDiscoverAndGenerateNode(
+      mockLLM as any,
+      mockDiscovery as any,
+      mockService as any,
+      'test-conn',
+      'test-user',
+      'mydb',
+      'run-123',
+      mockEmit,
+    );
+
+    const state = createMockState(tables);
+    const startTime = Date.now();
+    const result = await node(state);
+    const duration = Date.now() - startTime;
+
+    // With concurrency > 1, processing 3 tables with 50ms delay each should take ~50-100ms
+    // Sequential would take ~150ms+
+    expect(duration).toBeLessThan(150);
+
+    expect(result.datasets).toHaveLength(3);
+    expect(mockLLM.invoke).toHaveBeenCalledTimes(3);
+
+    // Verify progress events show parallel processing
+    const progressEvents = mockEmit.mock.calls.filter(c => c[0].type === 'progress');
+    expect(progressEvents.length).toBeGreaterThan(0);
+  });
+
+  it('should handle individual table failures without stopping other tables', async () => {
+    const mockDiscovery = createMockDiscoveryService();
+    const mockService = createMockSemanticModelsService();
+    const mockLLM = createMockLLM();
+    const mockEmit = jest.fn();
+
+    const tables = ['public.table1', 'public.table2', 'public.table3'];
+
+    // Mock discovery responses
+    mockDiscovery.listColumns.mockImplementation(async (connId, db, schema, table) => {
+      if (table === 'table2') {
+        throw new Error('Discovery failed for table2');
+      }
+      return { data: createMockColumns(table) };
+    });
+    mockDiscovery.getForeignKeys.mockResolvedValue({ data: [] });
+    mockDiscovery.getSampleData.mockResolvedValue({ data: { columns: ['id', 'name'], rows: [[1, 'test']] } });
+    mockDiscovery.getColumnStats.mockResolvedValue({ data: { sampleValues: ['test'], distinctCount: 1, nullCount: 0 } });
+    mockDiscovery.getDistinctColumnValues.mockResolvedValue(['test']);
+
+    // Mock LLM responses
+    mockLLM.invoke.mockImplementation(async () => createValidLLMResponse('table1'));
+
+    const { createDiscoverAndGenerateNode } = require('../nodes/discover-and-generate');
+    const node = createDiscoverAndGenerateNode(
+      mockLLM as any,
+      mockDiscovery as any,
+      mockService as any,
+      'test-conn',
+      'test-user',
+      'mydb',
+      'run-123',
+      mockEmit,
+    );
+
+    const state = createMockState(tables);
+    const result = await node(state);
+
+    // Should have 2 successful datasets (table1 and table3)
+    expect(result.datasets).toHaveLength(2);
+    expect(result.failedTables).toEqual(['public.table2']);
+
+    // Verify table_error event was emitted
+    const errorEvents = mockEmit.mock.calls.filter(c => c[0].type === 'table_error');
+    expect(errorEvents).toHaveLength(1);
+    expect(errorEvents[0][0].tableName).toBe('public.table2');
+  });
+
+  it('should pre-fetch foreign keys before parallel processing', async () => {
+    const mockDiscovery = createMockDiscoveryService();
+    const mockService = createMockSemanticModelsService();
+    const mockLLM = createMockLLM();
+    const mockEmit = jest.fn();
+
+    const tables = ['public.table1', 'public.table2', 'schema2.table3'];
+
+    const mockFKs: ForeignKeyInfo[] = [
+      {
+        constraintName: 'fk_test',
+        fromSchema: 'public',
+        fromTable: 'table1',
+        fromColumns: ['ref_id'],
+        toSchema: 'public',
+        toTable: 'table2',
+        toColumns: ['id'],
+      },
+    ];
+
+    // Mock discovery responses
+    mockDiscovery.listColumns.mockResolvedValue({ data: createMockColumns('table1') });
+    mockDiscovery.getForeignKeys.mockResolvedValue({ data: mockFKs });
+    mockDiscovery.getSampleData.mockResolvedValue({ data: { columns: ['id', 'name'], rows: [[1, 'test']] } });
+    mockDiscovery.getColumnStats.mockResolvedValue({ data: { sampleValues: ['test'], distinctCount: 1, nullCount: 0 } });
+    mockDiscovery.getDistinctColumnValues.mockResolvedValue(['test']);
+
+    // Mock LLM responses
+    mockLLM.invoke.mockResolvedValue(createValidLLMResponse('table1'));
+
+    const { createDiscoverAndGenerateNode } = require('../nodes/discover-and-generate');
+    const node = createDiscoverAndGenerateNode(
+      mockLLM as any,
+      mockDiscovery as any,
+      mockService as any,
+      'test-conn',
+      'test-user',
+      'mydb',
+      'run-123',
+      mockEmit,
+    );
+
+    const state = createMockState(tables);
+    await node(state);
+
+    // getForeignKeys should be called once per unique schema (public and schema2)
+    expect(mockDiscovery.getForeignKeys).toHaveBeenCalledTimes(2);
+    expect(mockDiscovery.getForeignKeys).toHaveBeenCalledWith('test-conn', 'mydb', 'public');
+    expect(mockDiscovery.getForeignKeys).toHaveBeenCalledWith('test-conn', 'mydb', 'schema2');
+  });
+
+  it('should respect SEMANTIC_MODEL_CONCURRENCY env var', async () => {
+    process.env.SEMANTIC_MODEL_CONCURRENCY = '3';
+
+    const mockDiscovery = createMockDiscoveryService();
+    const mockService = createMockSemanticModelsService();
+    const mockLLM = createMockLLM();
+    const mockEmit = jest.fn();
+
+    const tables = Array.from({ length: 6 }, (_, i) => `public.table${i + 1}`);
+
+    let activeCount = 0;
+    let maxConcurrent = 0;
+
+    // Mock discovery responses
+    mockDiscovery.listColumns.mockResolvedValue({ data: createMockColumns('table1') });
+    mockDiscovery.getForeignKeys.mockResolvedValue({ data: [] });
+    mockDiscovery.getSampleData.mockResolvedValue({ data: { columns: ['id', 'name'], rows: [[1, 'test']] } });
+    mockDiscovery.getColumnStats.mockResolvedValue({ data: { sampleValues: ['test'], distinctCount: 1, nullCount: 0 } });
+    mockDiscovery.getDistinctColumnValues.mockResolvedValue(['test']);
+
+    // Mock LLM with tracking
+    mockLLM.invoke.mockImplementation(async () => {
+      activeCount++;
+      maxConcurrent = Math.max(maxConcurrent, activeCount);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      activeCount--;
+      return createValidLLMResponse('table1');
+    });
+
+    const { createDiscoverAndGenerateNode } = require('../nodes/discover-and-generate');
+    const node = createDiscoverAndGenerateNode(
+      mockLLM as any,
+      mockDiscovery as any,
+      mockService as any,
+      'test-conn',
+      'test-user',
+      'mydb',
+      'run-123',
+      mockEmit,
+    );
+
+    const state = createMockState(tables);
+    await node(state);
+
+    // Should respect concurrency limit of 3
+    expect(maxConcurrent).toBeLessThanOrEqual(3);
+    expect(maxConcurrent).toBeGreaterThan(1); // Should be parallel
+  });
+
+  it('should default to DEFAULT_TABLE_CONCURRENCY when env var is not set', async () => {
+    delete process.env.SEMANTIC_MODEL_CONCURRENCY;
+
+    const mockDiscovery = createMockDiscoveryService();
+    const mockService = createMockSemanticModelsService();
+    const mockLLM = createMockLLM();
+    const mockEmit = jest.fn();
+
+    const tables = Array.from({ length: 10 }, (_, i) => `public.table${i + 1}`);
+
+    let activeCount = 0;
+    let maxConcurrent = 0;
+
+    // Mock discovery responses
+    mockDiscovery.listColumns.mockResolvedValue({ data: createMockColumns('table1') });
+    mockDiscovery.getForeignKeys.mockResolvedValue({ data: [] });
+    mockDiscovery.getSampleData.mockResolvedValue({ data: { columns: ['id', 'name'], rows: [[1, 'test']] } });
+    mockDiscovery.getColumnStats.mockResolvedValue({ data: { sampleValues: ['test'], distinctCount: 1, nullCount: 0 } });
+    mockDiscovery.getDistinctColumnValues.mockResolvedValue(['test']);
+
+    // Mock LLM with tracking
+    mockLLM.invoke.mockImplementation(async () => {
+      activeCount++;
+      maxConcurrent = Math.max(maxConcurrent, activeCount);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      activeCount--;
+      return createValidLLMResponse('table1');
+    });
+
+    const { createDiscoverAndGenerateNode, DEFAULT_TABLE_CONCURRENCY } = require('../nodes/discover-and-generate');
+    const node = createDiscoverAndGenerateNode(
+      mockLLM as any,
+      mockDiscovery as any,
+      mockService as any,
+      'test-conn',
+      'test-user',
+      'mydb',
+      'run-123',
+      mockEmit,
+    );
+
+    const state = createMockState(tables);
+    await node(state);
+
+    // Should use default concurrency (5)
+    expect(DEFAULT_TABLE_CONCURRENCY).toBe(5);
+    expect(maxConcurrent).toBeLessThanOrEqual(5);
+    expect(maxConcurrent).toBeGreaterThan(1);
+  });
+
+  it('should clamp concurrency to 1-20 range', async () => {
+    const testCases = [
+      { envValue: '0', expectedMax: 1 },
+      { envValue: '-5', expectedMax: 1 },
+      { envValue: '50', expectedMax: 20 },
+      { envValue: 'abc', expectedMax: 5 }, // Falls back to default
+    ];
+
+    for (const { envValue, expectedMax } of testCases) {
+      process.env.SEMANTIC_MODEL_CONCURRENCY = envValue;
+
+      const mockDiscovery = createMockDiscoveryService();
+      const mockService = createMockSemanticModelsService();
+      const mockLLM = createMockLLM();
+      const mockEmit = jest.fn();
+
+      const numTables = expectedMax + 5; // More tables than max concurrency
+      const tables = Array.from({ length: numTables }, (_, i) => `public.table${i + 1}`);
+
+      let activeCount = 0;
+      let maxConcurrent = 0;
+
+      // Mock discovery responses
+      mockDiscovery.listColumns.mockResolvedValue({ data: createMockColumns('table1') });
+      mockDiscovery.getForeignKeys.mockResolvedValue({ data: [] });
+      mockDiscovery.getSampleData.mockResolvedValue({ data: { columns: ['id', 'name'], rows: [[1, 'test']] } });
+      mockDiscovery.getColumnStats.mockResolvedValue({ data: { sampleValues: ['test'], distinctCount: 1, nullCount: 0 } });
+      mockDiscovery.getDistinctColumnValues.mockResolvedValue(['test']);
+
+      // Mock LLM with tracking
+      mockLLM.invoke.mockImplementation(async () => {
+        activeCount++;
+        maxConcurrent = Math.max(maxConcurrent, activeCount);
+        await new Promise(resolve => setTimeout(resolve, 10));
+        activeCount--;
+        return createValidLLMResponse('table1');
+      });
+
+      const { createDiscoverAndGenerateNode } = require('../nodes/discover-and-generate');
+      const node = createDiscoverAndGenerateNode(
+        mockLLM as any,
+        mockDiscovery as any,
+        mockService as any,
+        'test-conn',
+        'test-user',
+        'mydb',
+        'run-123',
+        mockEmit,
+      );
+
+      const state = createMockState(tables);
+      await node(state);
+
+      expect(maxConcurrent).toBeLessThanOrEqual(expectedMax);
+    }
+  });
+});
