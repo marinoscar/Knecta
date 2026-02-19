@@ -18,6 +18,9 @@ export function buildExplainerPrompt(
         detail += `\n(${r.pythonResult.charts.length} chart(s) generated)`;
       }
     }
+    if (r.chartSpec) {
+      detail += `\n**Interactive Chart**: ${r.chartSpec.type} chart titled "${r.chartSpec.title}" (rendered below your narrative)`;
+    }
     return detail;
   }).join('\n\n');
 
@@ -53,10 +56,11 @@ ${preferencesSection}
 1. Start with a **direct answer** to the user's question.
 2. Support your answer with the data from the execution results.
 3. Format data in markdown tables where appropriate.
-4. Include any charts generated during execution as inline images.
-5. Mention your methodology briefly.
-6. Include caveats if verification found issues or if assumptions were made.
-7. Be concise but thorough.
+4. **Chart References**: If any steps generated interactive charts (chartSpec present), reference them naturally in your narrative (e.g., "As shown in the chart below...", "The visualization reveals..."). Charts are rendered as interactive components below your text — do NOT embed markdown image tags or attempt to describe the chart structure.
+5. If no charts were generated but the data would clearly benefit from visualization, briefly suggest this for follow-up.
+6. Mention your methodology briefly.
+7. Include caveats if verification found issues or if assumptions were made.
+8. Be concise but thorough.
 
 ## Previous Conversation
 ${conversationContext || 'This is the start of the conversation.'}`;

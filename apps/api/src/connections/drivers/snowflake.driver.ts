@@ -9,6 +9,7 @@ import {
   ForeignKeyInfo,
   SampleDataResult,
   ColumnStatsResult,
+  ColumnValueOverlapResult,
   QueryResult,
 } from './driver.interface';
 
@@ -403,6 +404,85 @@ export class SnowflakeDriver implements DiscoveryDriver {
         sampleValues,
         min: stats['min'],
         max: stats['max'],
+      };
+    } finally {
+      this.destroyConnection(connection);
+    }
+  }
+
+  async getColumnValueOverlap(
+    params: ConnectionParams,
+    database: string,
+    childSchema: string,
+    childTable: string,
+    childColumn: string,
+    parentSchema: string,
+    parentTable: string,
+    parentColumn: string,
+    sampleSize = 1000,
+  ): Promise<ColumnValueOverlapResult> {
+    const sanitizedDb = this.sanitizeIdentifier(database);
+    const sanitizedChildSchema = this.sanitizeIdentifier(childSchema);
+    const sanitizedChildTable = this.sanitizeIdentifier(childTable);
+    const sanitizedChildColumn = this.sanitizeIdentifier(childColumn);
+    const sanitizedParentSchema = this.sanitizeIdentifier(parentSchema);
+    const sanitizedParentTable = this.sanitizeIdentifier(parentTable);
+    const sanitizedParentColumn = this.sanitizeIdentifier(parentColumn);
+
+    const connection = await this.createConnection(params, database);
+    try {
+      const { rows } = await this.exec(
+        connection,
+        `WITH child_sample AS (
+           SELECT "${sanitizedChildColumn}" AS val
+           FROM "${sanitizedDb}"."${sanitizedChildSchema}"."${sanitizedChildTable}"
+           LIMIT ${sampleSize}
+         ),
+         child_stats AS (
+           SELECT
+             COUNT(DISTINCT val) AS distinct_count,
+             SUM(CASE WHEN val IS NULL THEN 1 ELSE 0 END) AS null_count,
+             COUNT(*) AS total_count
+           FROM child_sample
+         ),
+         child_vals AS (
+           SELECT DISTINCT val::VARCHAR AS val
+           FROM child_sample
+           WHERE val IS NOT NULL
+         ),
+         parent_vals AS (
+           SELECT DISTINCT "${sanitizedParentColumn}"::VARCHAR AS val
+           FROM "${sanitizedDb}"."${sanitizedParentSchema}"."${sanitizedParentTable}"
+           WHERE "${sanitizedParentColumn}" IS NOT NULL
+           LIMIT ${sampleSize}
+         )
+         SELECT
+           cs.distinct_count AS "childDistinctCount",
+           cs.null_count AS "childNullCount",
+           cs.total_count AS "childSampleSize",
+           (SELECT COUNT(*) FROM parent_vals) AS "parentDistinctCount",
+           (SELECT COUNT(*) FROM child_vals c INNER JOIN parent_vals p ON c.val = p.val) AS "overlapCount"
+         FROM child_stats cs`,
+      );
+
+      const row = rows[0];
+      const childDistinctCount = parseInt(row['childDistinctCount'] as string, 10);
+      const childNullCount = parseInt(row['childNullCount'] as string, 10);
+      const childSampleSize = parseInt(row['childSampleSize'] as string, 10);
+      const parentDistinctCount = parseInt(row['parentDistinctCount'] as string, 10);
+      const overlapCount = parseInt(row['overlapCount'] as string, 10);
+
+      const overlapRatio = overlapCount / Math.max(childDistinctCount, 1);
+      const nullRatio = childNullCount / Math.max(childSampleSize, 1);
+
+      return {
+        childDistinctCount,
+        childNullCount,
+        childSampleSize,
+        parentDistinctCount,
+        overlapCount,
+        overlapRatio,
+        nullRatio,
       };
     } finally {
       this.destroyConnection(connection);
