@@ -16,8 +16,9 @@ export function createVerifierNode(llm: any, sandboxService: SandboxService, emi
       const plan = state.plan!;
       const stepResults = state.stepResults || [];
 
-      // For simple queries, skip verification
-      if (plan.complexity === 'simple') {
+      // Skip verification for simple single-table queries (no joins = low risk of grain explosion)
+      const hasJoins = state.joinPlan && state.joinPlan.joinPaths.length > 0;
+      if (plan.complexity === 'simple' && !hasJoins) {
         const passReport: VerificationReport = {
           passed: true,
           checks: [{ name: 'simple_query_bypass', passed: true, message: 'Simple query — verification skipped' }],
