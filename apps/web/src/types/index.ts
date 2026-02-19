@@ -414,7 +414,7 @@ export interface DataChatMessage {
     error?: string;
     claimed?: boolean;
     plan?: {
-      complexity: 'simple' | 'analytical';
+      complexity: 'simple' | 'analytical' | 'conversational';
       intent: string;
       steps: Array<{ id: number; description: string; strategy: string }>;
     };
@@ -434,6 +434,12 @@ export interface DataChatMessage {
     stepResults?: Array<{ stepId: number; description: string; strategy: string; sqlResult?: { rowCount: number; columns: string[]; data: string }; pythonResult?: { stdout: string; charts: string[] }; error?: string }>;
     joinPlan?: { relevantDatasets: Array<{ name: string; description: string; source: string; yaml?: string }>; joinPaths: Array<{ datasets: string[]; edges: Array<{ fromDataset: string; toDataset: string; fromColumns: string[]; toColumns: string[]; relationshipName: string }> }>; notes: string };
     clarificationQuestions?: Array<{ question: string; assumption: string }>;
+    cannotAnswer?: {
+      reason: string;
+      missingDatasets?: string[];
+      missingJoins?: string[];
+      availableDatasets?: string[];
+    };
   };
   status: 'generating' | 'complete' | 'failed' | 'clarification_needed';
   createdAt: string;
