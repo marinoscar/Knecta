@@ -249,7 +249,9 @@ describe('Data Agent Preferences (Integration)', () => {
         value: 'table',
       });
 
-      context.prismaMock.dataAgentPreference.upsert.mockResolvedValue(created);
+      // null ontologyId → findFirst + create path
+      context.prismaMock.dataAgentPreference.findFirst.mockResolvedValue(null);
+      context.prismaMock.dataAgentPreference.create.mockResolvedValue(created);
 
       const response = await request(context.app.getHttpServer())
         .post('/api/data-agent/preferences')
@@ -257,12 +259,13 @@ describe('Data Agent Preferences (Integration)', () => {
         .send({ key: 'output_format', value: 'table' })
         .expect(201);
 
-      // Controller returns the upserted record directly (wrapped by global transformer)
+      // Controller returns the created record directly (wrapped by global transformer)
       const body = response.body.data ?? response.body;
       expect(body).toHaveProperty('key', 'output_format');
       expect(body).toHaveProperty('value', 'table');
       expect(body).toHaveProperty('userId', contributor.id);
-      expect(context.prismaMock.dataAgentPreference.upsert).toHaveBeenCalled();
+      expect(context.prismaMock.dataAgentPreference.findFirst).toHaveBeenCalled();
+      expect(context.prismaMock.dataAgentPreference.create).toHaveBeenCalled();
     });
 
     it('should upsert when same user+ontology+key exists (updates value)', async () => {
@@ -321,7 +324,9 @@ describe('Data Agent Preferences (Integration)', () => {
         value: 'detailed',
       });
 
-      context.prismaMock.dataAgentPreference.upsert.mockResolvedValue(created);
+      // null ontologyId → findFirst + create path
+      context.prismaMock.dataAgentPreference.findFirst.mockResolvedValue(null);
+      context.prismaMock.dataAgentPreference.create.mockResolvedValue(created);
 
       const response = await request(context.app.getHttpServer())
         .post('/api/data-agent/preferences')
@@ -329,16 +334,16 @@ describe('Data Agent Preferences (Integration)', () => {
         .send({ key: 'verbosity', value: 'detailed' }) // No ontologyId
         .expect(201);
 
-      // Controller returns the upserted record wrapped by global transformer
+      // Controller returns the created record wrapped by global transformer
       const body = response.body.data ?? response.body;
       expect(body).toHaveProperty('ontologyId', null);
 
       // Verify create payload has ontologyId: null
       expect(
-        context.prismaMock.dataAgentPreference.upsert,
+        context.prismaMock.dataAgentPreference.create,
       ).toHaveBeenCalledWith(
         expect.objectContaining({
-          create: expect.objectContaining({
+          data: expect.objectContaining({
             userId: contributor.id,
             ontologyId: null,
           }),

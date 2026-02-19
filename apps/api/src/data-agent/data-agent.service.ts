@@ -432,22 +432,49 @@ export class DataAgentService {
   }
 
   async createPreference(userId: string, dto: CreatePreferenceDto) {
-    // Use upsert to handle duplicate (user_id, ontology_id, key)
-    return this.prisma.dataAgentPreference.upsert({
-      where: {
-        user_ontology_key_unique: {
-          userId,
-          ontologyId: dto.ontologyId ?? null,
-          key: dto.key,
+    if (dto.ontologyId) {
+      // When ontologyId is provided, use upsert with composite unique
+      return this.prisma.dataAgentPreference.upsert({
+        where: {
+          user_ontology_key_unique: {
+            userId,
+            ontologyId: dto.ontologyId,
+            key: dto.key,
+          },
         },
-      },
-      update: {
-        value: dto.value,
-        source: dto.source || 'manual',
-      },
-      create: {
+        update: {
+          value: dto.value,
+          source: dto.source || 'manual',
+        },
+        create: {
+          userId,
+          ontologyId: dto.ontologyId,
+          key: dto.key,
+          value: dto.value,
+          source: dto.source || 'manual',
+        },
+      });
+    }
+
+    // When ontologyId is null (global preference), find existing and update or create
+    const existing = await this.prisma.dataAgentPreference.findFirst({
+      where: { userId, ontologyId: null, key: dto.key },
+    });
+
+    if (existing) {
+      return this.prisma.dataAgentPreference.update({
+        where: { id: existing.id },
+        data: {
+          value: dto.value,
+          source: dto.source || 'manual',
+        },
+      });
+    }
+
+    return this.prisma.dataAgentPreference.create({
+      data: {
         userId,
-        ontologyId: dto.ontologyId ?? null,
+        ontologyId: null,
         key: dto.key,
         value: dto.value,
         source: dto.source || 'manual',

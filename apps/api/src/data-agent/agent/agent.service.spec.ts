@@ -139,6 +139,7 @@ describe('DataAgentAgentService', () => {
 
     mockDataAgentService = {
       updateAssistantMessage: jest.fn().mockResolvedValue(undefined),
+      getEffectivePreferences: jest.fn().mockResolvedValue([]),
     } as any;
 
     const module: TestingModule = await Test.createTestingModule({
@@ -181,6 +182,8 @@ describe('DataAgentAgentService', () => {
             grain: 'total',
             ambiguities: [],
             acceptanceChecks: [],
+            shouldClarify: false,
+            clarificationQuestions: [],
             steps: [
               {
                 id: 1,
@@ -211,6 +214,8 @@ describe('DataAgentAgentService', () => {
             grain: 'per-region',
             ambiguities: [],
             acceptanceChecks: ['verify row count', 'check null values'],
+            shouldClarify: false,
+            clarificationQuestions: [],
             steps: [
               {
                 id: 1,
@@ -481,10 +486,18 @@ describe('DataAgentAgentService', () => {
         onEvent,
       );
 
+      // First call: load conversation history (complete + clarification_needed)
       expect(mockPrisma.dataChatMessage.findMany).toHaveBeenCalledWith({
-        where: { chatId: mockChatId, status: 'complete' },
+        where: { chatId: mockChatId, status: { in: ['complete', 'clarification_needed'] } },
         orderBy: { createdAt: 'desc' },
         take: 10,
+      });
+
+      // Second call: check for previous clarification
+      expect(mockPrisma.dataChatMessage.findMany).toHaveBeenCalledWith({
+        where: { chatId: mockChatId, status: 'clarification_needed' },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
       });
 
       // Verify graph was invoked with conversation context
@@ -539,6 +552,7 @@ describe('DataAgentAgentService', () => {
             yaml: expect.any(String),
           }),
         ]),
+        userPreferences: expect.any(Array),
       });
     });
 

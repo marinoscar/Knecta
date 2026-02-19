@@ -669,7 +669,9 @@ describe('Data Agent Clarification Routing & Preferences (Integration)', () => {
         source: 'manual',
       });
 
-      context.prismaMock.dataAgentPreference.upsert.mockResolvedValue(created);
+      // null ontologyId → findFirst + create path
+      context.prismaMock.dataAgentPreference.findFirst.mockResolvedValue(null);
+      context.prismaMock.dataAgentPreference.create.mockResolvedValue(created);
 
       await dataAgentService.createPreference(userId, {
         key: 'verbosity',
@@ -678,9 +680,8 @@ describe('Data Agent Clarification Routing & Preferences (Integration)', () => {
       });
 
       const callArgs =
-        context.prismaMock.dataAgentPreference.upsert.mock.calls[0][0];
-      expect(callArgs.create.source).toBe('manual');
-      expect(callArgs.update.source).toBe('manual');
+        context.prismaMock.dataAgentPreference.create.mock.calls[0][0];
+      expect(callArgs.data.source).toBe('manual');
     });
 
     it('should coerce undefined ontologyId to null in where clause', async () => {
@@ -695,7 +696,9 @@ describe('Data Agent Clarification Routing & Preferences (Integration)', () => {
         source: 'manual',
       });
 
-      context.prismaMock.dataAgentPreference.upsert.mockResolvedValue(created);
+      // null ontologyId → findFirst + create path
+      context.prismaMock.dataAgentPreference.findFirst.mockResolvedValue(null);
+      context.prismaMock.dataAgentPreference.create.mockResolvedValue(created);
 
       await dataAgentService.createPreference(userId, {
         key: 'output_format',
@@ -703,10 +706,22 @@ describe('Data Agent Clarification Routing & Preferences (Integration)', () => {
         // ontologyId omitted
       });
 
-      const callArgs =
-        context.prismaMock.dataAgentPreference.upsert.mock.calls[0][0];
-      expect(callArgs.where.user_ontology_key_unique.ontologyId).toBeNull();
-      expect(callArgs.create.ontologyId).toBeNull();
+      // Verify findFirst was called with ontologyId: null
+      expect(
+        context.prismaMock.dataAgentPreference.findFirst,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            userId,
+            ontologyId: null,
+            key: 'output_format',
+          }),
+        }),
+      );
+      // Verify create was called with ontologyId: null
+      const createArgs =
+        context.prismaMock.dataAgentPreference.create.mock.calls[0][0];
+      expect(createArgs.data.ontologyId).toBeNull();
     });
   });
 
