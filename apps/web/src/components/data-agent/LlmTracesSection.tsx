@@ -12,6 +12,8 @@ import {
   ExpandMore as ExpandMoreIcon,
   Loop as LoopIcon,
 } from '@mui/icons-material';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { DataAgentStreamEvent, LlmTraceRecord } from '../../types';
 import { extractLiveLlmTraces, formatDuration, formatTokenCount, PHASE_LABELS, type LiveLlmTrace } from './insightsUtils';
 import { getMessageTraces } from '../../services/api';
@@ -212,19 +214,23 @@ export function LlmTracesSection({
                 <AccordionDetails sx={{ px: 2, py: 1 }}>
                   {trace.responsePreview ? (
                     <>
-                      <Typography
-                        variant="caption"
-                        component="div"
+                      <Box
                         sx={{
-                          fontFamily: 'monospace',
-                          whiteSpace: 'pre-wrap',
+                          fontSize: '0.8rem',
                           bgcolor: 'action.hover',
                           p: 1,
                           borderRadius: 1,
+                          '& p': { my: 0.25 },
+                          '& p:first-of-type': { mt: 0 },
+                          '& p:last-of-type': { mb: 0 },
+                          '& code': { fontFamily: 'monospace', fontSize: '0.85em' },
+                          '& pre': { my: 0.5, p: 1, borderRadius: 1, overflow: 'auto' },
                         }}
                       >
-                        {trace.responsePreview}
-                      </Typography>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {trace.responsePreview}
+                        </ReactMarkdown>
+                      </Box>
                       {trace.status === 'complete' && (
                         <Button
                           size="small"
@@ -307,22 +313,26 @@ export function LlmTracesSection({
 
                 {/* Expandable Details */}
                 <AccordionDetails sx={{ px: 2, py: 1 }}>
-                  <Typography
-                    variant="caption"
-                    component="div"
+                  <Box
                     sx={{
-                      fontFamily: 'monospace',
-                      whiteSpace: 'pre-wrap',
+                      fontSize: '0.8rem',
                       bgcolor: 'action.hover',
                       p: 1,
                       borderRadius: 1,
                       mb: 1,
+                      '& p': { my: 0.25 },
+                      '& p:first-of-type': { mt: 0 },
+                      '& p:last-of-type': { mb: 0 },
+                      '& code': { fontFamily: 'monospace', fontSize: '0.85em' },
+                      '& pre': { my: 0.5, p: 1, borderRadius: 1, overflow: 'auto' },
                     }}
                   >
-                    {trace.responseContent.length > 200
-                      ? `${trace.responseContent.slice(0, 200)}...`
-                      : trace.responseContent}
-                  </Typography>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {trace.responseContent.length > 200
+                        ? `${trace.responseContent.slice(0, 200)}...`
+                        : trace.responseContent}
+                    </ReactMarkdown>
+                  </Box>
                   <Button
                     size="small"
                     variant="outlined"

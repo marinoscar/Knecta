@@ -25,6 +25,8 @@ import {
 import { Light as SyntaxHighlighter } from 'react-syntax-highlighter';
 import json from 'react-syntax-highlighter/dist/esm/languages/hljs/json';
 import github from 'react-syntax-highlighter/dist/esm/styles/hljs/github';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { LlmTraceRecord } from '../../types';
 import { formatDuration, formatTokenCount, PHASE_LABELS } from './insightsUtils';
 
@@ -246,16 +248,27 @@ export function LlmTraceDialog({ trace, open, onClose }: LlmTraceDialogProps) {
                     {/* Content */}
                     <Box
                       sx={{
-                        fontFamily: 'monospace',
                         fontSize: '0.875rem',
-                        whiteSpace: 'pre-wrap',
                         bgcolor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.100',
                         p: 1.5,
                         borderRadius: 1,
                         overflowX: 'auto',
+                        '& p': { my: 0.5 },
+                        '& p:first-of-type': { mt: 0 },
+                        '& p:last-of-type': { mb: 0 },
+                        '& pre': { my: 1, p: 1.5, borderRadius: 1, overflow: 'auto', bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.200' },
+                        '& code': { fontFamily: 'monospace', fontSize: '0.85em', bgcolor: theme.palette.action.hover, px: 0.5, py: 0.25, borderRadius: 0.5 },
+                        '& pre code': { bgcolor: 'transparent', p: 0 },
+                        '& table': { borderCollapse: 'collapse', width: '100%', my: 1 },
+                        '& th, & td': { border: '1px solid', borderColor: 'divider', px: 1, py: 0.5, textAlign: 'left' },
+                        '& th': { bgcolor: theme.palette.action.hover, fontWeight: 600 },
+                        '& ul, & ol': { pl: 2.5, my: 0.5 },
+                        '& blockquote': { borderLeft: 3, borderColor: 'divider', pl: 2, my: 1, color: 'text.secondary' },
                       }}
                     >
-                      {displayContent}
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {displayContent}
+                      </ReactMarkdown>
                     </Box>
 
                     {/* Show Full toggle */}
@@ -310,16 +323,27 @@ export function LlmTraceDialog({ trace, open, onClose }: LlmTraceDialogProps) {
               ) : (
                 <Box
                   sx={{
-                    fontFamily: 'monospace',
                     fontSize: '0.875rem',
-                    whiteSpace: 'pre-wrap',
                     bgcolor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.100',
                     p: 1.5,
                     borderRadius: 1,
                     overflowX: 'auto',
+                    '& p': { my: 0.5 },
+                    '& p:first-of-type': { mt: 0 },
+                    '& p:last-of-type': { mb: 0 },
+                    '& pre': { my: 1, p: 1.5, borderRadius: 1, overflow: 'auto', bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.200' },
+                    '& code': { fontFamily: 'monospace', fontSize: '0.85em', bgcolor: theme.palette.action.hover, px: 0.5, py: 0.25, borderRadius: 0.5 },
+                    '& pre code': { bgcolor: 'transparent', p: 0 },
+                    '& table': { borderCollapse: 'collapse', width: '100%', my: 1 },
+                    '& th, & td': { border: '1px solid', borderColor: 'divider', px: 1, py: 0.5, textAlign: 'left' },
+                    '& th': { bgcolor: theme.palette.action.hover, fontWeight: 600 },
+                    '& ul, & ol': { pl: 2.5, my: 0.5 },
+                    '& blockquote': { borderLeft: 3, borderColor: 'divider', pl: 2, my: 1, color: 'text.secondary' },
                   }}
                 >
-                  {trace.responseContent}
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {trace.responseContent}
+                  </ReactMarkdown>
                 </Box>
               )}
             </AccordionDetails>
