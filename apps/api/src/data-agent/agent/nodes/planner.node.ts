@@ -18,7 +18,7 @@ const PlanStepSchema = z.object({
 });
 
 const PlanArtifactSchema = z.object({
-  complexity: z.enum(['simple', 'analytical']).describe('Query complexity level'),
+  complexity: z.enum(['simple', 'analytical', 'conversational']).describe('simple=single-table data query, analytical=multi-table/complex, conversational=no data needed (schema questions, explanations)'),
   intent: z.string().describe('High-level intent of the question'),
   metrics: z.array(z.string()).describe('Metrics/measures referenced'),
   dimensions: z.array(z.string()).describe('Dimensions/groupings referenced'),

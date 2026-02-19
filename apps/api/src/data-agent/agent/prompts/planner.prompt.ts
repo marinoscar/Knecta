@@ -33,8 +33,9 @@ Analyze the question and produce a structured plan with ordered sub-tasks. Each 
 
 ## Complexity Assessment
 
-- **simple**: Direct lookups, single-table queries, conversational questions, schema exploration. These skip the navigator/sql_builder/verifier phases.
-- **analytical**: Multi-table queries, comparisons, trend analysis, variance decomposition, statistical analysis. These go through the full pipeline.
+- **conversational**: No database query is needed. Use this for questions about data concepts, explanations of prior answers, or general questions that can be answered from context alone. Examples: "What does grain mean?", "Explain your last answer", "How should I interpret revenue?"
+- **simple**: Single-table queries, direct lookups, basic aggregations. These go through the full Navigator → SQL Builder → Executor pipeline.
+- **analytical**: Multi-table queries, comparisons, trend analysis, joins, variance decomposition, statistical analysis. Full pipeline with mandatory verification.
 
 ## Guidelines
 
@@ -45,6 +46,11 @@ Analyze the question and produce a structured plan with ordered sub-tasks. Each 
 5. Order steps so that dependencies are resolved first.
 6. Be specific about what columns, metrics, and dimensions are relevant.
 7. Include acceptance checks that the verifier should run.
+
+## CRITICAL: Ontology as Source of Truth
+The datasets listed in "Available Datasets" below come from a semantic search and may not be complete. The Navigator phase will query the full ontology to verify what is available.
+Do NOT assume a query is impossible just because you don't see a matching dataset below — the Navigator will make that determination.
+If no datasets are listed below AND the question requires data, still set complexity to "simple" and let the Navigator discover tables from the ontology.
 
 ## Clarification Policy
 
