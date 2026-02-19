@@ -1,4 +1,4 @@
-import { Box, Paper, Typography, useTheme } from '@mui/material';
+import { Paper, Typography, useTheme } from '@mui/material';
 import { BarChart, LineChart, PieChart, ScatterChart } from '@mui/x-charts';
 import type { ChartSpec } from '../../types';
 
@@ -47,8 +47,7 @@ export function ChartRenderer({ chartSpec }: ChartRendererProps) {
             layout={chartSpec.layout}
             slotProps={{
               legend: {
-                direction: 'row',
-                position: { vertical: 'top', horizontal: 'right' },
+                direction: 'horizontal',
               },
             }}
           />
@@ -79,8 +78,7 @@ export function ChartRenderer({ chartSpec }: ChartRendererProps) {
             yAxis={[{ label: chartSpec.yAxisLabel }]}
             slotProps={{
               legend: {
-                direction: 'row',
-                position: { vertical: 'top', horizontal: 'right' },
+                direction: 'horizontal',
               },
             }}
           />
@@ -109,9 +107,7 @@ export function ChartRenderer({ chartSpec }: ChartRendererProps) {
             ]}
             slotProps={{
               legend: {
-                direction: 'column',
-                position: { vertical: 'middle', horizontal: 'right' },
-                padding: 0,
+                direction: 'vertical',
               },
             }}
           />
