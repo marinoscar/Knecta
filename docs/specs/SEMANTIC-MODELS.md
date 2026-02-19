@@ -25,7 +25,7 @@ The Semantic Models feature enables users to automatically generate semantic mod
 ### Core Capabilities
 
 - **AI-Powered Discovery**: LangGraph-based agent explores database schemas, tables, columns, and relationships
-- **Intelligent Relationship Inference**: Discovers both explicit foreign keys and implicit relationships using column name matching, value overlap analysis, and validation queries
+- **Intelligent Relationship Inference**: Discovers both explicit foreign key constraints (from database system catalogs) and implicit relationships inferred by the LLM from naming patterns (e.g., `_id` suffixes, `<table_name>_id` matching), with confidence tagging for inferred relationships
 - **Real-Time Progress**: Direct SSE streaming provides log-style progress view with per-table status
 - **Multi-Provider LLM Support**: Pluggable architecture supports OpenAI, Anthropic, and Azure OpenAI
 - **OSI Compliance**: Generated models follow the Open Semantic Interface specification
@@ -960,7 +960,7 @@ The agent follows a linear pipeline with programmatic discovery and focused LLM 
 
 1. **Discover**: Programmatic database introspection (no LLM) — **parallel execution**
 2. **Generate**: One focused LLM call per table for dataset metadata — **parallel execution**
-3. **Relate**: One LLM call for relationships across all tables
+3. **Relate**: One LLM call for relationships across all tables — explicit FKs + naming pattern inference
 4. **Assemble**: Pure programmatic JSON construction
 5. **Validate**: Structural checks + optional LLM quality review
 6. **Persist**: Save to database
@@ -1197,19 +1197,44 @@ const graph = new StateGraph<AgentState>()
 
 #### 2. generateRelationships Node
 
-**Purpose:** Generate relationships + model-level metadata from FK data
+**Purpose:** Generate relationships + model-level metadata using dual-strategy discovery (explicit FKs + naming pattern inference)
 
-**Actions:**
-- Take accumulated FK data from discoverAndGenerate
-- Make ONE LLM call to generate:
-  - Relationship descriptions
-  - Relationship types (one-to-one, one-to-many, many-to-many)
-  - Model-level description and metadata
-  - Prompt includes dynamically-fetched OSI spec text
+**Input Preparation:**
+- Builds dataset summaries from accumulated datasets (name, source, primaryKey, columns list)
+- **Filters FK constraints** to only include those where BOTH `fromTable` and `toTable` exist in the selected datasets
+- This prevents relationships to external tables not included in the model
+
+**Dual Relationship Discovery Strategy:**
+
+The LLM is instructed to use two complementary strategies:
+
+1. **Strategy 1 — Explicit Foreign Keys:**
+   - Create a relationship for EVERY explicit FK constraint passed in the prompt
+   - These are fetched programmatically from database system catalogs (e.g., `information_schema.table_constraints`)
+   - Guaranteed accuracy (direct from database metadata)
+
+2. **Strategy 2 — Naming Pattern Inference:**
+   - Infer additional relationships from column naming conventions:
+     - Column names ending in `_id` that match another dataset's name (e.g., `customer_id` → `customers`)
+     - Column names matching `<table_name>_id` pattern
+   - Inferred relationships are tagged with:
+     - `ai_context.notes: "Inferred from naming pattern"`
+     - `ai_context.confidence: "high" | "medium" | "low"`
+   - Confidence level depends on naming pattern strength and context
+
+**What This Does NOT Do (Limitations):**
+- Does NOT run value overlap queries (e.g., checking if values in `orders.customer_id` exist in `customers.id`)
+- Does NOT perform statistical analysis to validate inferred relationships
+- Inference quality depends on the LLM's ability to recognize naming conventions and domain context
+- No cross-database validation of referential integrity
+
+**Additional Outputs:**
+- **model_metrics**: Cross-table aggregate metrics (e.g., total record counts, ratios) — only if they make business sense
+- **model_ai_context**: Model-level description and at least 5 domain-related synonyms
 
 **LLM Calls:** 1 total
 
-**Output:** Relationships array + model metadata
+**Output:** Relationships array (explicit + inferred with confidence tags), model-level metrics, model-level AI context
 
 ---
 
@@ -1236,6 +1261,11 @@ const graph = new StateGraph<AgentState>()
 **Actions:**
 - Validate JSON structure against OSI schema (programmatic)
 - Check for required fields, valid types, referential integrity
+- **Relationship validation** (catches LLM hallucinations):
+  - Each relationship must have: name, from, to, from_columns, to_columns
+  - Warns if `from` or `to` reference non-existent datasets (e.g., LLM invented a dataset name)
+  - Fails if `from_columns` and `to_columns` have different lengths (malformed relationship)
+  - This prevents relationships to datasets not included in the model
 - **Warning for missing data_type**: Emits non-fatal warning if field's `ai_context` lacks `data_type` (catches calculated/expression fields not mapped to columns)
 - Optional: LLM quality review for business logic errors
 
@@ -1425,15 +1455,53 @@ Output JSON with: name, description, fields[{name, description}]
 
 **Relationships Generation Prompt (once):**
 ```
-Given these datasets and foreign keys, generate:
-1. Relationship descriptions
-2. Relationship types (one-to-one, one-to-many, many-to-many)
-3. Overall model description
+You are finalizing an OSI semantic model by generating relationships and model-level metadata.
 
-Datasets: {all datasets}
-Foreign Keys: {all FKs}
+## Model: {modelName}
+Database: {databaseName}
 
-Output JSON with: relationships[], modelDescription
+## Datasets in the model
+[JSON array of dataset summaries: name, source, primaryKey, columns]
+
+## Foreign Key Constraints (between selected tables only)
+[JSON array of FK constraints: fromTable, fromColumns, toTable, toColumns]
+[If none found: "None found between the selected tables"]
+
+## Your Task
+
+Generate a JSON object with:
+
+### 1. relationships (Array)
+- Create a relationship for EVERY explicit foreign key constraint listed above
+- Also infer additional relationships from naming patterns:
+  - Column names ending in "_id" that match another dataset's name (e.g., customer_id → customers)
+  - Column names matching "<table_name>_id" pattern
+- Each relationship needs:
+  - **name**: Descriptive name (e.g., "order_customer" or "fk_orders_customer_id")
+  - **from**: The dataset name containing the foreign key column (many side)
+  - **to**: The dataset name being referenced (one side)
+  - **from_columns**: Array of FK column names
+  - **to_columns**: Array of referenced column names
+  - **ai_context**: For inferred relationships, include { "notes": "Inferred from naming pattern", "confidence": "high" or "medium" or "low" }
+
+### 2. model_metrics (Array)
+- Generate cross-table aggregate metrics that make business sense
+- Only create metrics that span multiple datasets
+- Examples: total count of records, average values, ratios
+- Each metric needs: name, expression (ANSI_SQL dialect), description, ai_context with synonyms
+- **CRITICAL**: Metric expressions MUST use fully qualified column names: `schema.table.column`
+- If no cross-table metrics make sense, return an empty array
+
+### 3. model_ai_context (Object)
+- **instructions**: Brief description of what this semantic model represents and how to use it
+- **synonyms**: At least 5 domain-related terms for this database/model
+
+Output ONLY a valid JSON object:
+{
+  "relationships": [...],
+  "model_metrics": [...],
+  "model_ai_context": { "instructions": "...", "synonyms": [...] }
+}
 ```
 
 ---
