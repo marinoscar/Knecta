@@ -202,31 +202,36 @@ START
   v
 [Planner] ─────────────────────────────────────────────────────┐
   |                                       |                     |
-  | (analytical)                          | (clarify)           | (simple: schema
-  |                                       v                     |  questions, convo)
-  |                                     [END]                   |
-  |                               clarification_needed          v
-[Navigator] ───> [SQL Builder] ───> [Executor] <──┘
-                                        |
-                                        v
-                                   [Verifier]
-                                        |
-                   ┌────────────────────┼────────────────────┐
-                   |                    |                    |
-           (pass)  |            (fail,  |            (fail,  |
-                   |         revisions<3)        revisions>=3)
-                   v                    |                    |
-              [Explainer] ──> END       |                    |
-                                        v                    v
-                           [Navigator/SQL Builder]     [Explainer]
-                              (revision loop)       (with caveats)
+  | (data: simple                        | (clarify)           | (conversational)
+  |  or analytical)                      v                     v
+  |                                    [END]               [Explainer] ──> END
+  |                               clarification_needed     (direct answer)
+  v
+[Navigator] ────────────────────────────────────────┐
+  |                                                  |
+  | (cannotAnswer=null)                            | (cannotAnswer set)
+  v                                                  v
+[SQL Builder] ───> [Executor]                   [Explainer] ──> END
+                       |                        (helpful refusal)
+                       v
+                  [Verifier]
+                       |
+      ┌────────────────┼────────────────────┐
+      |                |                    |
+  (pass)        (fail,             (fail,
+      |         revisions<3)       revisions>=3)
+      v                |                    |
+ [Explainer] ──> END   |                    |
+                       v                    v
+          [Navigator/SQL Builder]     [Explainer]
+             (revision loop)       (with caveats)
 ```
 
 ### Key Architectural Decisions
 
 1. **Structured Artifacts**: Each phase emits a typed artifact (PlanArtifact, JoinPlanArtifact, QuerySpec[], etc.) stored in state
 2. **Sub-Task Decomposition**: Planner ALWAYS decomposes questions into ordered steps with strategies (sql, python, sql_then_python)
-3. **Short-Circuit Path**: Simple questions (schema exploration, conversational) skip Navigator/SQL Builder/Verifier
+3. **Navigator is the Sole Ontology Gatekeeper**: ALL data-touching queries go through Navigator, which queries Neo4j to validate dataset availability. Only Navigator can determine that the ontology cannot answer a query (via `cannotAnswer` state). The Planner NEVER makes this determination.
 4. **Clarification Early Exit**: When the Planner detects critical unresolvable ambiguity, it returns `__end__` before running any expensive phases; conversation resumes with context on the next invocation
 5. **User Preferences Injection**: Global and ontology-scoped preferences are loaded before graph execution and injected into Planner and Explainer prompts; ontology-scoped overrides global for the same key
 6. **Mandatory Verification**: All analytical queries require Python validation; failures trigger Navigator or SQL Builder revision
@@ -234,6 +239,7 @@ START
 8. **Join Path Discovery**: Navigator uses Neo4j `shortestPath` algorithm to find RELATES_TO paths between datasets
 9. **No ReAct Loop in Main Graph**: Only Navigator uses mini-ReAct (max 8 iterations); other phases are single LLM calls with structured output
 10. **Semantic Model YAML as First-Class Data**: The YAML from the semantic model (stored on Neo4j Dataset nodes) is the authoritative schema. It flows through the entire pipeline: pre-fetched for Planner, carried in JoinPlanArtifact for Navigator/SQL Builder, and passed to Executor repair and Python generation prompts. No phase guesses column names.
+11. **Conversational Short-Circuit**: Purely conversational questions (no data needed) route directly from Planner to Explainer, bypassing all data phases. These include schema questions, explanations, and conceptual questions.
 
 ---
 
@@ -252,7 +258,7 @@ START
 **Output**: `PlanArtifact`
 ```typescript
 {
-  complexity: 'simple' | 'analytical',
+  complexity: 'simple' | 'analytical' | 'conversational',
   intent: string,
   metrics: string[],
   dimensions: string[],
@@ -1057,32 +1063,48 @@ step_2_data = pd.read_json(json.loads('''<step 2 result JSON>'''))
 
 ## Conditional Routing
 
-The graph has two conditional routing points:
+The graph has three conditional routing points:
 
-### 1. Planner Short-Circuit
+### 1. Planner Routing
 
-After Planner phase, route based on question complexity:
+After Planner phase, route based on question type:
 
 ```typescript
-function routeAfterPlanner(state: DataAgentStateType): 'navigator' | 'executor' {
-  if (state.plan?.complexity === 'simple') {
-    return 'executor';  // Skip Navigator, SQL Builder, Verifier
+function routeAfterPlanner(state: DataAgentStateType): 'navigator' | 'explainer' | '__end__' {
+  // Clarification needed — terminate graph early
+  if (state.plan?.shouldClarify && state.plan.clarificationQuestions?.length > 0) {
+    return '__end__';
   }
-  return 'navigator';   // Full analytical pipeline
+  // Conversational — no data needed, answer directly
+  if (state.plan?.complexity === 'conversational') {
+    return 'explainer';
+  }
+  // ALL data queries go through Navigator (both simple and analytical)
+  return 'navigator';
 }
 ```
 
-**Simple complexity examples**:
-- Schema exploration: "What fields are in the orders table?"
-- Conversational: "How do I interpret this metric?"
-- Single-dataset queries: "Show me 10 recent orders"
+**Conversational examples**:
+- "What does grain mean?"
+- "Explain your last answer"
+- "How should I interpret this metric?"
 
-**Analytical complexity examples**:
-- Multi-dataset joins: "Compare revenue by product category and region"
-- Aggregation + filtering: "What are the top 10 customers by LTV in 2025?"
-- Root cause analysis: "Why is Houston underperforming?"
+### 2. Navigator Gatekeeper
 
-### 2. Verifier Revision Loop
+After Navigator phase, validate ontology coverage:
+
+```typescript
+function routeAfterNavigator(state: DataAgentStateType): 'sql_builder' | 'explainer' {
+  if (state.cannotAnswer) {
+    return 'explainer';  // Ontology can't support this query
+  }
+  return 'sql_builder';
+}
+```
+
+Navigator sets `cannotAnswer` when ALL referenced datasets are missing from the ontology. Partial matches proceed with warnings.
+
+### 3. Verifier Revision Loop
 
 After Verifier phase, route based on validation result:
 
@@ -1127,6 +1149,51 @@ These fields are passed to the retried phase via state, allowing it to adjust be
 
 ---
 
+## Ontology Guardrails
+
+The Data Agent enforces the ontology as the absolute source of truth for all data queries. Multiple layers of guardrails ensure the agent never fabricates datasets, columns, or join paths.
+
+### Core Principle
+
+The Navigator is the **sole ontology gatekeeper**. Only the Navigator queries Neo4j and can authoritatively determine whether the ontology supports a query. The Planner sees only pre-fetched vector search results which may be incomplete.
+
+### Guardrail Chain
+
+| Phase | Guardrail | Type | Blocks? |
+|-------|-----------|------|---------|
+| **Navigator** | Post-validation: zero datasets found → `cannotAnswer` | Programmatic | **YES** — routes to Explainer |
+| **Navigator** | Post-validation: missing join paths | Programmatic | No — warning in notes |
+| **Navigator** | Prompt: "FORBIDDEN from inventing columns/joins" | Prompt-level | No |
+| **Planner** | Prompt: "only reference listed datasets" | Prompt-level | No |
+| **SQL Builder** | Prompt: "use ONLY YAML column names, ONLY ontology joins" | Prompt-level | No |
+| **SQL Builder** | Column validation: `expectedColumns` vs YAML | Programmatic | No — warning in notes |
+| **Executor** | Repair prompt: "use ONLY schema columns" | Prompt-level | No |
+
+### CannotAnswer State
+
+```typescript
+interface CannotAnswerArtifact {
+  reason: string;
+  missingDatasets?: string[];
+  missingJoins?: string[];
+  availableDatasets?: string[];
+}
+```
+
+When Navigator sets `cannotAnswer`, the graph routes to Explainer which generates a helpful refusal:
+- Explains why the question can't be answered
+- Lists available datasets in the ontology
+- Suggests adding more tables to the semantic model
+
+### Prompt Guardrails
+
+Every phase prompt includes a mandatory "Ontology as Source of Truth" section:
+- Navigator: FORBIDDEN from guessing column names, fabricating joins, using general SQL knowledge
+- SQL Builder: Must use ONLY YAML column names and ontology join paths
+- Executor: SQL repair must use ONLY columns from the schemas
+
+---
+
 ## Clarifying Questions
 
 ### Overview
@@ -1167,7 +1234,7 @@ The `PlanArtifact` produced by the Planner gains two new optional fields:
 
 ```typescript
 {
-  complexity: 'simple' | 'analytical',
+  complexity: 'simple' | 'analytical' | 'conversational',
   intent: string,
   metrics: string[],
   dimensions: string[],
