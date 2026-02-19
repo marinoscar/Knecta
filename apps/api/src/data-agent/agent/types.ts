@@ -14,6 +14,12 @@ export interface PlanStep {
   dependsOn: number[];
   datasets: string[];
   expectedOutput: string;
+  /**
+   * Chart type for visualization steps
+   * When set, executor will generate a ChartSpec instead of using Python sandbox
+   * null/undefined for non-visualization steps
+   */
+  chartType?: 'bar' | 'line' | 'pie' | 'scatter' | null;
 }
 
 export interface PlanArtifact {
@@ -78,7 +84,38 @@ export interface StepResult {
     stdout: string;
     charts: string[];
   };
+  chartSpec?: ChartSpec;
   error?: string;
+}
+
+// ─── Chart Specification Types ───
+
+export interface ChartSeries {
+  label: string;
+  data: number[];
+}
+
+export interface ChartSlice {
+  label: string;
+  value: number;
+}
+
+export interface ChartPoint {
+  x: number;
+  y: number;
+  label?: string;
+}
+
+export interface ChartSpec {
+  type: 'bar' | 'line' | 'pie' | 'scatter';
+  title: string;
+  xAxisLabel?: string;
+  yAxisLabel?: string;
+  categories?: string[];
+  series?: ChartSeries[];
+  slices?: ChartSlice[];
+  points?: ChartPoint[];
+  layout?: 'vertical' | 'horizontal';
 }
 
 // ─── Verifier Artifacts ───

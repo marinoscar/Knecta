@@ -15,6 +15,14 @@ const PlanStepSchema = z.object({
   dependsOn: z.array(z.number()).describe('IDs of steps this depends on'),
   datasets: z.array(z.string()).describe('Dataset names needed for this step'),
   expectedOutput: z.string().describe('What this step produces'),
+  chartType: z.enum(['bar', 'line', 'pie', 'scatter'])
+    .nullable()
+    .optional()
+    .describe(
+      'Chart type for visualization steps. Set when the step should produce an interactive chart. ' +
+      'Use "bar" for comparisons/rankings, "line" for trends, "pie" for proportions (<=6 categories), ' +
+      '"scatter" for correlations. Omit or set null for non-visualization steps.'
+    ),
 });
 
 const PlanArtifactSchema = z.object({
