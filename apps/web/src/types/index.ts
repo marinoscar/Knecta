@@ -358,6 +358,38 @@ export interface OntologyGraph {
 }
 
 // ==========================================
+// Chart Specification Types
+// ==========================================
+
+export interface ChartSeries {
+  label: string;
+  data: number[];
+}
+
+export interface ChartSlice {
+  label: string;
+  value: number;
+}
+
+export interface ChartPoint {
+  x: number;
+  y: number;
+  label?: string;
+}
+
+export interface ChartSpec {
+  type: 'bar' | 'line' | 'pie' | 'scatter';
+  title: string;
+  xAxisLabel?: string;
+  yAxisLabel?: string;
+  categories?: string[];
+  series?: ChartSeries[];
+  slices?: ChartSlice[];
+  points?: ChartPoint[];
+  layout?: 'vertical' | 'horizontal';
+}
+
+// ==========================================
 // Data Agent
 // ==========================================
 
@@ -431,7 +463,7 @@ export interface DataChatMessage {
     revisionsUsed?: number;
     durationMs?: number;
     startedAt?: number;
-    stepResults?: Array<{ stepId: number; description: string; strategy: string; sqlResult?: { rowCount: number; columns: string[]; data: string }; pythonResult?: { stdout: string; charts: string[] }; error?: string }>;
+    stepResults?: Array<{ stepId: number; description: string; strategy: string; sqlResult?: { rowCount: number; columns: string[]; data: string }; pythonResult?: { stdout: string; charts: string[] }; chartSpec?: ChartSpec; error?: string }>;
     joinPlan?: { relevantDatasets: Array<{ name: string; description: string; source: string; yaml?: string }>; joinPaths: Array<{ datasets: string[]; edges: Array<{ fromDataset: string; toDataset: string; fromColumns: string[]; toColumns: string[]; relationshipName: string }> }>; notes: string };
     clarificationQuestions?: Array<{ question: string; assumption: string }>;
     cannotAnswer?: {
