@@ -33,6 +33,7 @@ export const ChartSpecSchema = z.object({
   type: z.enum(['bar', 'line', 'pie', 'scatter'])
     .describe('Chart type (determines MUI X component)'),
   title: z.string()
+    .min(1)
     .max(60)
     .describe('Concise chart title (max 60 chars)'),
   xAxisLabel: z.string().optional()
