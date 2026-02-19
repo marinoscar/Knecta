@@ -100,7 +100,7 @@ export function ChatView({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          height: '100%',
+          flex: 1,
         }}
       >
         <Typography variant="body1" color="text.secondary">
@@ -111,7 +111,7 @@ export function ChatView({
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
       {/* Header */}
       <Box
         sx={{
@@ -122,6 +122,7 @@ export function ChatView({
           alignItems: 'center',
           justifyContent: 'space-between',
           bgcolor: 'background.paper',
+          flexShrink: 0,
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1 }}>
