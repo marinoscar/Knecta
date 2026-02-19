@@ -506,6 +506,85 @@ GET /api/ontologies/:id/graph
 
 ---
 
+### 6. Export Ontology as RDF
+
+```http
+GET /api/ontologies/:id/rdf
+```
+
+**Permission:** `ontologies:read`
+
+**Response (200):**
+```json
+{
+  "data": {
+    "rdf": "@prefix knecta: <http://knecta.io/ontology#> .\n@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n...",
+    "name": "Sales Analytics Ontology"
+  }
+}
+```
+
+**Response (400):** Ontology not in ready status
+
+**Response (404):** Ontology not found
+
+**RDF Format:** Turtle (.ttl)
+
+**Namespaces:**
+
+| Prefix | URI |
+|--------|-----|
+| `knecta:` | `http://knecta.io/ontology#` |
+| `rdf:` | `http://www.w3.org/1999/02/22-rdf-syntax-ns#` |
+| `rdfs:` | `http://www.w3.org/2000/01/rdf-schema#` |
+| `xsd:` | `http://www.w3.org/2001/XMLSchema#` |
+| `dcterms:` | `http://purl.org/dc/terms/` |
+
+**RDF Mapping:**
+
+| Neo4j Element | RDF Type | URI Pattern | Key Properties |
+|---|---|---|---|
+| Ontology metadata | `knecta:Ontology` | `knecta:Ontology_<id>` | `dcterms:title`, `dcterms:description`, `dcterms:created`, `knecta:nodeCount`, `knecta:relationshipCount`, `knecta:hasDataset` |
+| Dataset node | `knecta:Dataset` | `knecta:Dataset_<name>` | `rdfs:label`, `knecta:source`, `rdfs:comment`, `knecta:hasField` |
+| Field node | `knecta:Field` | `knecta:Field_<dataset>_<field>` | `rdfs:label`, `knecta:expression`, `knecta:fieldLabel`, `rdfs:comment`, `knecta:belongsToDataset` |
+| RELATES_TO edge | `knecta:Relationship` | `knecta:Rel_<name>` | `rdfs:label`, `knecta:fromDataset`, `knecta:toDataset`, `knecta:fromColumns`, `knecta:toColumns` |
+
+**Library:** n3 (Node.js RDF serializer)
+
+**Frontend Integration:**
+- "Export to RDF" button on ontology detail page
+- Visible when ontology status is `ready`
+- Downloads `.ttl` file with ontology name
+
+**Example Output (abbreviated):**
+```turtle
+@prefix knecta: <http://knecta.io/ontology#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+knecta:Ontology_abc123 a knecta:Ontology ;
+    dcterms:title "Sales Ontology" ;
+    knecta:hasDataset knecta:Dataset_customers, knecta:Dataset_orders .
+
+knecta:Dataset_customers a knecta:Dataset ;
+    rdfs:label "customers" ;
+    knecta:source "public.customers" ;
+    knecta:hasField knecta:Field_customers_customer_id .
+
+knecta:Field_customers_customer_id a knecta:Field ;
+    rdfs:label "customer_id" ;
+    knecta:expression "customer_id" ;
+    knecta:belongsToDataset knecta:Dataset_customers .
+
+knecta:Rel_fk_orders_customer a knecta:Relationship ;
+    knecta:fromDataset knecta:Dataset_orders ;
+    knecta:toDataset knecta:Dataset_customers ;
+    knecta:fromColumns "customer_id" ;
+    knecta:toColumns "customer_id" .
+```
+
+---
+
 ## Security
 
 ### Encryption and Data Protection
