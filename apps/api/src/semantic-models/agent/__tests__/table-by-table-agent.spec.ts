@@ -319,7 +319,7 @@ describe('buildGenerateRelationshipsPrompt', () => {
       { name: 'orders', source: 'mydb.public.orders', primaryKey: ['id'], columns: ['id', 'customer_id'] },
       { name: 'customers', source: 'mydb.public.customers', primaryKey: ['id'], columns: ['id', 'name'] },
     ],
-    foreignKeys: [],
+    relationshipCandidates: [],
   };
 
   it('should include model name and database name', () => {
@@ -335,42 +335,38 @@ describe('buildGenerateRelationshipsPrompt', () => {
     expect(prompt).toContain('customer_id');
   });
 
-  it('should include foreign keys when provided', () => {
+  it('should include high confidence candidates with overlap evidence', () => {
     const params = {
       ...baseParams,
-      foreignKeys: [{
-        constraintName: 'fk_orders_customer',
+      relationshipCandidates: [{
         fromSchema: 'public',
         fromTable: 'orders',
         fromColumns: ['customer_id'],
         toSchema: 'public',
         toTable: 'customers',
         toColumns: ['id'],
+        source: 'database_constraint' as const,
+        confidence: 'high' as const,
+        constraintName: 'fk_orders_customer',
+        overlap: {
+          overlapRatio: 0.95,
+          childDistinctCount: 950,
+          parentDistinctCount: 500,
+          nullRatio: 0.01,
+          childSampleSize: 1000,
+          cardinality: 'one_to_many' as const,
+        },
       }],
     };
     const prompt = buildGenerateRelationshipsPrompt(params);
+    expect(prompt).toContain('High Confidence');
+    expect(prompt).toContain('orders.customer_id');
     expect(prompt).toContain('fk_orders_customer');
   });
 
-  it('should filter FKs to only include datasets in the model', () => {
-    const params = {
-      ...baseParams,
-      foreignKeys: [
-        {
-          constraintName: 'fk_test',
-          fromSchema: 'public',
-          fromTable: 'orders',
-          fromColumns: ['customer_id'],
-          toSchema: 'public',
-          toTable: 'external_table',
-          toColumns: ['id'],
-        },
-      ],
-    };
-    const prompt = buildGenerateRelationshipsPrompt(params);
-    // The FK references external_table which is not in datasets, so it should be filtered out
-    expect(prompt).toContain('None found between the selected tables');
-    expect(prompt).not.toContain('external_table');
+  it('should show no candidates message when none provided', () => {
+    const prompt = buildGenerateRelationshipsPrompt(baseParams);
+    expect(prompt).toContain('No relationship candidates found');
   });
 
   it('should include instructions when provided', () => {
@@ -441,6 +437,7 @@ describe('createAssembleModelNode', () => {
       foreignKeys: [],
       tableMetrics: [[createValidMetric()]],
       failedTables: [],
+      relationshipCandidates: [],
       relationships: [],
       modelMetrics: [],
       modelAiContext: { synonyms: ['test'], instructions: 'test model' },
@@ -476,6 +473,7 @@ describe('createAssembleModelNode', () => {
       foreignKeys: [],
       tableMetrics: [],
       failedTables: [],
+      relationshipCandidates: [],
       relationships: [],
       modelMetrics: [],
       modelAiContext: { synonyms: [], instructions: '' },
@@ -511,6 +509,7 @@ describe('createAssembleModelNode', () => {
       foreignKeys: [],
       tableMetrics: [[tableMetric1], [tableMetric2]],
       failedTables: [],
+      relationshipCandidates: [],
       relationships: [],
       modelMetrics: [modelMetric],
       modelAiContext: { synonyms: [], instructions: '' },
@@ -547,6 +546,7 @@ describe('createAssembleModelNode', () => {
       foreignKeys: [],
       tableMetrics: [],
       failedTables: ['public.failed_table'],
+      relationshipCandidates: [],
       relationships: [],
       modelMetrics: [],
       modelAiContext: { synonyms: [], instructions: '' },
@@ -588,6 +588,7 @@ describe('createAssembleModelNode', () => {
       foreignKeys: [],
       tableMetrics: [],
       failedTables: [],
+      relationshipCandidates: [],
       relationships: [],
       modelMetrics: [],
       modelAiContext: { synonyms: [], instructions: '' },
@@ -685,6 +686,7 @@ describe('createDiscoverAndGenerateNode (parallel processing)', () => {
     foreignKeys: [],
     tableMetrics: [],
     failedTables: [],
+    relationshipCandidates: [],
     relationships: [],
     modelMetrics: [],
     modelAiContext: { synonyms: [], instructions: '' },
