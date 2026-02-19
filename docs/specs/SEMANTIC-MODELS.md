@@ -25,7 +25,7 @@ The Semantic Models feature enables users to automatically generate semantic mod
 ### Core Capabilities
 
 - **AI-Powered Discovery**: LangGraph-based agent explores database schemas, tables, columns, and relationships
-- **Intelligent Relationship Inference**: Discovers both explicit foreign key constraints (from database system catalogs) and implicit relationships inferred by the LLM from naming patterns (e.g., `_id` suffixes, `<table_name>_id` matching), with confidence tagging for inferred relationships
+- **Data-Driven Relationship Discovery**: Three-tier discovery pipeline: (1) explicit FK constraints from database catalogs, (2) programmatic naming heuristic analysis with type compatibility checking, and (3) value overlap validation via sample-based SQL queries. Includes automatic many-to-many junction table detection. The LLM reviews pre-validated candidates rather than discovering relationships from scratch.
 - **Real-Time Progress**: Direct SSE streaming provides log-style progress view with per-table status
 - **Multi-Provider LLM Support**: Pluggable architecture supports OpenAI, Anthropic, and Azure OpenAI
 - **OSI Compliance**: Generated models follow the Open Semantic Interface specification
@@ -70,7 +70,7 @@ The feature follows a sophisticated agent-based architecture with real-time SSE 
 │                                                               │
 │  AgentStreamController (SSE via Fastify hijack)             │
 │         ↓                                                    │
-│  LangGraph StateGraph (linear pipeline, 5 nodes)            │
+│  LangGraph StateGraph (linear pipeline, 6 nodes)            │
 │    ├─ Programmatic Discovery (DiscoveryService)            │
 │    └─ OSI Model Generation                                  │
 │         ↓                                                    │
@@ -131,14 +131,15 @@ The agent dynamically fetches the latest OSI specification from GitHub before ea
 #### Agent Graph Flow
 
 ```
-START → discoverAndGenerate → generateRelationships → assembleModel → validateModel → persistModel → END
+START → discoverAndGenerate → discoverRelationships → generateRelationships → assembleModel → validateModel → persistModel → END
 ```
 
 1. **discoverAndGenerate**: Table-by-table processing - programmatic discovery + focused LLM call per table
-2. **generateRelationships**: Generate relationships + model-level metadata from FK data
-3. **assembleModel**: Pure programmatic JSON assembly
-4. **validateModel**: Programmatic structural checks + optional LLM quality review
-5. **persistModel**: Save model to database with statistics
+2. **discoverRelationships**: Programmatic relationship candidate generation and value overlap validation
+3. **generateRelationships**: LLM review of pre-validated candidates + model-level metadata
+4. **assembleModel**: Pure programmatic JSON assembly
+5. **validateModel**: Programmatic structural checks + optional LLM quality review
+6. **persistModel**: Save model to database with statistics
 
 ---
 
@@ -1155,12 +1156,14 @@ To ensure 100% accuracy of database field metadata, the agent uses a hybrid appr
 ```typescript
 const graph = new StateGraph<AgentState>()
   .addNode('discoverAndGenerate', discoverAndGenerateNode)
+  .addNode('discoverRelationships', discoverRelationshipsNode)
   .addNode('generateRelationships', generateRelationshipsNode)
   .addNode('assembleModel', assembleModelNode)
   .addNode('validateModel', validateModelNode)
   .addNode('persistModel', persistModelNode)
   .addEdge(START, 'discoverAndGenerate')
-  .addEdge('discoverAndGenerate', 'generateRelationships')
+  .addEdge('discoverAndGenerate', 'discoverRelationships')
+  .addEdge('discoverRelationships', 'generateRelationships')
   .addEdge('generateRelationships', 'assembleModel')
   .addEdge('assembleModel', 'validateModel')
   .addEdge('validateModel', 'persistModel')
@@ -1195,50 +1198,74 @@ const graph = new StateGraph<AgentState>()
 
 ---
 
-#### 2. generateRelationships Node
+#### 2. discoverRelationships Node
 
-**Purpose:** Generate relationships + model-level metadata using dual-strategy discovery (explicit FKs + naming pattern inference)
+**Purpose:** Programmatic relationship candidate generation and validation (0 LLM calls)
 
-**Input Preparation:**
-- Builds dataset summaries from accumulated datasets (name, source, primaryKey, columns list)
-- **Filters FK constraints** to only include those where BOTH `fromTable` and `toTable` exist in the selected datasets
-- This prevents relationships to external tables not included in the model
+**Four-Phase Algorithm:**
 
-**Dual Relationship Discovery Strategy:**
+**Phase 1 — Candidate Generation:**
+- Converts explicit FK constraints to `RelationshipCandidate` objects
+- Generates naming-based candidates via `generateFKCandidates()`:
+  - Recognizes FK suffixes: `_id`, `_code`, `_key`, `_ref`, `_num`, `_no`, `_fk`, `id` (no separator)
+  - Matches column prefixes to table names via exact, plural, and abbreviation matching
+  - Common abbreviation support: `cust`→customers, `usr`→users, `prod`→products, etc.
+  - Type compatibility filtering (int↔int, uuid↔uuid, varchar↔varchar, numeric↔numeric)
+  - Naming score: 0.9 (exact+_id), 0.85 (plural+_id), 0.7 (other suffix), 0.5 (abbreviation), 0.3 (type-only)
+- Deduplicates: explicit FK candidates take priority over naming candidates
 
-The LLM is instructed to use two complementary strategies:
+**Phase 2 — Value Overlap Validation (parallel):**
+- Runs `getColumnValueOverlap()` SQL query for ALL candidates (including explicit FKs)
+- Uses existing concurrency limiter (`SEMANTIC_MODEL_CONCURRENCY` env var)
+- Single query per candidate pair — samples up to 1000 rows from each table
+- Computes overlap ratio, null ratio, and cardinality for each candidate
+- Confidence assignment:
+  - Explicit FK: always `high` (validated, constraint is authoritative)
+  - Inferred + overlap > 80%: `high`
+  - Inferred + overlap 50-80%: `medium`
+  - Inferred + overlap 20-50%: `low`
+  - Inferred + overlap < 20%: `rejected` (filtered out)
 
-1. **Strategy 1 — Explicit Foreign Keys:**
-   - Create a relationship for EVERY explicit FK constraint passed in the prompt
-   - These are fetched programmatically from database system catalogs (e.g., `information_schema.table_constraints`)
-   - Guaranteed accuracy (direct from database metadata)
+**Phase 3 — Junction Table Detection (M:N):**
+- Identifies tables with ≥2 validated FK relationships and ≤3 "own" columns (non-FK, non-audit)
+- Creates many-to-many relationship candidates between the referenced tables
+- Junction table name stored in candidate metadata
 
-2. **Strategy 2 — Naming Pattern Inference:**
-   - Infer additional relationships from column naming conventions:
-     - Column names ending in `_id` that match another dataset's name (e.g., `customer_id` → `customers`)
-     - Column names matching `<table_name>_id` pattern
-   - Inferred relationships are tagged with:
-     - `ai_context.notes: "Inferred from naming pattern"`
-     - `ai_context.confidence: "high" | "medium" | "low"`
-   - Confidence level depends on naming pattern strength and context
+**Phase 4 — Summary & Progress:**
+- Emits SSE progress events with validation results
+- Persists progress to run record
+- Returns `relationshipCandidates[]` to graph state
 
-**What This Does NOT Do (Limitations):**
-- Does NOT run value overlap queries (e.g., checking if values in `orders.customer_id` exist in `customers.id`)
-- Does NOT perform statistical analysis to validate inferred relationships
-- Inference quality depends on the LLM's ability to recognize naming conventions and domain context
-- No cross-database validation of referential integrity
+**LLM Calls:** 0
 
-**Additional Outputs:**
-- **model_metrics**: Cross-table aggregate metrics (e.g., total record counts, ratios) — only if they make business sense
-- **model_ai_context**: Model-level description and at least 5 domain-related synonyms
+**Output:** Array of `RelationshipCandidate` objects with confidence scores, overlap evidence, and cardinality
 
-**LLM Calls:** 1 total
-
-**Output:** Relationships array (explicit + inferred with confidence tags), model-level metrics, model-level AI context
+**Performance:** ~2-5 seconds for 20-50 candidates at concurrency=5
 
 ---
 
-#### 3. assembleModel Node
+#### 3. generateRelationships Node
+
+**Purpose:** LLM review of pre-validated relationship candidates + model-level metadata generation
+
+**Input:** Receives `relationshipCandidates[]` from discoverRelationships node, grouped by confidence level
+
+**Actions:**
+- Presents candidates to LLM grouped by confidence (high/medium/low/M:N) with overlap evidence
+- LLM accepts or rejects each candidate based on semantic understanding
+- LLM adds relationship names, descriptions, and ai_context for accepted candidates
+- LLM may suggest additional relationships missed by programmatic analysis
+- Generates model-level metrics and ai_context (same as before)
+
+**Key Design Change:** The LLM moved from "relationship discoverer" to "relationship reviewer" — same pattern shift used when moving from ReAct to table-by-table pipeline for dataset generation.
+
+**LLM Calls:** 1 total
+
+**Output:** Relationships array, model-level metrics, model-level AI context
+
+---
+
+#### 4. assembleModel Node
 
 **Purpose:** Pure programmatic JSON assembly
 
@@ -1254,7 +1281,7 @@ The LLM is instructed to use two complementary strategies:
 
 ---
 
-#### 4. validateModel Node
+#### 5. validateModel Node
 
 **Purpose:** Programmatic structural checks + optional LLM quality review
 
@@ -1275,7 +1302,7 @@ The LLM is instructed to use two complementary strategies:
 
 ---
 
-#### 5. persistModel Node
+#### 6. persistModel Node
 
 **Purpose:** Save model to database
 
@@ -1337,10 +1364,27 @@ This diagram shows the full pipeline from agent run start to downstream consumpt
    │     │
    │     └─ Emit SSE progress + persist partial model
 
+2.5. discover_relationships Node (NEW)
+   ├─ Phase 1: Candidate Generation (in-memory)
+   │  ├─ Convert explicit FKs to RelationshipCandidate[]
+   │  ├─ generateFKCandidates(): naming heuristics + type matching
+   │  └─ Deduplicate (explicit FKs take priority)
+   │
+   ├─ Phase 2: Value Overlap Validation (parallel)
+   │  ├─ For each candidate (in parallel):
+   │  │  └─ DiscoveryService.getColumnValueOverlap()
+   │  │     └─ Single SQL query: sample 1000 rows, compute overlap ratio
+   │  └─ Assign confidence: high (>80%), medium (50-80%), low (20-50%), rejected (<20%)
+   │
+   ├─ Phase 3: Junction Table Detection (M:N)
+   │  └─ Tables with ≥2 FKs and ≤3 own columns → M:N candidates
+   │
+   └─ Output: RelationshipCandidate[] with overlap evidence
+
 3. generate_relationships Node (once)
-   ├─ LLM Generation (1 call):
-   │  ├─ Prompt includes: osiSpecText + all datasets + FKs
-   │  └─ LLM outputs: relationships[] + model description
+   ├─ LLM Review (1 call):
+   │  ├─ Prompt includes: osiSpecText + all datasets + pre-validated candidates grouped by confidence
+   │  └─ LLM outputs: accepted relationships[] + model description
    │
    └─ Return relationships array
 
@@ -2414,12 +2458,13 @@ apps/api/
 │   │   │   └── semantic-model-query.dto.ts     # List query validation (Zod)
 │   │   └── agent/
 │   │       ├── agent.service.ts                # Agent orchestration and graph configuration
-│   │       ├── graph.ts                        # LangGraph StateGraph (5 linear nodes)
+│   │       ├── graph.ts                        # LangGraph StateGraph (6 linear nodes)
 │   │       ├── state.ts                        # Agent state (LangGraph Annotation.Root)
 │   │       ├── utils.ts                        # JSON extraction, token tracking utilities
 │   │       ├── nodes/                          # Graph nodes (linear pipeline)
 │   │       │   ├── discover-and-generate.ts    # Table-by-table discovery + LLM generation
-│   │       │   ├── generate-relationships.ts   # FK + implicit relationship inference (1 LLM call)
+│   │       │   ├── discover-relationships.ts   # Programmatic relationship discovery and validation node
+│   │       │   ├── generate-relationships.ts   # LLM review of pre-validated candidates (1 LLM call)
 │   │       │   ├── assemble-model.ts           # Pure programmatic JSON assembly
 │   │       │   ├── validate-model.ts           # Structural checks + optional LLM review
 │   │       │   └── persist-model.ts            # Save model + stats to database
@@ -2436,10 +2481,12 @@ apps/api/
 │   │       ├── utils/
 │   │       │   ├── inject-field-data-types.ts  # Programmatic data type injection
 │   │       │   ├── concurrency.ts              # Lightweight concurrency limiter for parallel processing
+│   │       │   ├── naming-heuristics.ts        # FK candidate generation from naming patterns
 │   │       │   └── __tests__/
 │   │       │       └── inject-field-data-types.spec.ts  # 16 tests for injection utils
 │   │       └── types/
-│   │           └── osi.types.ts                # OSI model TypeScript types
+│   │           ├── osi.types.ts                # OSI model TypeScript types
+│   │           └── relationship-candidate.ts   # Types for relationship candidates
 │   ├── discovery/
 │   │   ├── discovery.module.ts                 # NestJS module
 │   │   ├── discovery.controller.ts             # Schema introspection endpoints
