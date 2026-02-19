@@ -28,16 +28,26 @@ export interface DataAgentGraphDeps {
 }
 
 // ─── Conditional routing after planner ───
-function routeAfterPlanner(state: DataAgentStateType): 'navigator' | 'executor' | '__end__' {
-  // Check if clarification is needed — terminate graph early
+function routeAfterPlanner(state: DataAgentStateType): 'navigator' | 'explainer' | '__end__' {
+  // Clarification needed — terminate graph early
   if (state.plan?.shouldClarify && state.plan.clarificationQuestions?.length > 0) {
     return '__end__';
   }
-
-  if (state.plan?.complexity === 'simple') {
-    return 'executor';
+  // Conversational — no data needed, answer directly
+  if (state.plan?.complexity === 'conversational') {
+    return 'explainer';
   }
+  // ALL data queries go through Navigator (both simple and analytical)
   return 'navigator';
+}
+
+// ─── Conditional routing after navigator ───
+function routeAfterNavigator(state: DataAgentStateType): 'sql_builder' | 'explainer' {
+  // Navigator determined the ontology can't support this query
+  if (state.cannotAnswer) {
+    return 'explainer';
+  }
+  return 'sql_builder';
 }
 
 // ─── Conditional routing after verifier ───
@@ -77,10 +87,13 @@ export function buildDataAgentGraph(deps: DataAgentGraphDeps) {
     .addEdge(START, 'planner')
     .addConditionalEdges('planner', routeAfterPlanner, {
       navigator: 'navigator',
-      executor: 'executor',
+      explainer: 'explainer',
       __end__: END,
     })
-    .addEdge('navigator', 'sql_builder')
+    .addConditionalEdges('navigator', routeAfterNavigator, {
+      sql_builder: 'sql_builder',
+      explainer: 'explainer',
+    })
     .addEdge('sql_builder', 'executor')
     .addEdge('executor', 'verifier')
     .addConditionalEdges('verifier', routeAfterVerification, {
@@ -92,3 +105,6 @@ export function buildDataAgentGraph(deps: DataAgentGraphDeps) {
 
   return workflow.compile();
 }
+
+// Export routing functions for testing
+export { routeAfterPlanner, routeAfterNavigator, routeAfterVerification };
