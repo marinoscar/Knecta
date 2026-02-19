@@ -128,6 +128,57 @@ export function createNavigatorNode(
         (r) => planDatasets.has(r.fromDataset) || planDatasets.has(r.toDataset),
       );
 
+      // ─── POST-VALIDATION: Ontology gatekeeper ───
+
+      // Check which plan datasets were NOT found in the ontology
+      const missingDatasets: string[] = [];
+      for (const dsName of planDatasets) {
+        if (!datasetDetails.some((d) => d.name === dsName)) {
+          missingDatasets.push(dsName);
+        }
+      }
+
+      // Check for missing join paths between datasets that need joining
+      const missingJoins: string[] = [];
+      for (const step of plan.steps) {
+        if (step.datasets.length > 1) {
+          for (let i = 0; i < step.datasets.length - 1; i++) {
+            for (let j = i + 1; j < step.datasets.length; j++) {
+              const ds1 = step.datasets[i];
+              const ds2 = step.datasets[j];
+              const bothExist = datasetDetails.some((d) => d.name === ds1)
+                             && datasetDetails.some((d) => d.name === ds2);
+              if (!bothExist) continue; // Only check joins between datasets that both exist
+              const hasRelation = relevantRelationships.some(
+                (r) => (r.fromDataset === ds1 && r.toDataset === ds2) ||
+                       (r.fromDataset === ds2 && r.toDataset === ds1),
+              );
+              if (!hasRelation) {
+                missingJoins.push(`${ds1} <-> ${ds2}`);
+              }
+            }
+          }
+        }
+      }
+
+      // CRITICAL FAILURE: No datasets found at all for a data query
+      if (datasetDetails.length === 0 && planDatasets.size > 0) {
+        const allAvailable = await neoOntologyService.listDatasets(ontologyId);
+        const cannotAnswer = {
+          reason: `The ontology does not contain the datasets needed for this analysis: ${[...planDatasets].join(', ')}`,
+          missingDatasets: [...planDatasets],
+          availableDatasets: allAvailable.map((d: any) => d.name),
+        };
+        emit({ type: 'phase_artifact', phase: 'navigator', artifact: { cannotAnswer } });
+        emit({ type: 'phase_complete', phase: 'navigator' });
+        return {
+          cannotAnswer,
+          joinPlan: { relevantDatasets: [], joinPaths: [], notes: `Cannot answer: ${cannotAnswer.reason}` },
+          currentPhase: 'navigator',
+          tokensUsed: nodeTokens,
+        };
+      }
+
       const joinPlan: JoinPlanArtifact = {
         relevantDatasets: datasetDetails.map((ds) => ({
           name: ds.name,
@@ -147,6 +198,11 @@ export function createNavigatorNode(
         })),
         notes: findings,
       };
+
+      // NON-CRITICAL: Add warnings for missing joins (proceed with caveats)
+      if (missingJoins.length > 0) {
+        joinPlan.notes += `\nWARNING: No ontology relationship found for: ${missingJoins.join(', ')}. SQL Builder must not fabricate joins for these pairs.`;
+      }
 
       emit({ type: 'phase_artifact', phase: 'navigator', artifact: joinPlan });
       emit({ type: 'token_update', phase: 'navigator', tokensUsed: nodeTokens });

@@ -33,5 +33,15 @@ ${stepsSection || 'No SQL steps found.'}
 - If no relationship exists between two datasets, report it — do not fabricate a join.
 - Verify column names against the actual schema before recommending them.
 - The YAML returned by \`get_dataset_details\` is the semantic model — it defines exactly which columns exist and what types they are. Do NOT reference columns that do not appear in the YAML.
-- Report back when you have found all needed information.`;
+- If the ontology does not contain what is needed to answer the question, report this explicitly in your findings — do not attempt workarounds.
+- Report back when you have found all needed information.
+
+## CRITICAL: Ontology as Source of Truth
+You MUST only use datasets, fields, relationships, and join paths that exist in the ontology.
+You are FORBIDDEN from:
+- Guessing or inventing column names not in the YAML schemas
+- Assuming table structures not defined in the semantic model
+- Fabricating join conditions not in the ontology relationships
+- Using general SQL knowledge to fill gaps in the schema
+If the ontology does not contain what is needed to answer the question, report this explicitly in your findings — do not attempt workarounds.`;
 }
