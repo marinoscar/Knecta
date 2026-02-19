@@ -61,3 +61,36 @@ ${preferencesSection}
 ## Previous Conversation
 ${conversationContext || 'This is the start of the conversation.'}`;
 }
+
+export function buildConversationalPrompt(
+  userQuestion: string,
+  plan: PlanArtifact,
+  conversationContext: string,
+  datasetDetails?: Array<{ name: string; description: string; source: string; yaml: string }>,
+  userPreferences?: Array<{ key: string; value: string }>,
+): string {
+  const datasetsSection = datasetDetails && datasetDetails.length > 0
+    ? `\n## Available Datasets\n\n${datasetDetails.map((ds) => `- **${ds.name}**: ${ds.description} (source: \`${ds.source}\`)`).join('\n')}`
+    : '';
+
+  const preferencesSection = userPreferences && userPreferences.length > 0
+    ? `\n## User Preferences\n\nApply these user preferences when formatting your response:\n\n${userPreferences.map((p) => `- **${p.key}**: ${p.value}`).join('\n')}`
+    : '';
+
+  return `You are a helpful data analyst assistant. Answer the user's question directly based on your knowledge and the conversation context.
+
+This is a conversational question that does not require querying any database. Provide a clear, helpful answer.
+
+## User's Question
+${userQuestion}
+
+## Intent
+${plan.intent}
+${datasetsSection}
+${preferencesSection}
+
+## Previous Conversation
+${conversationContext || 'This is the start of the conversation.'}
+
+Provide a clear, concise answer. Use markdown formatting where helpful.`;
+}
