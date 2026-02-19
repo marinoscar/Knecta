@@ -34,4 +34,18 @@ export function getDiscoveryDriver(dbType: string): DiscoveryDriver {
   }
 }
 
-export { DatabaseDriver, DiscoveryDriver, ConnectionParams, ConnectionTestResult } from './driver.interface';
+export {
+  DatabaseDriver,
+  DiscoveryDriver,
+  ConnectionParams,
+  ConnectionTestResult,
+  DatabaseInfo,
+  SchemaInfo,
+  TableInfo,
+  ColumnInfo,
+  ForeignKeyInfo,
+  SampleDataResult,
+  ColumnStatsResult,
+  ColumnValueOverlapResult,
+  QueryResult,
+} from './driver.interface';

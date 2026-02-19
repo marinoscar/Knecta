@@ -10,6 +10,7 @@ import {
   ForeignKeyInfo,
   SampleDataResult,
   ColumnStatsResult,
+  ColumnValueOverlapResult,
   QueryResult,
 } from './driver.interface';
 
@@ -281,6 +282,88 @@ export class PostgreSQLDriver implements DiscoveryDriver {
         sampleValues,
         min: stats.min,
         max: stats.max,
+      };
+    } finally {
+      try {
+        await client.end();
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+  }
+
+  async getColumnValueOverlap(
+    params: ConnectionParams,
+    database: string,
+    childSchema: string,
+    childTable: string,
+    childColumn: string,
+    parentSchema: string,
+    parentTable: string,
+    parentColumn: string,
+    sampleSize = 1000,
+  ): Promise<ColumnValueOverlapResult> {
+    const client = await this.createClient(params, database);
+    try {
+      const sanitizedChildSchema = this.sanitizeIdentifier(childSchema);
+      const sanitizedChildTable = this.sanitizeIdentifier(childTable);
+      const sanitizedChildColumn = this.sanitizeIdentifier(childColumn);
+      const sanitizedParentSchema = this.sanitizeIdentifier(parentSchema);
+      const sanitizedParentTable = this.sanitizeIdentifier(parentTable);
+      const sanitizedParentColumn = this.sanitizeIdentifier(parentColumn);
+
+      const result = await client.query(
+        `WITH child_sample AS (
+           SELECT "${sanitizedChildColumn}" AS val
+           FROM "${sanitizedChildSchema}"."${sanitizedChildTable}"
+           LIMIT ${sampleSize}
+         ),
+         child_stats AS (
+           SELECT
+             COUNT(DISTINCT val) AS distinct_count,
+             COUNT(*) FILTER (WHERE val IS NULL) AS null_count,
+             COUNT(*) AS total_count
+           FROM child_sample
+         ),
+         child_vals AS (
+           SELECT DISTINCT val::text AS val
+           FROM child_sample
+           WHERE val IS NOT NULL
+         ),
+         parent_vals AS (
+           SELECT DISTINCT "${sanitizedParentColumn}"::text AS val
+           FROM "${sanitizedParentSchema}"."${sanitizedParentTable}"
+           WHERE "${sanitizedParentColumn}" IS NOT NULL
+           LIMIT ${sampleSize}
+         )
+         SELECT
+           cs.distinct_count AS "childDistinctCount",
+           cs.null_count AS "childNullCount",
+           cs.total_count AS "childSampleSize",
+           (SELECT COUNT(*) FROM parent_vals) AS "parentDistinctCount",
+           (SELECT COUNT(*) FROM child_vals c INNER JOIN parent_vals p ON c.val = p.val) AS "overlapCount"
+         FROM child_stats cs`
+      );
+
+      const row = result.rows[0];
+      const childDistinctCount = parseInt(row.childDistinctCount, 10);
+      const childNullCount = parseInt(row.childNullCount, 10);
+      const childSampleSize = parseInt(row.childSampleSize, 10);
+      const parentDistinctCount = parseInt(row.parentDistinctCount, 10);
+      const overlapCount = parseInt(row.overlapCount, 10);
+
+      // Compute ratios
+      const overlapRatio = overlapCount / Math.max(childDistinctCount, 1);
+      const nullRatio = childNullCount / Math.max(childSampleSize, 1);
+
+      return {
+        childDistinctCount,
+        childNullCount,
+        childSampleSize,
+        parentDistinctCount,
+        overlapCount,
+        overlapRatio,
+        nullRatio,
       };
     } finally {
       try {

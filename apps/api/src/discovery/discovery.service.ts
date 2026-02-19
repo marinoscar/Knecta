@@ -125,6 +125,41 @@ export class DiscoveryService {
   }
 
   /**
+   * Check value overlap between child and parent columns
+   */
+  async getColumnValueOverlap(
+    connectionId: string,
+    database: string,
+    childSchema: string,
+    childTable: string,
+    childColumn: string,
+    parentSchema: string,
+    parentTable: string,
+    parentColumn: string,
+    sampleSize?: number,
+  ) {
+    const { params, dbType } = await this.getConnectionParams(connectionId);
+    const driver = getDiscoveryDriver(dbType);
+    const overlap = await driver.getColumnValueOverlap(
+      params,
+      database,
+      childSchema,
+      childTable,
+      childColumn,
+      parentSchema,
+      parentTable,
+      parentColumn,
+      sampleSize,
+    );
+
+    this.logger.log(
+      `Retrieved value overlap for ${childTable}.${childColumn} -> ${parentTable}.${parentColumn} (${overlap.overlapRatio.toFixed(2)} overlap ratio) for connection ${connectionId}`,
+    );
+
+    return { data: overlap };
+  }
+
+  /**
    * Execute a read-only SQL query
    */
   async executeQuery(connectionId: string, sql: string, maxRows: number = 100) {
