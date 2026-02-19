@@ -1,6 +1,7 @@
 import { StateGraph, END, START } from '@langchain/langgraph';
 import { AgentState } from './state';
 import { createDiscoverAndGenerateNode } from './nodes/discover-and-generate';
+import { createDiscoverRelationshipsNode } from './nodes/discover-relationships';
 import { createGenerateRelationshipsNode } from './nodes/generate-relationships';
 import { createAssembleModelNode } from './nodes/assemble-model';
 import { createValidateModelNode } from './nodes/validate-model';
@@ -27,6 +28,9 @@ export function buildAgentGraph(
     .addNode('discover_and_generate', createDiscoverAndGenerateNode(
       llm, discoveryService, semanticModelsService, connectionId, userId, databaseName, runId, emitProgress,
     ))
+    .addNode('discover_relationships', createDiscoverRelationshipsNode(
+      discoveryService, connectionId, databaseName, semanticModelsService, runId, emitProgress,
+    ))
     .addNode('generate_relationships', createGenerateRelationshipsNode(
       llm, semanticModelsService, runId, emitProgress,
     ))
@@ -38,7 +42,8 @@ export function buildAgentGraph(
     ))
     .addNode('persist_model', createPersistNode(prisma))
     .addEdge(START, 'discover_and_generate')
-    .addEdge('discover_and_generate', 'generate_relationships')
+    .addEdge('discover_and_generate', 'discover_relationships')
+    .addEdge('discover_relationships', 'generate_relationships')
     .addEdge('generate_relationships', 'assemble_model')
     .addEdge('assemble_model', 'validate_model')
     .addEdge('validate_model', 'persist_model')

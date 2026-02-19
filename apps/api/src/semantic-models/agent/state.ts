@@ -1,6 +1,7 @@
 import { Annotation } from '@langchain/langgraph';
 import { OSIDataset, OSIRelationship, OSIMetric, OSIAIContext } from './osi/types';
 import { ForeignKeyInfo } from '../../connections/drivers/driver.interface';
+import { RelationshipCandidate } from './types/relationship-candidate';
 
 export const AgentState = Annotation.Root({
   // Input context
@@ -39,6 +40,12 @@ export const AgentState = Annotation.Root({
     default: () => [],
   }),
   failedTables: Annotation<string[]>({
+    reducer: (_, next) => next,
+    default: () => [],
+  }),
+
+  // Relationship discovery results (from discover_relationships node)
+  relationshipCandidates: Annotation<RelationshipCandidate[]>({
     reducer: (_, next) => next,
     default: () => [],
   }),
