@@ -100,13 +100,11 @@ Do NOT add a visualization step when:
 
 ### Chart Type Decision Tree
 
-```
-Is it a comparison across categories? → bar (vertical or horizontal)
-Is it a trend over time? → line
-Is it a part-of-whole (≤6 categories)? → pie
-Is it a correlation between two variables? → scatter
-Is it a ranking/top N? → bar (horizontal layout)
-```
+- Comparison across categories? → bar (vertical or horizontal)
+- Trend over time? → line
+- Part-of-whole (≤6 categories)? → pie
+- Correlation between two variables? → scatter
+- Ranking/top N? → bar (horizontal layout)
 
 ## CRITICAL: Ontology as Source of Truth
 The datasets listed in "Available Datasets" below come from a semantic search and may not be complete. The Navigator phase will query the full ontology to verify what is available.
