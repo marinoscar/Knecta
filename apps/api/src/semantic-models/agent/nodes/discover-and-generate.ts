@@ -184,7 +184,7 @@ async function processOneTable(
       totalTables,
       tableName: tableFQN,
       phase: 'discover',
-      percentComplete: Math.round((completedCount.value / totalTables) * 80),
+      percentComplete: Math.round((completedCount.value / totalTables) * 65),
     });
 
     // 1. List columns
@@ -249,7 +249,7 @@ async function processOneTable(
       totalTables,
       tableName: tableFQN,
       phase: 'generate',
-      percentComplete: Math.round((completedCount.value / totalTables) * 80),
+      percentComplete: Math.round((completedCount.value / totalTables) * 65),
     });
 
     // Build prompt and call LLM
@@ -311,7 +311,7 @@ async function processOneTable(
       completedTables: completedCount.value,
       totalTables,
       failedTables: [...failedTables],
-      percentComplete: Math.round((completedCount.value / totalTables) * 80),
+      percentComplete: Math.round((completedCount.value / totalTables) * 65),
       tokensUsed: { ...tokensUsed },
       startedAt: startTime,
       elapsedMs: Date.now() - startTimeMs,
@@ -347,7 +347,7 @@ async function processOneTable(
       completedTables: completedCount.value,
       totalTables,
       failedTables: [...failedTables],
-      percentComplete: Math.round((completedCount.value / totalTables) * 80),
+      percentComplete: Math.round((completedCount.value / totalTables) * 65),
       tokensUsed: { ...tokensUsed },
       startedAt: startTime,
       elapsedMs: Date.now() - startTimeMs,

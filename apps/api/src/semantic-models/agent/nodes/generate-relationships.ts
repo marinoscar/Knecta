@@ -37,7 +37,7 @@ export function createGenerateRelationshipsNode(
       modelName: state.modelName || `Model for ${state.databaseName}`,
       databaseName: state.databaseName,
       datasetSummaries,
-      foreignKeys: state.foreignKeys,
+      relationshipCandidates: state.relationshipCandidates,
       instructions: state.instructions || undefined,
       osiSpecText: state.osiSpecText || undefined,
     });
@@ -80,7 +80,7 @@ export function createGenerateRelationshipsNode(
       completedTables: state.datasets.length,
       totalTables: state.selectedTables.length,
       failedTables: state.failedTables,
-      percentComplete: 85,
+      percentComplete: 88,
       tokensUsed,
       elapsedMs: Date.now() - new Date(state.runId ? Date.now() : Date.now()).getTime(),
       partialModel: {
@@ -94,7 +94,7 @@ export function createGenerateRelationshipsNode(
       steps: [],
     }).catch(() => {});
 
-    logger.log(`Generated ${relationships.length} relationships and ${modelMetrics.length} model metrics (${callTokens.total} tokens)`);
+    logger.log(`Generated ${relationships.length} relationships and ${modelMetrics.length} model metrics from ${state.relationshipCandidates.length} candidates (${callTokens.total} tokens)`);
 
     return {
       relationships,
