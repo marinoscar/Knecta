@@ -272,6 +272,7 @@ export class DataAgentAgentService {
           ? { passed: finalState.verificationReport.passed, checks: finalState.verificationReport.checks }
           : undefined,
         dataLineage: explainerOutput?.dataLineage || undefined,
+        cannotAnswer: finalState.cannotAnswer || undefined,
         revisionsUsed: finalState.revisionCount || 0,
         durationMs: Date.now() - startedAt,
         startedAt,
