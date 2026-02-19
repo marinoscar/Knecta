@@ -13,7 +13,7 @@ import {
   Loop as LoopIcon,
 } from '@mui/icons-material';
 import type { DataAgentStreamEvent, LlmTraceRecord } from '../../types';
-import { extractLiveLlmTraces, formatDuration, formatTokenCount, PHASE_LABELS } from './insightsUtils';
+import { extractLiveLlmTraces, formatDuration, formatTokenCount, PHASE_LABELS, type LiveLlmTrace } from './insightsUtils';
 import { getMessageTraces } from '../../services/api';
 import { LlmTraceDialog } from './LlmTraceDialog';
 
@@ -33,6 +33,32 @@ const PHASE_COLORS: Record<string, 'info' | 'secondary' | 'primary' | 'warning' 
   verifier: 'success',
   explainer: 'default',
 };
+
+// Helper to convert LiveLlmTrace to LlmTraceRecord for the dialog
+function liveTraceToRecord(trace: LiveLlmTrace): LlmTraceRecord {
+  return {
+    id: `live-${trace.callIndex}`,
+    messageId: '',
+    phase: trace.phase,
+    callIndex: trace.callIndex,
+    stepId: trace.stepId ?? null,
+    purpose: trace.purpose,
+    provider: trace.provider,
+    model: trace.model,
+    temperature: null,
+    structuredOutput: trace.structuredOutput,
+    promptMessages: [],
+    responseContent: trace.responsePreview || '',
+    toolCalls: null,
+    promptTokens: trace.promptTokens || 0,
+    completionTokens: trace.completionTokens || 0,
+    totalTokens: trace.totalTokens || 0,
+    startedAt: '',
+    completedAt: '',
+    durationMs: trace.durationMs || 0,
+    error: trace.error || null,
+  };
+}
 
 export function LlmTracesSection({
   streamEvents,
@@ -161,11 +187,6 @@ export function LlmTracesSection({
                       {trace.purpose}
                     </Typography>
 
-                    {/* Provider/Model */}
-                    <Typography variant="caption" color="text.secondary">
-                      {trace.provider}/{trace.model}
-                    </Typography>
-
                     {/* Duration and tokens */}
                     {trace.status === 'complete' && trace.durationMs !== undefined && (
                       <>
@@ -190,19 +211,31 @@ export function LlmTracesSection({
                 {/* Expandable Details */}
                 <AccordionDetails sx={{ px: 2, py: 1 }}>
                   {trace.responsePreview ? (
-                    <Typography
-                      variant="caption"
-                      component="div"
-                      sx={{
-                        fontFamily: 'monospace',
-                        whiteSpace: 'pre-wrap',
-                        bgcolor: 'action.hover',
-                        p: 1,
-                        borderRadius: 1,
-                      }}
-                    >
-                      {trace.responsePreview}
-                    </Typography>
+                    <>
+                      <Typography
+                        variant="caption"
+                        component="div"
+                        sx={{
+                          fontFamily: 'monospace',
+                          whiteSpace: 'pre-wrap',
+                          bgcolor: 'action.hover',
+                          p: 1,
+                          borderRadius: 1,
+                        }}
+                      >
+                        {trace.responsePreview}
+                      </Typography>
+                      {trace.status === 'complete' && (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={() => setSelectedTrace(liveTraceToRecord(trace))}
+                          sx={{ mt: 1 }}
+                        >
+                          View Full
+                        </Button>
+                      )}
+                    </>
                   ) : (
                     <Typography variant="caption" color="text.secondary" fontStyle="italic">
                       Response pending...
@@ -259,11 +292,6 @@ export function LlmTracesSection({
                     {/* Purpose */}
                     <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
                       {trace.purpose}
-                    </Typography>
-
-                    {/* Provider/Model */}
-                    <Typography variant="caption" color="text.secondary">
-                      {trace.provider}/{trace.model}
                     </Typography>
 
                     {/* Duration and tokens */}
