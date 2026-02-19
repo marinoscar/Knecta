@@ -11,9 +11,10 @@ import {
   Button,
   FormControlLabel,
   Switch,
+  Snackbar,
 } from '@mui/material';
-import { ArrowBack as ArrowBackIcon } from '@mui/icons-material';
-import { getOntology, getOntologyGraph } from '../services/api';
+import { ArrowBack as ArrowBackIcon, Download as DownloadIcon } from '@mui/icons-material';
+import { getOntology, getOntologyGraph, exportOntologyRdf } from '../services/api';
 import type { Ontology, OntologyGraph, GraphNode } from '../types';
 import { OntologyGraph as OntologyGraphComponent } from '../components/ontologies/OntologyGraph';
 import { NodeInspector } from '../components/ontologies/NodeInspector';
@@ -35,6 +36,12 @@ export default function OntologyDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [showFields, setShowFields] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error';
+  }>({ open: false, message: '', severity: 'success' });
 
   // Fetch ontology details
   useEffect(() => {
@@ -81,6 +88,39 @@ export default function OntologyDetailPage() {
 
   const handleNodeClick = (node: GraphNode) => {
     setSelectedNode(node);
+  };
+
+  const handleExportRdf = async () => {
+    if (!ontology) return;
+
+    setExporting(true);
+    try {
+      const result = await exportOntologyRdf(ontology.id);
+
+      const blob = new Blob([result.rdf], { type: 'text/turtle' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${ontology.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.ttl`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      setSnackbar({
+        open: true,
+        message: 'RDF exported successfully',
+        severity: 'success',
+      });
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        message: err instanceof Error ? err.message : 'Failed to export RDF',
+        severity: 'error',
+      });
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (loading) {
@@ -164,12 +204,20 @@ export default function OntologyDetailPage() {
 
       {ontology.status === 'ready' && (
         <>
-          {/* Toggle: Show/Hide Fields */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+          {/* Toolbar: Toggle + Export */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
             <FormControlLabel
               control={<Switch checked={showFields} onChange={(e) => setShowFields(e.target.checked)} />}
               label="Show Fields"
             />
+            <Button
+              variant="outlined"
+              startIcon={<DownloadIcon />}
+              onClick={handleExportRdf}
+              disabled={exporting}
+            >
+              {exporting ? 'Exporting...' : 'Export to RDF'}
+            </Button>
           </Box>
 
           {/* Graph + Inspector layout */}
@@ -191,6 +239,21 @@ export default function OntologyDetailPage() {
           <NodeInspector node={selectedNode} open={!!selectedNode} onClose={() => setSelectedNode(null)} />
         </>
       )}
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+      >
+        <Alert
+          onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 }

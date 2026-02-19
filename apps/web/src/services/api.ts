@@ -503,6 +503,10 @@ export async function getOntologyGraph(id: string): Promise<OntologyGraph> {
   return api.get<OntologyGraph>(`/ontologies/${id}/graph`);
 }
 
+export async function exportOntologyRdf(id: string): Promise<{ rdf: string; name: string }> {
+  return api.get<{ rdf: string; name: string }>(`/ontologies/${id}/rdf`);
+}
+
 // ============================================================================
 // Data Agent API
 // ============================================================================
