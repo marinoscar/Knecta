@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NeoOntologyService } from './neo-ontology.service';
 import { CreateOntologyDto } from './dto/create-ontology.dto';
 import { OntologyQueryDto } from './dto/ontology-query.dto';
+import { exportGraphToTurtle } from './utils/rdf-exporter.util';
 
 @Injectable()
 export class OntologiesService {
@@ -263,6 +264,22 @@ export class OntologiesService {
 
     // Get graph from Neo4j
     return this.neoOntologyService.getGraph(id);
+  }
+
+  /**
+   * Export ontology as RDF Turtle format
+   */
+  async exportRdf(id: string): Promise<{ rdf: string; name: string }> {
+    const ontology = await this.getById(id);
+
+    if (ontology.status !== 'ready') {
+      throw new BadRequestException('Ontology must be in ready status to export');
+    }
+
+    const graph = await this.neoOntologyService.getGraph(id);
+    const rdf = exportGraphToTurtle(ontology, graph);
+
+    return { rdf, name: ontology.name };
   }
 
   /**

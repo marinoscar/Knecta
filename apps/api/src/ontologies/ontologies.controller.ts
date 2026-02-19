@@ -90,4 +90,15 @@ export class OntologiesController {
   async getGraph(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.getGraph(id);
   }
+
+  @Get(':id/rdf')
+  @Auth({ permissions: [PERMISSIONS.ONTOLOGIES_READ] })
+  @ApiOperation({ summary: 'Export ontology as RDF Turtle' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'RDF Turtle exported' })
+  @ApiResponse({ status: 404, description: 'Ontology not found' })
+  @ApiResponse({ status: 400, description: 'Ontology not ready for export' })
+  async exportRdf(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.exportRdf(id);
+  }
 }
