@@ -1,4 +1,9 @@
-import { buildDataAgentGraph } from './graph';
+import {
+  buildDataAgentGraph,
+  routeAfterPlanner,
+  routeAfterNavigator,
+  routeAfterVerification,
+} from './graph';
 import {
   createPlannerNode,
   createNavigatorNode,
@@ -265,6 +270,148 @@ describe('buildDataAgentGraph', () => {
       expect(createExecutorNode).toHaveBeenCalledTimes(1);
       expect(createVerifierNode).toHaveBeenCalledTimes(1);
       expect(createExplainerNode).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Routing functions', () => {
+    describe('routeAfterPlanner', () => {
+      it('should route to __end__ when clarification is needed', () => {
+        const state = {
+          plan: {
+            shouldClarify: true,
+            clarificationQuestions: [
+              { question: 'What time window?', assumption: 'last 30 days' },
+            ],
+            complexity: 'analytical',
+          },
+        } as any;
+        expect(routeAfterPlanner(state)).toBe('__end__');
+      });
+
+      it('should route conversational queries to explainer', () => {
+        const state = {
+          plan: {
+            shouldClarify: false,
+            clarificationQuestions: [],
+            complexity: 'conversational',
+          },
+        } as any;
+        expect(routeAfterPlanner(state)).toBe('explainer');
+      });
+
+      it('should route simple queries to navigator (NOT executor)', () => {
+        const state = {
+          plan: {
+            shouldClarify: false,
+            clarificationQuestions: [],
+            complexity: 'simple',
+          },
+        } as any;
+        expect(routeAfterPlanner(state)).toBe('navigator');
+      });
+
+      it('should route analytical queries to navigator', () => {
+        const state = {
+          plan: {
+            shouldClarify: false,
+            clarificationQuestions: [],
+            complexity: 'analytical',
+          },
+        } as any;
+        expect(routeAfterPlanner(state)).toBe('navigator');
+      });
+
+      it('should route to navigator when plan is null', () => {
+        const state = { plan: null } as any;
+        expect(routeAfterPlanner(state)).toBe('navigator');
+      });
+    });
+
+    describe('routeAfterNavigator', () => {
+      it('should route to explainer when cannotAnswer is set', () => {
+        const state = {
+          cannotAnswer: {
+            reason: 'Datasets not found',
+            missingDatasets: ['sales'],
+            availableDatasets: ['orders', 'products'],
+          },
+        } as any;
+        expect(routeAfterNavigator(state)).toBe('explainer');
+      });
+
+      it('should route to sql_builder when cannotAnswer is null', () => {
+        const state = {
+          cannotAnswer: null,
+        } as any;
+        expect(routeAfterNavigator(state)).toBe('sql_builder');
+      });
+
+      it('should route to sql_builder when cannotAnswer is undefined', () => {
+        const state = {} as any;
+        expect(routeAfterNavigator(state)).toBe('sql_builder');
+      });
+    });
+
+    describe('routeAfterVerification', () => {
+      it('should route to explainer when verification passed', () => {
+        const state = {
+          verificationReport: {
+            passed: true,
+            checks: [],
+            diagnosis: '',
+            recommendedTarget: null,
+          },
+          revisionCount: 0,
+        } as any;
+        expect(routeAfterVerification(state)).toBe('explainer');
+      });
+
+      it('should route to explainer when no verification report', () => {
+        const state = {
+          verificationReport: null,
+          revisionCount: 0,
+        } as any;
+        expect(routeAfterVerification(state)).toBe('explainer');
+      });
+
+      it('should route to explainer when max revisions reached', () => {
+        const state = {
+          verificationReport: {
+            passed: false,
+            checks: [],
+            diagnosis: 'fail',
+            recommendedTarget: 'sql_builder',
+          },
+          revisionCount: 3,
+        } as any;
+        expect(routeAfterVerification(state)).toBe('explainer');
+      });
+
+      it('should route to navigator when recommended', () => {
+        const state = {
+          verificationReport: {
+            passed: false,
+            checks: [],
+            diagnosis: 'join issue',
+            recommendedTarget: 'navigator',
+          },
+          revisionCount: 1,
+        } as any;
+        expect(routeAfterVerification(state)).toBe('navigator');
+      });
+
+      it('should route to sql_builder by default on failure', () => {
+        const state = {
+          verificationReport: {
+            passed: false,
+            checks: [],
+            diagnosis: 'SQL error',
+            recommendedTarget: 'sql_builder',
+          },
+          revisionCount: 1,
+        } as any;
+        expect(routeAfterVerification(state)).toBe('sql_builder');
+      });
     });
   });
 });
