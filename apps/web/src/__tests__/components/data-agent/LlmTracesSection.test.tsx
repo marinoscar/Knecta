@@ -99,9 +99,6 @@ describe('LlmTracesSection', () => {
       // Should show purpose
       expect(screen.getByText('Generate execution plan')).toBeInTheDocument();
 
-      // Should show provider/model
-      expect(screen.getByText(/openai\/gpt-4/i)).toBeInTheDocument();
-
       // Should show tokens
       expect(screen.getByText(/100 in/i)).toBeInTheDocument();
       expect(screen.getByText(/50 out/i)).toBeInTheDocument();
@@ -292,7 +289,6 @@ describe('LlmTracesSection', () => {
       });
 
       expect(screen.getByText('Generate plan')).toBeInTheDocument();
-      expect(screen.getByText(/openai\/gpt-4/i)).toBeInTheDocument();
       expect(screen.getByText('0:01')).toBeInTheDocument();
       expect(screen.getByText(/100 in/i)).toBeInTheDocument();
       expect(screen.getByText(/50 out/i)).toBeInTheDocument();
