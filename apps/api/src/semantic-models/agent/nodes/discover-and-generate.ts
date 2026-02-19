@@ -415,7 +415,7 @@ export function createDiscoverAndGenerateNode(
       databaseName,
       runId,
       modelName,
-      instructions: state.instructions,
+      instructions: state.instructions ?? undefined,
       osiSpecText: state.osiSpecText,
       emitProgress,
     };
