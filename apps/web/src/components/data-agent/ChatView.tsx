@@ -10,6 +10,7 @@ import {
   DialogContent,
   DialogActions,
   Button,
+  Tooltip,
   useTheme,
 } from '@mui/material';
 import {
@@ -148,13 +149,14 @@ export function ChatView({
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           {onOpenPreferences && (
-            <IconButton
-              onClick={onOpenPreferences}
-              size="small"
-              title="Agent Preferences"
-            >
-              <TuneIcon />
-            </IconButton>
+            <Tooltip title="Agent Preferences">
+              <IconButton
+                onClick={onOpenPreferences}
+                size="small"
+              >
+                <TuneIcon />
+              </IconButton>
+            </Tooltip>
           )}
           <IconButton
             onClick={onToggleInsightsPanel}
