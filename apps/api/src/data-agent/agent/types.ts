@@ -17,7 +17,7 @@ export interface PlanStep {
 }
 
 export interface PlanArtifact {
-  complexity: 'simple' | 'analytical';
+  complexity: 'simple' | 'analytical' | 'conversational';
   intent: string;
   metrics: string[];
   dimensions: string[];
@@ -114,6 +114,15 @@ export interface ExplainerOutput {
   charts: string[];
 }
 
+// ─── Cannot Answer Artifact ───
+
+export interface CannotAnswerArtifact {
+  reason: string;
+  missingDatasets?: string[];
+  missingJoins?: string[];
+  availableDatasets?: string[];
+}
+
 // ─── Tool Call Tracking ───
 
 export interface TrackedToolCall {
@@ -166,6 +175,7 @@ export interface DataAgentMessageMetadata {
   verificationReport?: { passed: boolean; checks: VerificationCheck[] };
   dataLineage?: DataLineage;
   clarificationQuestions?: Array<{ question: string; assumption: string }>;
+  cannotAnswer?: CannotAnswerArtifact;
   revisionsUsed: number;
   durationMs?: number;
   startedAt?: number;

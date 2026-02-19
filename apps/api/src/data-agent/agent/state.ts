@@ -7,6 +7,7 @@ import {
   StepResult,
   VerificationReport,
   ExplainerOutput,
+  CannotAnswerArtifact,
   TrackedToolCall,
   DataAgentPhase,
 } from './types';
@@ -63,6 +64,10 @@ export const DataAgentState = Annotation.Root({
     default: () => null,
   }),
   explainerOutput: Annotation<ExplainerOutput | null>({
+    reducer: (_, next) => next,
+    default: () => null,
+  }),
+  cannotAnswer: Annotation<CannotAnswerArtifact | null>({
     reducer: (_, next) => next,
     default: () => null,
   }),
