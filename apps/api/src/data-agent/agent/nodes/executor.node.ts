@@ -2,12 +2,54 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { DataAgentStateType } from '../state';
 import { StepResult, TrackedToolCall } from '../types';
 import { EmitFn } from '../graph';
-import { buildExecutorRepairPrompt, buildPythonGenerationPrompt } from '../prompts/executor.prompt';
+import { buildExecutorRepairPrompt, buildPythonGenerationPrompt, buildChartSpecPrompt } from '../prompts/executor.prompt';
 import { DiscoveryService } from '../../../discovery/discovery.service';
 import { SandboxService } from '../../../sandbox/sandbox.service';
 import { extractTokenUsage, mergeTokenUsage } from '../utils/token-tracker';
 import { DataAgentTracer } from '../utils/data-agent-tracer';
 import { extractTextContent } from '../utils/content-extractor';
+import { z } from 'zod';
+import { ChartSpec } from '../types';
+
+// ─── Chart Specification Validation Schema ───
+
+const ChartSeriesSchema = z.object({
+  label: z.string().describe('Series name shown in legend'),
+  data: z.array(z.number()).describe('Numeric values, one per category'),
+});
+
+const ChartSliceSchema = z.object({
+  label: z.string().describe('Slice label'),
+  value: z.number().describe('Slice value (converted to percentage)'),
+});
+
+const ChartPointSchema = z.object({
+  x: z.number().describe('X coordinate'),
+  y: z.number().describe('Y coordinate'),
+  label: z.string().optional().describe('Optional point label for hover tooltip'),
+});
+
+export const ChartSpecSchema = z.object({
+  type: z.enum(['bar', 'line', 'pie', 'scatter'])
+    .describe('Chart type (determines MUI X component)'),
+  title: z.string()
+    .max(60)
+    .describe('Concise chart title (max 60 chars)'),
+  xAxisLabel: z.string().optional()
+    .describe('X-axis label with units (e.g., "Month", "Region")'),
+  yAxisLabel: z.string().optional()
+    .describe('Y-axis label with units (e.g., "Revenue ($M)")'),
+  categories: z.array(z.string()).optional()
+    .describe('X-axis category labels (for bar/line charts)'),
+  series: z.array(ChartSeriesSchema).optional()
+    .describe('Data series for bar/line charts (can be multiple)'),
+  slices: z.array(ChartSliceSchema).max(8).optional()
+    .describe('Pie chart slices (max 8, group remaining as "Other")'),
+  points: z.array(ChartPointSchema).optional()
+    .describe('Scatter plot points (x/y coordinates)'),
+  layout: z.enum(['vertical', 'horizontal']).optional()
+    .describe('Chart orientation (bar charts only, default: vertical)'),
+});
 
 export function createExecutorNode(
   llm: any,
@@ -118,8 +160,78 @@ export function createExecutorNode(
           }
         }
 
+        // ── Chart Spec Generation (replaces Python for visualization steps) ──
+        if (step.chartType && (stepResult.sqlResult || priorContext)) {
+          try {
+            const chartPrompt = buildChartSpecPrompt(
+              step.description,
+              step.chartType,
+              stepResult.sqlResult?.data || null,
+              priorContext,
+            );
+
+            const chartMessages = [new SystemMessage(chartPrompt)];
+
+            const structuredLlm = llm.withStructuredOutput(ChartSpecSchema, {
+              name: 'create_chart',
+              includeRaw: true,
+            });
+
+            const { response: chartResponse } = await tracer.trace<any>(
+              {
+                phase: 'executor',
+                stepId: step.id,
+                purpose: `chart_gen_step_${step.id}`,
+                structuredOutput: true,
+              },
+              chartMessages,
+              () => structuredLlm.invoke(chartMessages),
+            );
+
+            stepResult.chartSpec = chartResponse.parsed as ChartSpec;
+
+            nodeTokens = mergeTokenUsage(
+              nodeTokens,
+              extractTokenUsage(chartResponse.raw),
+            );
+
+            emit({
+              type: 'tool_end',
+              phase: 'executor',
+              stepId: step.id,
+              name: 'create_chart',
+              result: `${step.chartType} chart: ${stepResult.chartSpec.title}`,
+            });
+
+            trackedToolCalls.push({
+              phase: 'executor',
+              stepId: step.id,
+              name: 'create_chart',
+              args: { chartType: step.chartType },
+              result: stepResult.chartSpec.title,
+            });
+          } catch (chartError) {
+            const chartMsg =
+              chartError instanceof Error ? chartError.message : String(chartError);
+
+            if (!stepResult.error) stepResult.error = '';
+            stepResult.error += `Chart Generation Error: ${chartMsg}`;
+
+            emit({
+              type: 'tool_error',
+              phase: 'executor',
+              stepId: step.id,
+              name: 'create_chart',
+              error: chartMsg,
+            });
+          }
+        }
+
         // ── Python Execution ──
-        if (step.strategy === 'python' || step.strategy === 'sql_then_python') {
+        if (
+          (step.strategy === 'python' || step.strategy === 'sql_then_python') &&
+          !step.chartType
+        ) {
           try {
             const prompt = buildPythonGenerationPrompt(
               step.description,
