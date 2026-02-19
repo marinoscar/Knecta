@@ -28,7 +28,7 @@
     "react-dom": "^18.x",
     "react-force-graph-2d": "^1.29.1",
     "react-markdown": "^8.0.7",
-    "react-router-dom": "^6.x",
+    "react-router-dom": "^7.x",
     "react-syntax-highlighter": "^15.6.6",
     "remark-gfm": "^3.0.1"
   },
