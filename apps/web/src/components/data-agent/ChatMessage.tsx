@@ -7,6 +7,7 @@ import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { DataChatMessage } from '../../types';
 import { getDataTableComponents } from './DataTable';
 import { ClarificationCard } from './ClarificationCard';
+import { ChartRenderer } from './ChartRenderer';
 
 interface ChatMessageProps {
   message: DataChatMessage;
@@ -254,6 +255,15 @@ export function ChatMessage({
           >
             {message.content}
           </ReactMarkdown>
+        )}
+
+        {/* Interactive Charts from Step Results */}
+        {message.metadata?.stepResults?.map((step) =>
+          step.chartSpec ? (
+            <Box key={`chart-${step.stepId}`}>
+              <ChartRenderer chartSpec={step.chartSpec} />
+            </Box>
+          ) : null
         )}
 
         {/* Clarification card for messages awaiting clarification */}
