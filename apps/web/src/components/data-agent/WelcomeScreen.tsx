@@ -84,7 +84,7 @@ export function WelcomeScreen({ onOntologySelect }: WelcomeScreenProps) {
         </Typography>
 
         {isLoading ? (
-          <Grid container spacing={2} sx={{ mt: 2 }}>
+          <Grid container spacing={2} sx={{ mt: 2 }} justifyContent="center">
             {[1, 2, 3, 4].map((i) => (
               <Grid item xs={12} sm={6} key={i}>
                 <Skeleton
@@ -149,7 +149,7 @@ export function WelcomeScreen({ onOntologySelect }: WelcomeScreenProps) {
             </Button>
           </Box>
         ) : (
-          <Grid container spacing={2} sx={{ mt: 2 }}>
+          <Grid container spacing={2} sx={{ mt: 2 }} justifyContent="center">
             {ontologies.map((ontology) => (
               <Grid item xs={12} sm={6} md={4} key={ontology.id}>
                 <Card
