@@ -194,17 +194,11 @@ export function LlmTracesSection({
                       {trace.purpose}
                     </Typography>
 
-                    {/* Duration and tokens */}
+                    {/* Duration */}
                     {trace.status === 'complete' && trace.durationMs !== undefined && (
-                      <>
-                        <Typography variant="caption" color="text.secondary">
-                          {formatDuration(trace.durationMs)}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {formatTokenCount(trace.promptTokens || 0)} in /{' '}
-                          {formatTokenCount(trace.completionTokens || 0)} out
-                        </Typography>
-                      </>
+                      <Typography variant="caption" color="text.secondary">
+                        {formatDuration(trace.durationMs)}
+                      </Typography>
                     )}
 
                     {trace.status === 'running' && (
@@ -219,6 +213,11 @@ export function LlmTracesSection({
                 <AccordionDetails sx={{ px: 2, py: 1 }}>
                   {trace.responsePreview ? (
                     <>
+                      {trace.status === 'complete' && (
+                        <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                          {formatTokenCount(trace.promptTokens || 0)} in / {formatTokenCount(trace.completionTokens || 0)} out
+                        </Typography>
+                      )}
                       <Box
                         sx={{
                           fontSize: '0.8rem',
@@ -305,19 +304,18 @@ export function LlmTracesSection({
                       {trace.purpose}
                     </Typography>
 
-                    {/* Duration and tokens */}
+                    {/* Duration */}
                     <Typography variant="caption" color="text.secondary">
                       {formatDuration(trace.durationMs)}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {formatTokenCount(trace.promptTokens)} in /{' '}
-                      {formatTokenCount(trace.completionTokens)} out
                     </Typography>
                   </Box>
                 </AccordionSummary>
 
                 {/* Expandable Details */}
                 <AccordionDetails sx={{ px: 2, py: 1 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                    {formatTokenCount(trace.promptTokens)} in / {formatTokenCount(trace.completionTokens)} out
+                  </Typography>
                   <Box
                     sx={{
                       fontSize: '0.8rem',
