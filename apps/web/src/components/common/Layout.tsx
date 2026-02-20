@@ -26,13 +26,14 @@ export function Layout() {
       }}
     >
       <AppBar onMenuClick={handleSidebarToggle} />
-      <Box sx={{ display: 'flex', flexGrow: 1 }}>
+      <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <Sidebar open={sidebarOpen} onClose={handleSidebarClose} />
         <Box
           component="main"
           sx={{
-            flexGrow: 1,
-            p: 3,
+            flex: 1,
+            minHeight: 0,
+            overflow: 'hidden',
           }}
         >
           <Outlet />
