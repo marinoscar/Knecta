@@ -198,7 +198,20 @@ export type DataAgentEventType =
   | 'token_update'
   | 'clarification_requested'
   | 'preference_suggested'
-  | 'preference_auto_saved';
+  | 'preference_auto_saved'
+  | 'discovery_start'
+  | 'discovery_complete';
+
+// ─── Discovery Result ───
+
+export interface DiscoveryResult {
+  embeddingDurationMs: number;
+  vectorSearchDurationMs: number;
+  yamlFetchDurationMs: number;
+  matchedDatasets: Array<{ name: string; score: number }>;
+  datasetsWithYaml: number;
+  preferencesLoaded: number;
+}
 
 // ─── Message Metadata ───
 
@@ -217,6 +230,7 @@ export interface DataAgentMessageMetadata {
   durationMs?: number;
   startedAt?: number;
   llmCallCount?: number;
+  discovery?: DiscoveryResult;
 }
 
 // ─── LLM Tracing ───
