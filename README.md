@@ -130,7 +130,3 @@ cd apps/api && npm test
 # Frontend tests (Vitest + React Testing Library)
 cd apps/web && npm test
 ```
-
-## License
-
-All rights reserved.
