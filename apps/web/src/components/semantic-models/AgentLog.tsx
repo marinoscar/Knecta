@@ -22,6 +22,7 @@ import Markdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { api } from '../../services/api';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 interface AgentLogProps {
   runId: string;
@@ -70,6 +71,10 @@ type LogStatus = 'connecting' | 'running' | 'completed' | 'error';
 
 export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
   const navigate = useNavigate();
+  const { notify } = useNotifications();
+  const notifyRef = useRef(notify);
+  notifyRef.current = notify;
+
   const [status, setStatus] = useState<LogStatus>('connecting');
   const [sections, setSections] = useState<StepSection[]>([]);
   const [semanticModelId, setSemanticModelId] = useState<string | null>(null);
@@ -292,11 +297,26 @@ export function AgentLog({ runId, onRetry, onExit }: AgentLogProps) {
           if (event.duration) {
             setDuration(event.duration);
           }
+          notifyRef.current({
+            title: event.semanticModelId ? 'Semantic Model Ready' : 'Model Generation Complete',
+            body: event.failedTables?.length
+              ? `Generated with ${event.failedTables.length} table(s) skipped.`
+              : `Generated successfully${event.duration ? ` in ${Math.floor(event.duration / 1000)}s` : ''}.`,
+            module: 'semantic-models',
+            severity: event.failedTables?.length ? 'warning' : 'success',
+            clickUrl: event.semanticModelId ? `/semantic-models/${event.semanticModelId}` : undefined,
+          });
           break;
 
         case 'run_error':
           setStatus('error');
           setErrorMessage(event.message);
+          notifyRef.current({
+            title: 'Model Generation Failed',
+            body: event.message || 'An error occurred during generation.',
+            module: 'semantic-models',
+            severity: 'error',
+          });
           break;
       }
     };
