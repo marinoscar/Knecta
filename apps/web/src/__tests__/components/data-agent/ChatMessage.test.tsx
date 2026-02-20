@@ -1,8 +1,17 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import { render } from '../../utils/test-utils';
 import { ChatMessage } from '../../../components/data-agent/ChatMessage';
 import type { DataChatMessage } from '../../../types';
+
+// Mock MUI X Charts - they depend on canvas/SVG that JSDOM can't render
+// ChatMessage imports ChartRenderer which imports @mui/x-charts
+vi.mock('@mui/x-charts', () => ({
+  BarChart: (props: any) => <div data-testid="bar-chart" data-height={props.height} />,
+  LineChart: (props: any) => <div data-testid="line-chart" data-height={props.height} />,
+  PieChart: (props: any) => <div data-testid="pie-chart" data-height={props.height} />,
+  ScatterChart: (props: any) => <div data-testid="scatter-chart" data-height={props.height} />,
+}));
 
 describe('ChatMessage', () => {
   const baseMessage: DataChatMessage = {
