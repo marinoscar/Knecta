@@ -5,19 +5,20 @@ import { SandboxService } from '../../../sandbox/sandbox.service';
 export function createRunPythonTool(
   sandboxService: SandboxService,
 ): DynamicStructuredTool {
-  // @ts-expect-error — DynamicStructuredTool has excessively deep Zod type inference
+  const schema = z.object({
+    code: z
+      .string()
+      .describe(
+        'Python code to execute. Use print() for text output. Use matplotlib for charts (they are auto-saved).',
+      ),
+  });
+
   return new DynamicStructuredTool({
     name: 'run_python',
     description:
       'Execute Python code for data analysis and visualization. Available libraries: pandas, numpy, matplotlib, seaborn, scipy. Use matplotlib to create charts — they will be automatically saved and returned. Print results to stdout for text output.',
-    schema: z.object({
-      code: z
-        .string()
-        .describe(
-          'Python code to execute. Use print() for text output. Use matplotlib for charts (they are auto-saved).',
-        ),
-    }),
-    func: async ({ code }) => {
+    schema: schema as any,
+    func: async ({ code }: any) => {
       try {
         const result = await sandboxService.executeCode(code, 30);
 
