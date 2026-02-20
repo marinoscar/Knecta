@@ -35,6 +35,8 @@ interface ChatViewProps {
   onClarificationAnswer?: (originalQuestion: string, response: string) => void;
   onProceedWithAssumptions?: (originalQuestion: string, assumptions: string) => void;
   onOpenPreferences?: () => void;
+  selectedMessageId?: string;
+  onMessageSelect?: (messageId: string) => void;
 }
 
 export function ChatView({
@@ -49,6 +51,8 @@ export function ChatView({
   onClarificationAnswer,
   onProceedWithAssumptions,
   onOpenPreferences,
+  selectedMessageId,
+  onMessageSelect,
 }: ChatViewProps) {
   const theme = useTheme();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -199,38 +203,57 @@ export function ChatView({
           </Box>
         ) : (
           <Box sx={{ maxWidth: 900, mx: 'auto' }}>
-            {messages.map((message, index) => (
-              <Box key={message.id}>
-                <ChatMessage
-                  message={message}
-                  isStreaming={isStreaming}
-                  onClarificationAnswer={(response) => {
-                    const prevUserMsg = index > 0 ? messages[index - 1] : null;
-                    const originalQuestion =
-                      prevUserMsg?.role === 'user' ? prevUserMsg.content : '';
-                    onClarificationAnswer?.(originalQuestion, response);
+            {messages.map((message, index) => {
+              const isSelectable = message.role === 'assistant' && message.status === 'complete' && onMessageSelect;
+              const isSelected = message.id === selectedMessageId;
+
+              return (
+                <Box
+                  key={message.id}
+                  onClick={isSelectable ? () => onMessageSelect?.(message.id) : undefined}
+                  sx={{
+                    cursor: isSelectable ? 'pointer' : 'default',
+                    borderLeft: isSelected ? 3 : 0,
+                    borderColor: isSelected ? 'primary.main' : 'transparent',
+                    bgcolor: isSelected ? 'action.hover' : 'transparent',
+                    borderRadius: 1,
+                    pl: isSelected ? 1 : 0,
+                    transition: 'all 0.15s ease',
+                    '&:hover': isSelectable ? {
+                      bgcolor: 'action.hover',
+                    } : {},
                   }}
-                  onProceedWithAssumptions={() => {
-                    const prevUserMsg = index > 0 ? messages[index - 1] : null;
-                    const originalQuestion =
-                      prevUserMsg?.role === 'user' ? prevUserMsg.content : '';
-                    const assumptions = (
-                      message.metadata?.clarificationQuestions || []
-                    )
-                      .map((q) => q.assumption)
-                      .join('; ');
-                    onProceedWithAssumptions?.(originalQuestion, assumptions);
-                  }}
-                />
-                {/* Show phase indicator for the current streaming assistant message */}
-                {message.role === 'assistant' &&
-                  message.status === 'generating' &&
-                  index === messages.length - 1 &&
-                  streamEvents.length > 0 && (
-                    <PhaseIndicator events={streamEvents} isStreaming={isStreaming} />
-                  )}
-              </Box>
-            ))}
+                >
+                  <ChatMessage
+                    message={message}
+                    isStreaming={isStreaming}
+                    onClarificationAnswer={(response) => {
+                      const prevUserMsg = index > 0 ? messages[index - 1] : null;
+                      const originalQuestion =
+                        prevUserMsg?.role === 'user' ? prevUserMsg.content : '';
+                      onClarificationAnswer?.(originalQuestion, response);
+                    }}
+                    onProceedWithAssumptions={() => {
+                      const prevUserMsg = index > 0 ? messages[index - 1] : null;
+                      const originalQuestion =
+                        prevUserMsg?.role === 'user' ? prevUserMsg.content : '';
+                      const assumptions = (
+                        message.metadata?.clarificationQuestions || []
+                      )
+                        .map((q) => q.assumption)
+                        .join('; ');
+                      onProceedWithAssumptions?.(originalQuestion, assumptions);
+                    }}
+                  />
+                  {message.role === 'assistant' &&
+                    message.status === 'generating' &&
+                    index === messages.length - 1 &&
+                    streamEvents.length > 0 && (
+                      <PhaseIndicator events={streamEvents} isStreaming={isStreaming} />
+                    )}
+                </Box>
+              );
+            })}
             <div ref={messagesEndRef} />
           </Box>
         )}

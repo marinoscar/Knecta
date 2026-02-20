@@ -21,6 +21,7 @@ export default function DataAgentPage() {
   const [newChatDialogOpen, setNewChatDialogOpen] = useState(false);
   const [pendingSuggestion, setPendingSuggestion] = useState<string | null>(null);
   const [insightsPanelOpen, setInsightsPanelOpen] = useState(false);
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [preferencesDialogOpen, setPreferencesDialogOpen] = useState(false);
   const [autoSavedSnackbarOpen, setAutoSavedSnackbarOpen] = useState(false);
   const theme = useTheme();
@@ -192,10 +193,18 @@ export default function DataAgentPage() {
     [addPreference, chat?.ontologyId, clearPreferenceSuggestions],
   );
 
+  const handleMessageSelect = useCallback((messageId: string) => {
+    setSelectedMessageId(messageId);
+    if (!insightsPanelOpen) {
+      setInsightsPanelOpen(true);
+    }
+  }, [insightsPanelOpen]);
+
   // Auto-open insights panel when streaming starts (large screens only)
   useEffect(() => {
     if (isStreaming && isLargeScreen) {
       setInsightsPanelOpen(true);
+      setSelectedMessageId(null); // Reset to latest during streaming
     }
   }, [isStreaming, isLargeScreen]);
 
@@ -248,6 +257,8 @@ export default function DataAgentPage() {
               onDelete={handleDeleteCurrentChat}
               insightsPanelOpen={insightsPanelOpen}
               onToggleInsightsPanel={() => setInsightsPanelOpen((prev) => !prev)}
+              selectedMessageId={selectedMessageId ?? undefined}
+              onMessageSelect={handleMessageSelect}
               onClarificationAnswer={handleClarificationAnswer}
               onProceedWithAssumptions={handleProceedWithAssumptions}
               onOpenPreferences={() => setPreferencesDialogOpen(true)}
@@ -287,6 +298,8 @@ export default function DataAgentPage() {
             messages={messages}
             streamEvents={streamEvents}
             isStreaming={isStreaming}
+            selectedMessageId={selectedMessageId ?? undefined}
+            chatId={chatId}
             onClose={() => setInsightsPanelOpen(false)}
           />
         </Box>
@@ -304,6 +317,8 @@ export default function DataAgentPage() {
             messages={messages}
             streamEvents={streamEvents}
             isStreaming={isStreaming}
+            selectedMessageId={selectedMessageId ?? undefined}
+            chatId={chatId}
             onClose={() => setInsightsPanelOpen(false)}
           />
         </Drawer>
