@@ -34,6 +34,8 @@ export interface PlanArtifact {
   acceptanceChecks: string[];
   shouldClarify: boolean;
   clarificationQuestions: Array<{ question: string; assumption: string }>;
+  /** Planner's self-assessed confidence that the plan is unambiguous */
+  confidenceLevel: 'high' | 'medium' | 'low';
   steps: PlanStep[];
 }
 

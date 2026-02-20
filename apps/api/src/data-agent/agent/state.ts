@@ -42,6 +42,12 @@ export const DataAgentState = Annotation.Root({
     default: () => [],
   }),
 
+  // ─── Clarification Round Tracking ───
+  clarificationRound: Annotation<number>({
+    reducer: (_, next) => next,
+    default: () => 0,
+  }),
+
   // ─── Phase Artifacts ───
   plan: Annotation<PlanArtifact | null>({
     reducer: (_, next) => next,
