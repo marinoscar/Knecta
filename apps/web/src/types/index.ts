@@ -21,6 +21,11 @@ export interface UserSettings {
     customImageUrl?: string | null;
   };
   defaultProvider?: string;
+  notifications?: {
+    browser?: boolean;
+    email?: boolean;
+    sms?: boolean;
+  };
   updatedAt: string;
   version: number;
 }
@@ -41,6 +46,10 @@ export interface SystemSettings {
     openai?: DataAgentProviderConfig;
     anthropic?: DataAgentProviderConfig;
     azure?: DataAgentProviderConfig;
+  };
+  notifications?: {
+    email?: { enabled: boolean };
+    sms?: { enabled: boolean };
   };
   updatedAt: string;
   updatedBy: { id: string; email: string } | null;
@@ -557,4 +566,22 @@ export interface DataAgentStreamEvent {
   matchedDatasets?: Array<{ name: string; score: number }>;
   datasetsWithYaml?: number;
   preferencesLoaded?: number;
+}
+
+// ==========================================
+// Notifications
+// ==========================================
+
+export type NotificationModule = 'semantic-models' | 'data-agent' | 'ontologies';
+export type NotificationSeverity = 'success' | 'error' | 'info' | 'warning';
+export type BrowserNotificationPermission = 'default' | 'granted' | 'denied';
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  body: string;
+  module: NotificationModule;
+  severity: NotificationSeverity;
+  clickUrl?: string;
+  timestamp: number;
 }
