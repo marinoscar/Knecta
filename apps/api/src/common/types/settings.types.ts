@@ -13,6 +13,11 @@ export interface UserSettingsValue {
     customImageUrl?: string | null;
   };
   defaultProvider?: string;
+  notifications?: {
+    browser?: boolean;
+    email?: boolean;
+    sms?: boolean;
+  };
 }
 
 /**
@@ -38,6 +43,10 @@ export interface SystemSettingsValue {
     openai?: DataAgentProviderConfig;
     anthropic?: DataAgentProviderConfig;
     azure?: DataAgentProviderConfig;
+  };
+  notifications?: {
+    email?: { enabled: boolean };
+    sms?: { enabled: boolean };
   };
 }
 

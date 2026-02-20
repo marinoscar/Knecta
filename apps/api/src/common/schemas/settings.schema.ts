@@ -12,6 +12,13 @@ export const userSettingsSchema = z.object({
     customImageUrl: z.string().url().nullable().optional(),
   }),
   defaultProvider: z.string().max(50).optional(),
+  notifications: z
+    .object({
+      browser: z.boolean().optional(),
+      email: z.boolean().optional(),
+      sms: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 export type UserSettingsDto = z.infer<typeof userSettingsSchema>;
@@ -22,6 +29,10 @@ export const userSettingsPatchSchema = userSettingsSchema.deepPartial();
 // =============================================================================
 // System Settings Schema
 // =============================================================================
+
+const notificationChannelConfigSchema = z.object({
+  enabled: z.boolean(),
+});
 
 const dataAgentProviderConfigSchema = z.object({
   temperature: z.number().min(0).max(2).optional(),
@@ -39,6 +50,12 @@ export const systemSettingsSchema = z.object({
       openai: dataAgentProviderConfigSchema.optional(),
       anthropic: dataAgentProviderConfigSchema.optional(),
       azure: dataAgentProviderConfigSchema.optional(),
+    })
+    .optional(),
+  notifications: z
+    .object({
+      email: notificationChannelConfigSchema.optional(),
+      sms: notificationChannelConfigSchema.optional(),
     })
     .optional(),
 });

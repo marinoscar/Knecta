@@ -1,6 +1,10 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
+const notificationChannelConfigSchema = z.object({
+  enabled: z.boolean(),
+});
+
 const dataAgentProviderConfigSchema = z.object({
   temperature: z.number().min(0).max(2).optional(),
   model: z.string().max(100).optional(),
@@ -18,6 +22,12 @@ export const updateSystemSettingsSchema = z.object({
       openai: dataAgentProviderConfigSchema.optional(),
       anthropic: dataAgentProviderConfigSchema.optional(),
       azure: dataAgentProviderConfigSchema.optional(),
+    })
+    .optional(),
+  notifications: z
+    .object({
+      email: notificationChannelConfigSchema.optional(),
+      sms: notificationChannelConfigSchema.optional(),
     })
     .optional(),
 });
@@ -39,6 +49,12 @@ export const patchSystemSettingsSchema = z.object({
       openai: dataAgentProviderConfigSchema.optional(),
       anthropic: dataAgentProviderConfigSchema.optional(),
       azure: dataAgentProviderConfigSchema.optional(),
+    })
+    .optional(),
+  notifications: z
+    .object({
+      email: notificationChannelConfigSchema.optional(),
+      sms: notificationChannelConfigSchema.optional(),
     })
     .optional(),
 });

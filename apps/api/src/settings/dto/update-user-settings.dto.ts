@@ -10,6 +10,13 @@ export const updateUserSettingsSchema = z.object({
     customImageUrl: z.string().url().nullable().optional(),
   }),
   defaultProvider: z.string().max(50).optional(),
+  notifications: z
+    .object({
+      browser: z.boolean().optional(),
+      email: z.boolean().optional(),
+      sms: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 export class UpdateUserSettingsDto extends createZodDto(
@@ -27,6 +34,13 @@ export const patchUserSettingsSchema = z.object({
     })
     .optional(),
   defaultProvider: z.string().max(50).optional(),
+  notifications: z
+    .object({
+      browser: z.boolean().optional(),
+      email: z.boolean().optional(),
+      sms: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 export class PatchUserSettingsDto extends createZodDto(

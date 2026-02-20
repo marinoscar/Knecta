@@ -57,6 +57,7 @@ export class SystemSettingsService {
       ui: value.ui,
       features: value.features,
       dataAgent: value.dataAgent,
+      notifications: value.notifications,
       updatedAt: settings.updatedAt,
       updatedBy: settings.updatedByUser,
       version: settings.version,
@@ -102,6 +103,7 @@ export class SystemSettingsService {
       ui: value.ui,
       features: value.features,
       dataAgent: value.dataAgent,
+      notifications: value.notifications,
       updatedAt: settings.updatedAt,
       updatedBy: settings.updatedByUser,
       version: settings.version,
@@ -156,6 +158,16 @@ export class SystemSettingsService {
       };
     }
 
+    // Only include notifications if it exists in current or dto
+    if (current.notifications || dto.notifications) {
+      const emailConfig = dto.notifications?.email ?? current.notifications?.email;
+      const smsConfig = dto.notifications?.sms ?? current.notifications?.sms;
+      merged.notifications = {
+        ...(emailConfig ? { email: emailConfig } : {}),
+        ...(smsConfig ? { sms: smsConfig } : {}),
+      };
+    }
+
     // Validate merged result
     const validated = systemSettingsSchema.parse(merged);
 
@@ -187,6 +199,7 @@ export class SystemSettingsService {
       ui: value.ui,
       features: value.features,
       dataAgent: value.dataAgent,
+      notifications: value.notifications,
       updatedAt: settings.updatedAt,
       updatedBy: settings.updatedByUser,
       version: settings.version,
