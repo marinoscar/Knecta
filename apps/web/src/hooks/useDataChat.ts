@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { getDataChat, sendDataAgentMessage, updateDataChat } from '../services/api';
 import { api } from '../services/api';
 import type { DataChat, DataChatMessage, DataAgentStreamEvent } from '../types';
+import { useNotifications } from '../contexts/NotificationContext';
 
 export interface PreferenceSuggestion {
   key: string;
@@ -28,6 +29,10 @@ interface UseDataChatResult {
 }
 
 export function useDataChat(): UseDataChatResult {
+  const { notify } = useNotifications();
+  const notifyRef = useRef(notify);
+  notifyRef.current = notify;
+
   const [chat, setChat] = useState<DataChat | null>(null);
   const [messages, setMessages] = useState<DataChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -37,6 +42,10 @@ export function useDataChat(): UseDataChatResult {
   const [autoSavedPreferences, setAutoSavedPreferences] = useState<Array<{ key: string; value: string }>>([]);
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const chatRef = useRef<DataChat | null>(null);
+
+  // Keep chatRef in sync with chat state
+  chatRef.current = chat;
 
   const loadChat = useCallback(async (id: string) => {
     setIsLoading(true);
@@ -183,6 +192,16 @@ export function useDataChat(): UseDataChatResult {
                           : m,
                       ),
                     );
+                    // Send browser notification (skip for clarification requests)
+                    if ((event as any).status !== 'clarification_needed') {
+                      notifyRef.current({
+                        title: 'Analysis Complete',
+                        body: ((event as any).content || 'Your query has been answered.').slice(0, 120),
+                        module: 'data-agent',
+                        severity: 'success',
+                        clickUrl: chatRef.current ? `/agent/${chatRef.current.id}` : undefined,
+                      });
+                    }
                     break;
 
                   case 'message_error':
@@ -198,6 +217,13 @@ export function useDataChat(): UseDataChatResult {
                       ),
                     );
                     setError(event.message || 'Agent error');
+                    notifyRef.current({
+                      title: 'Analysis Failed',
+                      body: (event as any).message || 'An error occurred.',
+                      module: 'data-agent',
+                      severity: 'error',
+                      clickUrl: chatRef.current ? `/agent/${chatRef.current.id}` : undefined,
+                    });
                     break;
 
                   case 'preference_suggested':
