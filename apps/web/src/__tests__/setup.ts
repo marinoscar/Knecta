@@ -90,6 +90,18 @@ class IntersectionObserverMock {
 }
 global.IntersectionObserver = IntersectionObserverMock as any;
 
+// Mock Notification API
+const MockNotification = vi.fn();
+Object.defineProperty(MockNotification, 'permission', {
+  value: 'default',
+  writable: true,
+});
+MockNotification.requestPermission = vi.fn().mockResolvedValue('default');
+Object.defineProperty(window, 'Notification', {
+  value: MockNotification,
+  writable: true,
+});
+
 // Setup MSW server
 beforeAll(() => {
   server.listen({

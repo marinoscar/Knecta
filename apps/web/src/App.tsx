@@ -3,6 +3,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeContextProvider, useThemeContext } from './contexts/ThemeContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
 import { Layout } from './components/common/Layout';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
@@ -83,7 +84,9 @@ export default function App() {
   return (
     <ThemeContextProvider>
       <AuthProvider>
-        <AppRoutes />
+        <NotificationProvider>
+          <AppRoutes />
+        </NotificationProvider>
       </AuthProvider>
     </ThemeContextProvider>
   );

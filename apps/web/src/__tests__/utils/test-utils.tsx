@@ -4,9 +4,10 @@ import { MemoryRouter } from 'react-router-dom';
 import { CssBaseline } from '@mui/material';
 import { vi } from 'vitest';
 
-// Import AuthContext and ThemeContextProvider
+// Import AuthContext, ThemeContextProvider, and NotificationContext
 import { AuthContext } from '../../contexts/AuthContext';
 import { ThemeContextProvider } from '../../contexts/ThemeContext';
+import { NotificationContext } from '../../contexts/NotificationContext';
 import type { AuthProvider as AuthProviderType } from '../../types';
 
 interface WrapperOptions {
@@ -92,7 +93,14 @@ function MockAuthProvider({
 
   return (
     <AuthContext.Provider value={contextValue}>
-      {children}
+      <NotificationContext.Provider value={{
+        notify: vi.fn().mockResolvedValue(undefined),
+        browserPermission: 'default' as const,
+        requestBrowserPermission: vi.fn().mockResolvedValue(true),
+        isSupported: true,
+      }}>
+        {children}
+      </NotificationContext.Provider>
     </AuthContext.Provider>
   );
 }
