@@ -9,7 +9,7 @@ export function buildExecutorRepairPrompt(
     ? `\n## Dataset Schemas (from semantic model)\n\nUse these column names and types to fix the SQL. CRITICAL: Use ONLY column names that appear in these schemas. Do NOT invent or guess column names.\n\n${datasetSchemas}\n`
     : '';
 
-  return `The following SQL query failed during execution. Fix it and return ONLY the corrected SQL query (no markdown fences, no explanation).
+  return `Fix the following failed SQL query and return ONLY the corrected SQL query (no markdown fences, no explanation).
 
 ## Database Type
 ${databaseType}
@@ -65,7 +65,7 @@ export function buildChartSpecPrompt(
   sqlData: string | null,
   priorContext: string,
 ): string {
-  return `You are a data visualization expert. Extract chart data from the execution results and output a structured chart specification.
+  return `Extract chart data from the execution results and output a structured chart specification.
 
 ## Task Description
 ${stepDescription}

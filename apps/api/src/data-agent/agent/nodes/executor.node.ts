@@ -115,7 +115,10 @@ export function createExecutorNode(
 
               try {
                 const repairPrompt = buildExecutorRepairPrompt(step.description, querySpec.pilotSql, errMsg, state.databaseType, datasetSchemas);
-                const repairMessages = [new SystemMessage(repairPrompt)];
+                const repairMessages = [
+                  new SystemMessage('You are a SQL repair expert. Fix the broken SQL query and return ONLY the corrected SQL.'),
+                  new HumanMessage(repairPrompt),
+                ];
                 const { response: repairResponse } = await tracer.trace<any>(
                   { phase: 'executor', stepId: step.id, purpose: `sql_repair_step_${step.id}`, structuredOutput: false },
                   repairMessages,
@@ -171,7 +174,10 @@ export function createExecutorNode(
               priorContext,
             );
 
-            const chartMessages = [new SystemMessage(chartPrompt)];
+            const chartMessages = [
+              new SystemMessage('You are a data visualization expert. Extract chart data from execution results and output a structured chart specification.'),
+              new HumanMessage(chartPrompt),
+            ];
 
             const structuredLlm = llm.withStructuredOutput(ChartSpecSchema, {
               name: 'create_chart',
