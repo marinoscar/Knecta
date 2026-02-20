@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -21,7 +21,13 @@ import {
   Cancel,
   AccountTree,
   TravelExplore,
+  SmartToy,
+  Code,
+  ExpandMore,
 } from '@mui/icons-material';
+import { Light as SyntaxHighlighter } from 'react-syntax-highlighter';
+import sql from 'react-syntax-highlighter/dist/esm/languages/hljs/sql';
+import { vs2015 } from 'react-syntax-highlighter/dist/esm/styles/hljs';
 import type { DataChatMessage, DataAgentStreamEvent } from '../../types';
 import {
   extractPlan,
@@ -35,14 +41,20 @@ import {
   formatDurationMs,
 } from './insightsUtils';
 import { useElapsedTimer } from '../../hooks/useElapsedTimer';
+import { useMessageInsights } from '../../hooks/useMessageInsights';
 import { JoinGraphDialog } from './JoinGraphDialog';
 import { LlmTracesSection } from './LlmTracesSection';
+import type { PhaseDetailWithTiming } from './traceInsightsParser';
+
+SyntaxHighlighter.registerLanguage('sql', sql);
 
 interface AgentInsightsPanelProps {
   messages: DataChatMessage[];
   streamEvents: DataAgentStreamEvent[];
   isStreaming: boolean;
   onClose: () => void;
+  selectedMessageId?: string;
+  chatId?: string;
 }
 
 export function AgentInsightsPanel({
@@ -50,55 +62,111 @@ export function AgentInsightsPanel({
   streamEvents,
   isStreaming,
   onClose,
+  selectedMessageId,
+  chatId,
 }: AgentInsightsPanelProps) {
-  // Mode detection
+  // Resolve target message: selected or last assistant message
   const lastAssistantMessage = messages.filter((m) => m.role === 'assistant').pop();
-  const isLiveMode = isStreaming && lastAssistantMessage?.status === 'generating';
-  const metadata = !isLiveMode ? lastAssistantMessage?.metadata : null;
+  const targetMessage = useMemo(() => {
+    if (selectedMessageId) {
+      return messages.find((m) => m.id === selectedMessageId) ?? lastAssistantMessage;
+    }
+    return lastAssistantMessage;
+  }, [selectedMessageId, messages, lastAssistantMessage]);
 
-  // Extract data
-  const plan = extractPlan(streamEvents, metadata, isLiveMode);
-  const stepStatuses = extractStepStatuses(plan, streamEvents, metadata, isLiveMode);
-  const phaseDetails = extractPhaseDetails(streamEvents, metadata, isLiveMode);
-  const joinPlan = extractJoinPlan(streamEvents, metadata, isLiveMode);
+  // Find the user question that preceded the target message
+  const userQuestion = useMemo(() => {
+    if (!targetMessage) return null;
+    const idx = messages.findIndex((m) => m.id === targetMessage.id);
+    if (idx > 0 && messages[idx - 1].role === 'user') {
+      return messages[idx - 1].content;
+    }
+    return null;
+  }, [targetMessage, messages]);
+
+  // Mode detection
+  const isLiveMode = isStreaming && targetMessage?.status === 'generating';
+  const metadata = !isLiveMode ? targetMessage?.metadata : null;
+
+  // Fetch and derive insights from traces (history mode only)
+  const { traces, insights, isLoading: insightsLoading } = useMessageInsights({
+    chatId,
+    messageId: targetMessage?.id,
+    metadata,
+    enabled: !isLiveMode && !!targetMessage,
+  });
+
+  // Extract data — use trace-derived insights in history mode, stream events in live mode
+  const plan = isLiveMode
+    ? extractPlan(streamEvents, metadata, true)
+    : insights?.plan ?? extractPlan(streamEvents, metadata, false);
+
+  const stepStatuses = isLiveMode
+    ? extractStepStatuses(plan, streamEvents, metadata, true)
+    : insights?.stepStatuses.length
+      ? insights.stepStatuses
+      : extractStepStatuses(plan, streamEvents, metadata, false);
+
+  const phaseDetails = isLiveMode
+    ? extractPhaseDetails(streamEvents, metadata, true)
+    : insights?.phaseDetails.length
+      ? insights.phaseDetails
+      : extractPhaseDetails(streamEvents, metadata, false);
+
+  const joinPlan = isLiveMode
+    ? extractJoinPlan(streamEvents, metadata, true)
+    : insights?.joinPlan ?? extractJoinPlan(streamEvents, metadata, false);
+
   const discovery = extractDiscovery(streamEvents, metadata, isLiveMode);
 
   // State
   const [joinGraphOpen, setJoinGraphOpen] = useState(false);
 
-  // Live timer — read startedAt from the message_start stream event (not from metadata, which isn't set until completion)
+  // Live timer
   const startedAt = isLiveMode
     ? streamEvents.find((e) => e.type === 'message_start')?.startedAt || null
-    : lastAssistantMessage?.metadata?.startedAt || null;
+    : targetMessage?.metadata?.startedAt || null;
   const liveElapsed = useElapsedTimer(startedAt, isLiveMode);
 
-  // Compute duration
+  // Compute duration — prefer trace-derived in history mode
   const duration = isLiveMode
     ? liveElapsed
-    : metadata?.durationMs
-      ? formatDuration(metadata.durationMs)
-      : '--';
+    : insights?.durationMs
+      ? formatDuration(insights.durationMs)
+      : metadata?.durationMs
+        ? formatDuration(metadata.durationMs)
+        : '--';
 
-  // Token stats — read from stream events during live mode, from metadata in history mode
+  // Token stats
   const liveTokens = isLiveMode ? extractLiveTokens(streamEvents) : null;
-  const tokenSource = isLiveMode ? liveTokens : metadata?.tokensUsed;
-  const inputTokens = tokenSource?.prompt
-    ? formatTokenCount(tokenSource.prompt)
-    : '--';
-  const outputTokens = tokenSource?.completion
-    ? formatTokenCount(tokenSource.completion)
-    : '--';
-  const totalTokens = tokenSource?.total
-    ? formatTokenCount(tokenSource.total)
-    : '--';
+  const tokenSource = isLiveMode
+    ? liveTokens
+    : insights?.tokens.total
+      ? insights.tokens
+      : metadata?.tokensUsed;
+  const inputTokens = tokenSource?.prompt ? formatTokenCount(tokenSource.prompt) : '--';
+  const outputTokens = tokenSource?.completion ? formatTokenCount(tokenSource.completion) : '--';
+  const totalTokens = tokenSource?.total ? formatTokenCount(tokenSource.total) : '--';
+
+  // Provider/model from traces
+  const providerModel = insights?.providerModel ?? null;
+
+  // SQL queries from traces
+  const sqlQueries = insights?.sqlQueries ?? [];
+
+  // Verification & lineage — metadata only
+  const verificationReport = insights?.verificationReport ?? metadata?.verificationReport;
+  const dataLineage = insights?.dataLineage ?? metadata?.dataLineage;
 
   // Filter phases for display
   const visiblePhases = phaseDetails.filter((pd) =>
-    isLiveMode ? pd.status !== 'pending' || phaseDetails.some((p) => p.status !== 'pending') : pd.status !== 'pending'
+    isLiveMode
+      ? pd.status !== 'pending' || phaseDetails.some((p) => p.status !== 'pending')
+      : pd.status !== 'pending',
   );
 
   // Empty state
-  if (!lastAssistantMessage) {
+  if (!targetMessage) {
     return (
       <Box
         sx={{
@@ -143,6 +211,41 @@ export function AgentInsightsPanel({
           <ChevronRight />
         </IconButton>
       </Box>
+
+      {/* User Question Context */}
+      {userQuestion && !isLiveMode && (
+        <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+            Question
+          </Typography>
+          <Typography
+            variant="body2"
+            sx={{
+              bgcolor: 'action.hover',
+              borderRadius: 1,
+              px: 1.5,
+              py: 1,
+              fontStyle: 'italic',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              display: '-webkit-box',
+              WebkitLineClamp: 3,
+              WebkitBoxOrient: 'vertical',
+            }}
+          >
+            {userQuestion}
+          </Typography>
+        </Box>
+      )}
+
+      {/* Loading indicator */}
+      {insightsLoading && !isLiveMode && (
+        <Box sx={{ px: 2, py: 1 }}>
+          <Typography variant="caption" color="text.secondary">
+            Loading trace data...
+          </Typography>
+        </Box>
+      )}
 
       {/* Stats Row */}
       <Box
@@ -240,6 +343,29 @@ export function AgentInsightsPanel({
             {totalTokens}
           </Typography>
         </Box>
+
+        {/* Provider / Model */}
+        {providerModel && (
+          <Box
+            sx={{
+              bgcolor: 'action.hover',
+              borderRadius: 1,
+              px: 1.5,
+              py: 1,
+              flex: '1 1 100%',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+              <SmartToy sx={{ fontSize: 16, color: 'text.secondary' }} />
+              <Typography variant="caption" color="text.secondary">
+                Model
+              </Typography>
+            </Box>
+            <Typography variant="body2" fontWeight="medium">
+              {providerModel.provider} / {providerModel.model}
+            </Typography>
+          </Box>
+        )}
       </Box>
 
       {/* Dataset Discovery Section */}
@@ -266,7 +392,6 @@ export function AgentInsightsPanel({
               </Typography>
             ) : (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {/* Matched Datasets */}
                 {discovery.matchedDatasets.length > 0 && (
                   <Box>
                     <Typography variant="caption" color="text.secondary">
@@ -285,8 +410,6 @@ export function AgentInsightsPanel({
                     </Box>
                   </Box>
                 )}
-
-                {/* Summary Stats */}
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                   <Chip
                     size="small"
@@ -303,8 +426,6 @@ export function AgentInsightsPanel({
                     />
                   )}
                 </Box>
-
-                {/* Timing Breakdown */}
                 {discovery.embeddingDurationMs !== undefined && (
                   <Box>
                     <Typography variant="caption" color="text.secondary">
@@ -355,7 +476,6 @@ export function AgentInsightsPanel({
                   py: 0.75,
                 }}
               >
-                {/* Status Icon */}
                 <Box sx={{ flexShrink: 0, mt: 0.25 }}>
                   {step.status === 'pending' && (
                     <RadioButtonUnchecked sx={{ fontSize: 20, color: 'action.disabled' }} />
@@ -380,8 +500,6 @@ export function AgentInsightsPanel({
                     <Error sx={{ fontSize: 20, color: 'error.main' }} />
                   )}
                 </Box>
-
-                {/* Step Details */}
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Box
                     sx={{
@@ -422,9 +540,127 @@ export function AgentInsightsPanel({
             <Typography variant="subtitle2" fontWeight={600} mb={1}>
               Phase Details
             </Typography>
-            {visiblePhases.map((phase) => (
+            {visiblePhases.map((phase) => {
+              const phaseTiming = (phase as PhaseDetailWithTiming).durationMs;
+              const phaseTokens = (phase as PhaseDetailWithTiming).tokens;
+
+              return (
+                <Accordion
+                  key={phase.phase}
+                  disableGutters
+                  elevation={0}
+                  sx={{
+                    '&:before': { display: 'none' },
+                    bgcolor: 'transparent',
+                  }}
+                >
+                  <AccordionSummary
+                    sx={{
+                      px: 1,
+                      minHeight: 40,
+                      '&.Mui-expanded': { minHeight: 40 },
+                      '& .MuiAccordionSummary-content': { my: 1 },
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                      <Box
+                        sx={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          bgcolor:
+                            phase.status === 'complete'
+                              ? 'success.main'
+                              : phase.status === 'active'
+                                ? 'primary.main'
+                                : 'action.disabled',
+                          ...(phase.status === 'active' && {
+                            '@keyframes pulse': {
+                              '0%, 100%': { opacity: 1 },
+                              '50%': { opacity: 0.5 },
+                            },
+                            animation: 'pulse 1.5s ease-in-out infinite',
+                          }),
+                        }}
+                      />
+                      <Typography variant="body2" sx={{ flex: 1 }}>
+                        {phase.label}
+                      </Typography>
+                      {/* Per-phase timing from traces */}
+                      {phaseTiming > 0 && (
+                        <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
+                          {formatDurationMs(phaseTiming)}
+                        </Typography>
+                      )}
+                      {phaseTokens?.total > 0 && (
+                        <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
+                          {formatTokenCount(phaseTokens.total)} tok
+                        </Typography>
+                      )}
+                      <Chip
+                        size="small"
+                        label={phase.status}
+                        color={
+                          phase.status === 'complete'
+                            ? 'success'
+                            : phase.status === 'active'
+                              ? 'primary'
+                              : 'default'
+                        }
+                        sx={{ fontSize: '0.7rem', height: 20 }}
+                      />
+                    </Box>
+                  </AccordionSummary>
+                  <AccordionDetails sx={{ px: 2, py: 1 }}>
+                    {phase.toolCalls.length === 0 ? (
+                      <Typography variant="caption" color="text.secondary" fontStyle="italic">
+                        No tools used
+                      </Typography>
+                    ) : (
+                      <Box>
+                        {phase.toolCalls.map((toolCall, idx) => (
+                          <Typography
+                            key={idx}
+                            variant="caption"
+                            component="div"
+                            sx={{ mb: 0.5 }}
+                          >
+                            <strong>{toolCall.name}</strong>
+                            {toolCall.result && (
+                              <>
+                                {': '}
+                                {toolCall.result.length > 100
+                                  ? `${toolCall.result.slice(0, 100)}...`
+                                  : toolCall.result}
+                              </>
+                            )}
+                          </Typography>
+                        ))}
+                      </Box>
+                    )}
+                  </AccordionDetails>
+                </Accordion>
+              );
+            })}
+          </Box>
+        </>
+      )}
+
+      {/* SQL Queries Section (from traces) */}
+      {sqlQueries.length > 0 && (
+        <>
+          <Divider />
+          <Box sx={{ p: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <Code sx={{ fontSize: 18, color: 'text.secondary' }} />
+              <Typography variant="subtitle2" fontWeight={600}>
+                SQL Queries
+              </Typography>
+              <Chip size="small" label={`${sqlQueries.length}`} variant="outlined" sx={{ height: 20 }} />
+            </Box>
+            {sqlQueries.map((query) => (
               <Accordion
-                key={phase.phase}
+                key={query.stepId}
                 disableGutters
                 elevation={0}
                 sx={{
@@ -433,79 +669,32 @@ export function AgentInsightsPanel({
                 }}
               >
                 <AccordionSummary
+                  expandIcon={<ExpandMore />}
                   sx={{
                     px: 1,
-                    minHeight: 40,
-                    '&.Mui-expanded': { minHeight: 40 },
-                    '& .MuiAccordionSummary-content': { my: 1 },
+                    minHeight: 36,
+                    '&.Mui-expanded': { minHeight: 36 },
+                    '& .MuiAccordionSummary-content': { my: 0.5 },
                   }}
                 >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                    {/* Status Dot */}
-                    <Box
-                      sx={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        bgcolor:
-                          phase.status === 'complete'
-                            ? 'success.main'
-                            : phase.status === 'active'
-                              ? 'primary.main'
-                              : 'action.disabled',
-                        ...(phase.status === 'active' && {
-                          '@keyframes pulse': {
-                            '0%, 100%': { opacity: 1 },
-                            '50%': { opacity: 0.5 },
-                          },
-                          animation: 'pulse 1.5s ease-in-out infinite',
-                        }),
-                      }}
-                    />
-                    <Typography variant="body2" sx={{ flex: 1 }}>
-                      {phase.label}
-                    </Typography>
-                    <Chip
-                      size="small"
-                      label={phase.status}
-                      color={
-                        phase.status === 'complete'
-                          ? 'success'
-                          : phase.status === 'active'
-                            ? 'primary'
-                            : 'default'
-                      }
-                      sx={{ fontSize: '0.7rem', height: 20 }}
-                    />
-                  </Box>
+                  <Typography variant="body2">
+                    Step {query.stepId}: {query.description}
+                  </Typography>
                 </AccordionSummary>
-                <AccordionDetails sx={{ px: 2, py: 1 }}>
-                  {phase.toolCalls.length === 0 ? (
-                    <Typography variant="caption" color="text.secondary" fontStyle="italic">
-                      No tools used
-                    </Typography>
-                  ) : (
-                    <Box>
-                      {phase.toolCalls.map((toolCall, idx) => (
-                        <Typography
-                          key={idx}
-                          variant="caption"
-                          component="div"
-                          sx={{ mb: 0.5 }}
-                        >
-                          <strong>{toolCall.name}</strong>
-                          {toolCall.result && (
-                            <>
-                              {': '}
-                              {toolCall.result.length > 100
-                                ? `${toolCall.result.slice(0, 100)}...`
-                                : toolCall.result}
-                            </>
-                          )}
-                        </Typography>
-                      ))}
-                    </Box>
-                  )}
+                <AccordionDetails sx={{ p: 0 }}>
+                  <SyntaxHighlighter
+                    language="sql"
+                    style={vs2015}
+                    customStyle={{
+                      margin: 0,
+                      borderRadius: 4,
+                      fontSize: '0.8rem',
+                      maxHeight: 200,
+                    }}
+                    wrapLongLines
+                  >
+                    {query.sql}
+                  </SyntaxHighlighter>
                 </AccordionDetails>
               </Accordion>
             ))}
@@ -519,8 +708,9 @@ export function AgentInsightsPanel({
         <LlmTracesSection
           streamEvents={streamEvents}
           isLiveMode={isLiveMode}
-          chatId={lastAssistantMessage?.chatId}
-          messageId={lastAssistantMessage?.id}
+          chatId={chatId ?? targetMessage?.chatId}
+          messageId={targetMessage?.id}
+          historyTraces={!isLiveMode ? traces : undefined}
         />
       </Box>
 
@@ -571,7 +761,7 @@ export function AgentInsightsPanel({
       )}
 
       {/* Verification Summary */}
-      {metadata?.verificationReport && (
+      {verificationReport && (
         <>
           <Divider />
           <Box sx={{ p: 2 }}>
@@ -581,12 +771,12 @@ export function AgentInsightsPanel({
               </Typography>
               <Chip
                 size="small"
-                label={metadata.verificationReport.passed ? 'Passed' : 'Failed'}
-                color={metadata.verificationReport.passed ? 'success' : 'warning'}
+                label={verificationReport.passed ? 'Passed' : 'Failed'}
+                color={verificationReport.passed ? 'success' : 'warning'}
               />
             </Box>
             <Box>
-              {metadata.verificationReport.checks.map((check: any, idx: number) => (
+              {verificationReport.checks.map((check: any, idx: number) => (
                 <Box
                   key={idx}
                   sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, py: 0.5 }}
@@ -610,7 +800,7 @@ export function AgentInsightsPanel({
       )}
 
       {/* Data Lineage */}
-      {metadata?.dataLineage && (
+      {dataLineage && (
         <>
           <Divider />
           <Box sx={{ p: 2 }}>
@@ -623,7 +813,7 @@ export function AgentInsightsPanel({
                   Datasets:
                 </Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-                  {metadata.dataLineage.datasets.map((dataset: string) => (
+                  {dataLineage.datasets.map((dataset: string) => (
                     <Chip key={dataset} size="small" label={dataset} variant="outlined" />
                   ))}
                 </Box>
@@ -632,15 +822,15 @@ export function AgentInsightsPanel({
                 <Typography variant="caption" color="text.secondary">
                   Grain:
                 </Typography>
-                <Typography variant="body2">{metadata.dataLineage.grain}</Typography>
+                <Typography variant="body2">{dataLineage.grain}</Typography>
               </Box>
-              {metadata.dataLineage.rowCount !== null && (
+              {dataLineage.rowCount !== null && (
                 <Box>
                   <Typography variant="caption" color="text.secondary">
                     Row Count:
                   </Typography>
                   <Typography variant="body2">
-                    {metadata.dataLineage.rowCount.toLocaleString()}
+                    {dataLineage.rowCount.toLocaleString()}
                   </Typography>
                 </Box>
               )}

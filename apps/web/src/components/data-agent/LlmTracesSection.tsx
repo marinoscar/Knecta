@@ -24,6 +24,7 @@ interface LlmTracesSectionProps {
   isLiveMode: boolean;
   chatId?: string;
   messageId?: string;
+  historyTraces?: LlmTraceRecord[];
 }
 
 // Phase color mapping (matches PhaseIndicator)
@@ -67,21 +68,25 @@ export function LlmTracesSection({
   isLiveMode,
   chatId,
   messageId,
+  historyTraces: preloadedTraces,
 }: LlmTracesSectionProps) {
-  const [historyTraces, setHistoryTraces] = useState<LlmTraceRecord[]>([]);
+  const [fetchedTraces, setFetchedTraces] = useState<LlmTraceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedTrace, setSelectedTrace] = useState<LlmTraceRecord | null>(null);
 
-  // Fetch traces in history mode
+  // Use pre-loaded traces if available, otherwise fetch
+  const historyTraces = preloadedTraces ?? fetchedTraces;
+
+  // Fetch traces in history mode (only when no pre-loaded traces)
   useEffect(() => {
-    if (!isLiveMode && chatId && messageId) {
+    if (!isLiveMode && !preloadedTraces && chatId && messageId) {
       setIsLoading(true);
       getMessageTraces(chatId, messageId)
-        .then((traces) => setHistoryTraces(traces))
+        .then((traces) => setFetchedTraces(traces))
         .catch((err) => console.error('Failed to load LLM traces:', err))
         .finally(() => setIsLoading(false));
     }
-  }, [isLiveMode, chatId, messageId]);
+  }, [isLiveMode, preloadedTraces, chatId, messageId]);
 
   // Extract live traces from stream events
   const liveTraces = isLiveMode ? extractLiveLlmTraces(streamEvents) : [];
