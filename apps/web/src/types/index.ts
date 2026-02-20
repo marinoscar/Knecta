@@ -472,6 +472,14 @@ export interface DataChatMessage {
       missingJoins?: string[];
       availableDatasets?: string[];
     };
+    discovery?: {
+      embeddingDurationMs: number;
+      vectorSearchDurationMs: number;
+      yamlFetchDurationMs: number;
+      matchedDatasets: Array<{ name: string; score: number }>;
+      datasetsWithYaml: number;
+      preferencesLoaded: number;
+    };
   };
   status: 'generating' | 'complete' | 'failed' | 'clarification_needed';
   createdAt: string;
@@ -506,7 +514,9 @@ export interface DataAgentStreamEvent {
     | 'llm_call_end'
     | 'clarification_requested'
     | 'preference_suggested'
-    | 'preference_auto_saved';
+    | 'preference_auto_saved'
+    | 'discovery_start'
+    | 'discovery_complete';
   name?: string;
   args?: Record<string, unknown>;
   result?: string;
@@ -540,4 +550,11 @@ export interface DataAgentStreamEvent {
   suggestions?: Array<{ key: string; value: string; question: string }>;
   preferences?: Array<{ key: string; value: string }>;
   status?: string;
+  // Discovery fields
+  embeddingDurationMs?: number;
+  vectorSearchDurationMs?: number;
+  yamlFetchDurationMs?: number;
+  matchedDatasets?: Array<{ name: string; score: number }>;
+  datasetsWithYaml?: number;
+  preferencesLoaded?: number;
 }

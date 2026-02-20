@@ -419,3 +419,69 @@ export function extractLiveLlmTraces(
 
   return Array.from(traceMap.values()).sort((a, b) => a.callIndex - b.callIndex);
 }
+
+// Discovery Types
+
+export interface DiscoveryData {
+  status: 'pending' | 'running' | 'complete';
+  embeddingDurationMs?: number;
+  vectorSearchDurationMs?: number;
+  yamlFetchDurationMs?: number;
+  matchedDatasets: Array<{ name: string; score: number }>;
+  datasetsWithYaml: number;
+  preferencesLoaded: number;
+}
+
+/**
+ * Extract discovery data from either live stream events or message metadata
+ */
+export function extractDiscovery(
+  streamEvents: DataAgentStreamEvent[],
+  metadata: any,
+  isLive: boolean,
+): DiscoveryData | null {
+  if (isLive) {
+    const discoveryComplete = streamEvents.find((e) => e.type === 'discovery_complete');
+    if (discoveryComplete) {
+      return {
+        status: 'complete',
+        embeddingDurationMs: discoveryComplete.embeddingDurationMs,
+        vectorSearchDurationMs: discoveryComplete.vectorSearchDurationMs,
+        yamlFetchDurationMs: discoveryComplete.yamlFetchDurationMs,
+        matchedDatasets: discoveryComplete.matchedDatasets || [],
+        datasetsWithYaml: discoveryComplete.datasetsWithYaml || 0,
+        preferencesLoaded: discoveryComplete.preferencesLoaded || 0,
+      };
+    }
+    const discoveryStarted = streamEvents.some((e) => e.type === 'discovery_start');
+    if (discoveryStarted) {
+      return {
+        status: 'running',
+        matchedDatasets: [],
+        datasetsWithYaml: 0,
+        preferencesLoaded: 0,
+      };
+    }
+    return null;
+  } else {
+    const discovery = metadata?.discovery;
+    if (!discovery) return null;
+    return {
+      status: 'complete',
+      embeddingDurationMs: discovery.embeddingDurationMs,
+      vectorSearchDurationMs: discovery.vectorSearchDurationMs,
+      yamlFetchDurationMs: discovery.yamlFetchDurationMs,
+      matchedDatasets: discovery.matchedDatasets || [],
+      datasetsWithYaml: discovery.datasetsWithYaml || 0,
+      preferencesLoaded: discovery.preferencesLoaded || 0,
+    };
+  }
+}
+
+/**
+ * Format duration in milliseconds (for sub-second durations)
+ */
+export function formatDurationMs(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return formatDuration(ms);
+}

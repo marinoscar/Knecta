@@ -20,6 +20,7 @@ import {
   Error,
   Cancel,
   AccountTree,
+  TravelExplore,
 } from '@mui/icons-material';
 import type { DataChatMessage, DataAgentStreamEvent } from '../../types';
 import {
@@ -28,8 +29,10 @@ import {
   extractPhaseDetails,
   extractLiveTokens,
   extractJoinPlan,
+  extractDiscovery,
   formatDuration,
   formatTokenCount,
+  formatDurationMs,
 } from './insightsUtils';
 import { useElapsedTimer } from '../../hooks/useElapsedTimer';
 import { JoinGraphDialog } from './JoinGraphDialog';
@@ -58,6 +61,7 @@ export function AgentInsightsPanel({
   const stepStatuses = extractStepStatuses(plan, streamEvents, metadata, isLiveMode);
   const phaseDetails = extractPhaseDetails(streamEvents, metadata, isLiveMode);
   const joinPlan = extractJoinPlan(streamEvents, metadata, isLiveMode);
+  const discovery = extractDiscovery(streamEvents, metadata, isLiveMode);
 
   // State
   const [joinGraphOpen, setJoinGraphOpen] = useState(false);
@@ -237,6 +241,97 @@ export function AgentInsightsPanel({
           </Typography>
         </Box>
       </Box>
+
+      {/* Dataset Discovery Section */}
+      {discovery && (
+        <>
+          <Divider />
+          <Box sx={{ p: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <TravelExplore sx={{ fontSize: 18, color: 'text.secondary' }} />
+              <Typography variant="subtitle2" fontWeight={600}>
+                Dataset Discovery
+              </Typography>
+              {discovery.status === 'running' && (
+                <Chip size="small" label="running" color="primary" sx={{ fontSize: '0.7rem', height: 20 }} />
+              )}
+              {discovery.status === 'complete' && (
+                <Chip size="small" label="complete" color="success" sx={{ fontSize: '0.7rem', height: 20 }} />
+              )}
+            </Box>
+
+            {discovery.status === 'running' ? (
+              <Typography variant="body2" color="text.secondary">
+                Searching for relevant datasets...
+              </Typography>
+            ) : (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {/* Matched Datasets */}
+                {discovery.matchedDatasets.length > 0 && (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Matched Datasets ({discovery.matchedDatasets.length})
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+                      {discovery.matchedDatasets.map((ds) => (
+                        <Chip
+                          key={ds.name}
+                          size="small"
+                          label={`${ds.name} (${(ds.score * 100).toFixed(0)}%)`}
+                          variant="outlined"
+                          sx={{ fontSize: '0.75rem' }}
+                        />
+                      ))}
+                    </Box>
+                  </Box>
+                )}
+
+                {/* Summary Stats */}
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  <Chip
+                    size="small"
+                    label={`${discovery.datasetsWithYaml} schemas loaded`}
+                    variant="outlined"
+                    sx={{ fontSize: '0.75rem' }}
+                  />
+                  {discovery.preferencesLoaded > 0 && (
+                    <Chip
+                      size="small"
+                      label={`${discovery.preferencesLoaded} preferences`}
+                      variant="outlined"
+                      sx={{ fontSize: '0.75rem' }}
+                    />
+                  )}
+                </Box>
+
+                {/* Timing Breakdown */}
+                {discovery.embeddingDurationMs !== undefined && (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Timing
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 0.5 }}>
+                      <Typography variant="caption">
+                        Embedding: {formatDurationMs(discovery.embeddingDurationMs)}
+                      </Typography>
+                      {discovery.vectorSearchDurationMs !== undefined && (
+                        <Typography variant="caption">
+                          Vector Search: {formatDurationMs(discovery.vectorSearchDurationMs)}
+                        </Typography>
+                      )}
+                      {discovery.yamlFetchDurationMs !== undefined && (
+                        <Typography variant="caption">
+                          YAML Fetch: {formatDurationMs(discovery.yamlFetchDurationMs)}
+                        </Typography>
+                      )}
+                    </Box>
+                  </Box>
+                )}
+              </Box>
+            )}
+          </Box>
+        </>
+      )}
 
       {/* Execution Plan Section */}
       <Divider />

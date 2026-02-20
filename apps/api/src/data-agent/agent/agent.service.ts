@@ -8,7 +8,7 @@ import { DiscoveryService } from '../../discovery/discovery.service';
 import { SandboxService } from '../../sandbox/sandbox.service';
 import { DataAgentService } from '../data-agent.service';
 import { buildDataAgentGraph } from './graph';
-import { DataAgentMessageMetadata } from './types';
+import { DataAgentMessageMetadata, DiscoveryResult } from './types';
 import { DataAgentTracer } from './utils/data-agent-tracer';
 
 export interface AgentStreamEvent {
@@ -82,20 +82,25 @@ export class DataAgentAgentService {
 
     const startedAt = Date.now();
     onEvent({ type: 'message_start', startedAt });
+    onEvent({ type: 'discovery_start' });
 
     // ── Step 2: Generate embedding for user question ──
     this.logger.log('Generating embedding for user question');
+    const embeddingStart = Date.now();
     const embeddingProvider = this.embeddingService.getProvider();
     const queryEmbedding = await embeddingProvider.generateEmbedding(userQuestion);
+    const embeddingDurationMs = Date.now() - embeddingStart;
 
     // ── Step 3: Vector search for relevant datasets ──
     this.logger.log('Searching for relevant datasets');
+    const vectorSearchStart = Date.now();
     const relevantDatasets = await this.neoVectorService.searchSimilar(
       'dataset_embedding',
       ontology.id,
       queryEmbedding,
       10,
     );
+    const vectorSearchDurationMs = Date.now() - vectorSearchStart;
 
     if (relevantDatasets.length === 0) {
       this.logger.warn('No vector search results, checking if ontology has datasets');
@@ -119,9 +124,11 @@ export class DataAgentAgentService {
 
     // ── Step 3b: Pre-fetch YAML schemas for vector-matched datasets ──
     const datasetNames = relevantDatasets.map((ds) => ds.name);
+    const yamlFetchStart = Date.now();
     const relevantDatasetDetails = datasetNames.length > 0
       ? await this.neoOntologyService.getDatasetsByNames(ontology.id, datasetNames)
       : [];
+    const yamlFetchDurationMs = Date.now() - yamlFetchStart;
 
     // ── Step 4b: Load user preferences for this ontology ──
     const effectivePreferences = await this.dataAgentService.getEffectivePreferences(
@@ -129,6 +136,16 @@ export class DataAgentAgentService {
       ontology.id,
     );
     this.logger.log(`Loaded ${effectivePreferences.length} user preferences`);
+
+    const discoveryResult: DiscoveryResult = {
+      embeddingDurationMs,
+      vectorSearchDurationMs,
+      yamlFetchDurationMs,
+      matchedDatasets: relevantDatasets.map((ds) => ({ name: ds.name, score: ds.score })),
+      datasetsWithYaml: relevantDatasetDetails.length,
+      preferencesLoaded: effectivePreferences.length,
+    };
+    onEvent({ type: 'discovery_complete', ...discoveryResult });
 
     // ── Step 4: Load conversation history (last 10 messages) ──
     const previousMessages = await this.prisma.dataChatMessage.findMany({
@@ -230,6 +247,7 @@ export class DataAgentAgentService {
           durationMs: Date.now() - startedAt,
           startedAt,
           llmCallCount: traces.length,
+          discovery: discoveryResult,
         };
 
         await this.dataAgentService.updateAssistantMessage(
@@ -277,6 +295,7 @@ export class DataAgentAgentService {
         durationMs: Date.now() - startedAt,
         startedAt,
         llmCallCount: traces.length,
+        discovery: discoveryResult,
       };
 
       await this.dataAgentService.updateAssistantMessage(
