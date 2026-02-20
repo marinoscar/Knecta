@@ -10,6 +10,7 @@ describe('ChatSidebar', () => {
   const mockOnSelectChat = vi.fn();
   const mockOnDeleteChat = vi.fn();
   const mockOnRenameChat = vi.fn();
+  const mockOnClose = vi.fn();
 
   const mockChats: DataChat[] = [
     {
@@ -50,6 +51,15 @@ describe('ChatSidebar', () => {
     },
   ];
 
+  const defaultProps = {
+    open: true,
+    onClose: mockOnClose,
+    onNewChat: mockOnNewChat,
+    onSelectChat: mockOnSelectChat,
+    onDeleteChat: mockOnDeleteChat,
+    onRenameChat: mockOnRenameChat,
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockOnDeleteChat.mockResolvedValue(undefined);
@@ -60,11 +70,8 @@ describe('ChatSidebar', () => {
     it('should render chat list with names', () => {
       render(
         <ChatSidebar
+          {...defaultProps}
           chats={mockChats}
-          onNewChat={mockOnNewChat}
-          onSelectChat={mockOnSelectChat}
-          onDeleteChat={mockOnDeleteChat}
-          onRenameChat={mockOnRenameChat}
           isLoading={false}
         />,
       );
@@ -77,11 +84,8 @@ describe('ChatSidebar', () => {
     it('should render New Chat button', () => {
       render(
         <ChatSidebar
+          {...defaultProps}
           chats={mockChats}
-          onNewChat={mockOnNewChat}
-          onSelectChat={mockOnSelectChat}
-          onDeleteChat={mockOnDeleteChat}
-          onRenameChat={mockOnRenameChat}
           isLoading={false}
         />,
       );
@@ -94,11 +98,8 @@ describe('ChatSidebar', () => {
     it('should render search input', () => {
       render(
         <ChatSidebar
+          {...defaultProps}
           chats={mockChats}
-          onNewChat={mockOnNewChat}
-          onSelectChat={mockOnSelectChat}
-          onDeleteChat={mockOnDeleteChat}
-          onRenameChat={mockOnRenameChat}
           isLoading={false}
         />,
       );
@@ -111,11 +112,8 @@ describe('ChatSidebar', () => {
     it('should show loading state', () => {
       render(
         <ChatSidebar
+          {...defaultProps}
           chats={[]}
-          onNewChat={mockOnNewChat}
-          onSelectChat={mockOnSelectChat}
-          onDeleteChat={mockOnDeleteChat}
-          onRenameChat={mockOnRenameChat}
           isLoading={true}
         />,
       );
@@ -126,11 +124,8 @@ describe('ChatSidebar', () => {
     it('should show empty state when no chats', () => {
       render(
         <ChatSidebar
+          {...defaultProps}
           chats={[]}
-          onNewChat={mockOnNewChat}
-          onSelectChat={mockOnSelectChat}
-          onDeleteChat={mockOnDeleteChat}
-          onRenameChat={mockOnRenameChat}
           isLoading={false}
         />,
       );
@@ -145,11 +140,8 @@ describe('ChatSidebar', () => {
 
       render(
         <ChatSidebar
+          {...defaultProps}
           chats={mockChats}
-          onNewChat={mockOnNewChat}
-          onSelectChat={mockOnSelectChat}
-          onDeleteChat={mockOnDeleteChat}
-          onRenameChat={mockOnRenameChat}
           isLoading={false}
         />,
       );
@@ -162,12 +154,9 @@ describe('ChatSidebar', () => {
     it('should highlight active chat', () => {
       const { container } = render(
         <ChatSidebar
+          {...defaultProps}
           chats={mockChats}
           activeChatId="chat-1"
-          onNewChat={mockOnNewChat}
-          onSelectChat={mockOnSelectChat}
-          onDeleteChat={mockOnDeleteChat}
-          onRenameChat={mockOnRenameChat}
           isLoading={false}
         />,
       );
@@ -184,11 +173,8 @@ describe('ChatSidebar', () => {
 
       render(
         <ChatSidebar
+          {...defaultProps}
           chats={mockChats}
-          onNewChat={mockOnNewChat}
-          onSelectChat={mockOnSelectChat}
-          onDeleteChat={mockOnDeleteChat}
-          onRenameChat={mockOnRenameChat}
           isLoading={false}
         />,
       );
@@ -205,11 +191,8 @@ describe('ChatSidebar', () => {
 
       render(
         <ChatSidebar
+          {...defaultProps}
           chats={mockChats}
-          onNewChat={mockOnNewChat}
-          onSelectChat={mockOnSelectChat}
-          onDeleteChat={mockOnDeleteChat}
-          onRenameChat={mockOnRenameChat}
           isLoading={false}
         />,
       );
@@ -227,11 +210,8 @@ describe('ChatSidebar', () => {
 
       render(
         <ChatSidebar
+          {...defaultProps}
           chats={mockChats}
-          onNewChat={mockOnNewChat}
-          onSelectChat={mockOnSelectChat}
-          onDeleteChat={mockOnDeleteChat}
-          onRenameChat={mockOnRenameChat}
           isLoading={false}
         />,
       );
@@ -247,11 +227,8 @@ describe('ChatSidebar', () => {
     it('should group chats by date', () => {
       render(
         <ChatSidebar
+          {...defaultProps}
           chats={mockChats}
-          onNewChat={mockOnNewChat}
-          onSelectChat={mockOnSelectChat}
-          onDeleteChat={mockOnDeleteChat}
-          onRenameChat={mockOnRenameChat}
           isLoading={false}
         />,
       );
@@ -268,11 +245,8 @@ describe('ChatSidebar', () => {
 
       const { container } = render(
         <ChatSidebar
+          {...defaultProps}
           chats={mockChats}
-          onNewChat={mockOnNewChat}
-          onSelectChat={mockOnSelectChat}
-          onDeleteChat={mockOnDeleteChat}
-          onRenameChat={mockOnRenameChat}
           isLoading={false}
         />,
       );
@@ -305,11 +279,8 @@ describe('ChatSidebar', () => {
 
       const { container } = render(
         <ChatSidebar
+          {...defaultProps}
           chats={mockChats}
-          onNewChat={mockOnNewChat}
-          onSelectChat={mockOnSelectChat}
-          onDeleteChat={mockOnDeleteChat}
-          onRenameChat={mockOnRenameChat}
           isLoading={false}
         />,
       );
@@ -352,11 +323,8 @@ describe('ChatSidebar', () => {
 
       const { container } = render(
         <ChatSidebar
+          {...defaultProps}
           chats={mockChats}
-          onNewChat={mockOnNewChat}
-          onSelectChat={mockOnSelectChat}
-          onDeleteChat={mockOnDeleteChat}
-          onRenameChat={mockOnRenameChat}
           isLoading={false}
         />,
       );
@@ -388,11 +356,8 @@ describe('ChatSidebar', () => {
 
       const { container } = render(
         <ChatSidebar
+          {...defaultProps}
           chats={mockChats}
-          onNewChat={mockOnNewChat}
-          onSelectChat={mockOnSelectChat}
-          onDeleteChat={mockOnDeleteChat}
-          onRenameChat={mockOnRenameChat}
           isLoading={false}
         />,
       );
