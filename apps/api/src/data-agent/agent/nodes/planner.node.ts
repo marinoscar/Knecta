@@ -45,6 +45,12 @@ const PlanArtifactSchema = z.object({
     question: z.string().describe('A specific, clear question to ask the user'),
     assumption: z.string().describe('What the agent will assume if the user does not answer'),
   })).max(3).describe('Up to 3 clarification questions. Only populated when shouldClarify is true. Empty array when shouldClarify is false.'),
+  confidenceLevel: z.enum(['high', 'medium', 'low']).describe(
+    'Your confidence that the question is unambiguous: ' +
+    '"high" = clear intent, known metrics, reasonable defaults available; ' +
+    '"medium" = some ambiguity but safe assumptions exist; ' +
+    '"low" = critical ambiguity that would significantly change the analysis'
+  ),
   steps: z.array(PlanStepSchema).describe('Ordered sub-tasks to execute'),
 });
 
@@ -78,6 +84,22 @@ export function createPlannerNode(llm: any, emit: EmitFn, tracer: DataAgentTrace
       );
 
       const result = response.parsed as PlanArtifact;
+
+      // Round-limit backstop: if >= 3 clarification rounds already, force proceed
+      if (state.clarificationRound >= 3 && result.shouldClarify) {
+        result.shouldClarify = false;
+        if (result.clarificationQuestions.length > 0) {
+          result.ambiguities = [
+            ...result.ambiguities,
+            ...result.clarificationQuestions.map(q => ({
+              question: q.question,
+              assumption: q.assumption,
+            })),
+          ];
+          result.clarificationQuestions = [];
+        }
+      }
+
       const nodeTokens = extractTokenUsage(response.raw);
 
       emit({ type: 'phase_artifact', phase: 'planner', artifact: result });
@@ -105,6 +127,7 @@ export function createPlannerNode(llm: any, emit: EmitFn, tracer: DataAgentTrace
           acceptanceChecks: [],
           shouldClarify: false,
           clarificationQuestions: [],
+          confidenceLevel: 'medium',
           steps: [{
             id: 1,
             description: state.userQuestion,
