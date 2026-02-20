@@ -184,6 +184,7 @@ describe('DataAgentAgentService', () => {
             acceptanceChecks: [],
             shouldClarify: false,
             clarificationQuestions: [],
+            confidenceLevel: 'high',
             steps: [
               {
                 id: 1,
@@ -216,6 +217,7 @@ describe('DataAgentAgentService', () => {
             acceptanceChecks: ['verify row count', 'check null values'],
             shouldClarify: false,
             clarificationQuestions: [],
+            confidenceLevel: 'medium',
             steps: [
               {
                 id: 1,
@@ -360,6 +362,9 @@ describe('DataAgentAgentService', () => {
             grain: 'total',
             ambiguities: [],
             acceptanceChecks: [],
+            shouldClarify: false,
+            clarificationQuestions: [],
+            confidenceLevel: 'high',
             steps: [
               {
                 id: 1,
@@ -553,6 +558,7 @@ describe('DataAgentAgentService', () => {
           }),
         ]),
         userPreferences: expect.any(Array),
+        clarificationRound: 0,
       });
     });
 
@@ -961,6 +967,9 @@ describe('DataAgentAgentService', () => {
           grain: 'total',
           ambiguities: [],
           acceptanceChecks: [],
+          shouldClarify: false,
+          clarificationQuestions: [],
+          confidenceLevel: 'medium',
           steps: [],
         },
         verificationReport: {
@@ -992,6 +1001,108 @@ describe('DataAgentAgentService', () => {
           revisionsUsed: 3,
         }),
         'complete',
+      );
+    });
+
+    it('should count clarification rounds from conversation history', async () => {
+      // Setup messages with clarification_needed status
+      const clarificationMessages = [
+        {
+          id: 'msg-1',
+          chatId: mockChatId,
+          role: 'user',
+          content: 'What is revenue?',
+          status: 'complete',
+          metadata: {},
+          createdAt: new Date('2024-01-01'),
+        },
+        {
+          id: 'msg-2',
+          chatId: mockChatId,
+          role: 'assistant',
+          content: 'Clarification questions...',
+          status: 'clarification_needed',
+          metadata: {},
+          createdAt: new Date('2024-01-02'),
+        },
+        {
+          id: 'msg-3',
+          chatId: mockChatId,
+          role: 'user',
+          content: 'I mean gross revenue',
+          status: 'complete',
+          metadata: {},
+          createdAt: new Date('2024-01-03'),
+        },
+        {
+          id: 'msg-4',
+          chatId: mockChatId,
+          role: 'assistant',
+          content: 'More clarification needed...',
+          status: 'clarification_needed',
+          metadata: {},
+          createdAt: new Date('2024-01-04'),
+        },
+      ];
+
+      mockPrisma.dataChatMessage.findMany.mockResolvedValue(clarificationMessages as any);
+
+      const onEvent = jest.fn();
+
+      await service.executeAgent(
+        mockChatId,
+        mockMessageId,
+        'Final question',
+        mockUserId,
+        onEvent,
+      );
+
+      // Should count 2 clarification_needed messages
+      expect(mockGraph.invoke).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clarificationRound: 2,
+        }),
+      );
+    });
+
+    it('should pass clarificationRound=0 when no clarification_needed messages exist', async () => {
+      const regularMessages = [
+        {
+          id: 'msg-1',
+          chatId: mockChatId,
+          role: 'user',
+          content: 'Question 1',
+          status: 'complete',
+          metadata: {},
+          createdAt: new Date('2024-01-01'),
+        },
+        {
+          id: 'msg-2',
+          chatId: mockChatId,
+          role: 'assistant',
+          content: 'Answer 1',
+          status: 'complete',
+          metadata: {},
+          createdAt: new Date('2024-01-02'),
+        },
+      ];
+
+      mockPrisma.dataChatMessage.findMany.mockResolvedValue(regularMessages as any);
+
+      const onEvent = jest.fn();
+
+      await service.executeAgent(
+        mockChatId,
+        mockMessageId,
+        'New question',
+        mockUserId,
+        onEvent,
+      );
+
+      expect(mockGraph.invoke).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clarificationRound: 0,
+        }),
       );
     });
   });

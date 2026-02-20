@@ -59,6 +59,7 @@ describe('Data Agent Clarification Routing & Preferences (Integration)', () => {
             assumption: 'Last 30 days',
           },
         ],
+        confidenceLevel: 'low',
         steps: [],
       };
 
@@ -81,6 +82,7 @@ describe('Data Agent Clarification Routing & Preferences (Integration)', () => {
         acceptanceChecks: [],
         shouldClarify: false,
         clarificationQuestions: [],
+        confidenceLevel: 'high',
         steps: [
           {
             id: 1,
@@ -119,6 +121,7 @@ describe('Data Agent Clarification Routing & Preferences (Integration)', () => {
           acceptanceChecks: [],
           shouldClarify: false,
           clarificationQuestions: [],
+          confidenceLevel: 'high',
           steps: [
             {
               id: 1,
@@ -171,6 +174,7 @@ describe('Data Agent Clarification Routing & Preferences (Integration)', () => {
             assumption: 'Global',
           },
         ],
+        confidenceLevel: 'low',
         steps: [],
       };
 
@@ -194,6 +198,7 @@ describe('Data Agent Clarification Routing & Preferences (Integration)', () => {
         acceptanceChecks: [],
         shouldClarify: false,
         clarificationQuestions: [],
+        confidenceLevel: 'high',
         steps: [],
       };
 
@@ -217,6 +222,7 @@ describe('Data Agent Clarification Routing & Preferences (Integration)', () => {
         acceptanceChecks: [],
         shouldClarify: true,
         clarificationQuestions: [], // Empty — no termination
+        confidenceLevel: 'medium',
         steps: [],
       };
 
@@ -239,6 +245,7 @@ describe('Data Agent Clarification Routing & Preferences (Integration)', () => {
         acceptanceChecks: [],
         shouldClarify: false,
         clarificationQuestions: [],
+        confidenceLevel: 'high',
         steps: [],
       };
 
@@ -267,6 +274,7 @@ describe('Data Agent Clarification Routing & Preferences (Integration)', () => {
         acceptanceChecks: [],
         shouldClarify: false,
         clarificationQuestions: [],
+        confidenceLevel: 'medium',
         steps: [],
       };
 

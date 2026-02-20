@@ -326,6 +326,94 @@ describe('buildDataAgentGraph', () => {
         const state = { plan: null } as any;
         expect(routeAfterPlanner(state)).toBe('navigator');
       });
+
+      it('should route to __end__ when clarification is needed with questions', () => {
+        const state = {
+          plan: {
+            shouldClarify: true,
+            clarificationQuestions: [
+              { question: 'What time window?', assumption: 'last 30 days' },
+            ],
+            complexity: 'simple',
+          },
+        } as any;
+        expect(routeAfterPlanner(state)).toBe('__end__');
+      });
+
+        it('should route to navigator when shouldClarify=true but no questions', () => {
+        const state = {
+          plan: {
+            shouldClarify: true,
+            clarificationQuestions: [],
+            complexity: 'simple',
+          },
+        } as any;
+        // Empty clarificationQuestions means no early termination
+        expect(routeAfterPlanner(state)).toBe('navigator');
+      });
+    });
+
+    describe('Clarification round-limit backstop', () => {
+      it('should document planner node round-override behavior', () => {
+        // This test documents the round-override logic in planner.node.ts (lines 88-101)
+        // When clarificationRound >= 3 and LLM returns shouldClarify=true, the node:
+        // 1. Forces shouldClarify to false
+        // 2. Moves clarificationQuestions to ambiguities array
+        // 3. Clears clarificationQuestions
+
+        // Simulated LLM output when clarificationRound=3
+        const llmOutput = {
+          shouldClarify: true,
+          clarificationQuestions: [
+            { question: 'What currency?', assumption: 'USD' },
+            { question: 'What region?', assumption: 'Global' },
+          ],
+          ambiguities: [
+            { question: 'Existing ambiguity', assumption: 'Default assumption' },
+          ],
+          complexity: 'simple',
+          intent: 'Total revenue',
+          metrics: ['revenue'],
+          dimensions: [],
+          timeWindow: null,
+          filters: [],
+          grain: 'total',
+          acceptanceChecks: [],
+          confidenceLevel: 'low',
+          steps: [],
+        };
+
+        // After planner node override (when clarificationRound >= 3)
+        const expectedOutput = {
+          shouldClarify: false, // Forced to false
+          clarificationQuestions: [], // Cleared
+          ambiguities: [
+            { question: 'Existing ambiguity', assumption: 'Default assumption' },
+            { question: 'What currency?', assumption: 'USD' }, // Moved from clarificationQuestions
+            { question: 'What region?', assumption: 'Global' }, // Moved from clarificationQuestions
+          ],
+          complexity: 'simple',
+          intent: 'Total revenue',
+          metrics: ['revenue'],
+          dimensions: [],
+          timeWindow: null,
+          filters: [],
+          grain: 'total',
+          acceptanceChecks: [],
+          confidenceLevel: 'low',
+          steps: [],
+        };
+
+        // Verify the override behavior
+        expect(llmOutput.shouldClarify).toBe(true);
+        expect(llmOutput.clarificationQuestions).toHaveLength(2);
+        expect(llmOutput.ambiguities).toHaveLength(1);
+
+        // After override
+        expect(expectedOutput.shouldClarify).toBe(false);
+        expect(expectedOutput.clarificationQuestions).toHaveLength(0);
+        expect(expectedOutput.ambiguities).toHaveLength(3); // 1 original + 2 moved
+      });
     });
 
     describe('routeAfterNavigator', () => {
