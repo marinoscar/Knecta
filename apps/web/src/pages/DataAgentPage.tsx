@@ -19,7 +19,6 @@ export default function DataAgentPage() {
   const { chatId } = useParams<{ chatId: string }>();
   const navigate = useNavigate();
   const [newChatDialogOpen, setNewChatDialogOpen] = useState(false);
-  const [pendingSuggestion, setPendingSuggestion] = useState<string | null>(null);
   const [insightsPanelOpen, setInsightsPanelOpen] = useState(false);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [preferencesDialogOpen, setPreferencesDialogOpen] = useState(false);
@@ -101,13 +100,37 @@ export default function DataAgentPage() {
 
   const handleNewChat = useCallback(() => {
     setNewChatDialogOpen(true);
-    setPendingSuggestion(null);
   }, []);
 
-  const handleSuggestionClick = useCallback((text: string) => {
-    setPendingSuggestion(text);
-    setNewChatDialogOpen(true);
-  }, []);
+  const handleOntologySelect = useCallback(
+    async (ontologyId: string, ontologyName: string) => {
+      try {
+        const timestamp = new Date().toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        });
+        const chatName = `${ontologyName} Chat ${timestamp}`;
+
+        const newChat = await createChat({
+          name: chatName,
+          ontologyId,
+          llmProvider: defaultProvider,
+        });
+
+        navigate(`/agent/${newChat.id}`);
+
+        if (isMobile) {
+          setSidebarOpen(false);
+        }
+      } catch (err) {
+        console.error('Failed to create chat:', err);
+      }
+    },
+    [createChat, navigate, defaultProvider, isMobile],
+  );
 
   const handleChatCreated = useCallback(
     async (_tempId: string, ontologyId: string, name: string, llmProvider?: string | null) => {
@@ -119,20 +142,12 @@ export default function DataAgentPage() {
         if (isMobile) {
           setSidebarOpen(false);
         }
-
-        // If there's a pending suggestion, send it after a brief delay
-        if (pendingSuggestion) {
-          setTimeout(() => {
-            sendMessage(pendingSuggestion);
-            setPendingSuggestion(null);
-          }, 500);
-        }
       } catch (err) {
         // Error is already handled by useDataAgent
         console.error('Failed to create chat:', err);
       }
     },
-    [createChat, navigate, pendingSuggestion, sendMessage, defaultProvider, isMobile],
+    [createChat, navigate, defaultProvider, isMobile],
   );
 
   const handleSelectChat = useCallback(
@@ -264,7 +279,7 @@ export default function DataAgentPage() {
 
         {/* Content */}
         {showWelcome ? (
-          <WelcomeScreen onSuggestionClick={handleSuggestionClick} />
+          <WelcomeScreen onOntologySelect={handleOntologySelect} />
         ) : (
           <>
             <ChatView
@@ -345,10 +360,7 @@ export default function DataAgentPage() {
       {/* New Chat Dialog */}
       <NewChatDialog
         open={newChatDialogOpen}
-        onClose={() => {
-          setNewChatDialogOpen(false);
-          setPendingSuggestion(null);
-        }}
+        onClose={() => setNewChatDialogOpen(false)}
         onCreated={handleChatCreated}
         providers={providers}
         defaultProvider={defaultProvider}
