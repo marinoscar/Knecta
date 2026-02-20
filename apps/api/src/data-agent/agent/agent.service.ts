@@ -155,6 +155,11 @@ export class DataAgentAgentService {
     });
     previousMessages.reverse();
 
+    // Count clarification rounds in this conversation
+    const clarificationRound = previousMessages.filter(
+      (m) => m.status === 'clarification_needed'
+    ).length;
+
     const conversationContext = previousMessages
       .map((m) => {
         const role = m.role === 'user' ? 'User' : 'Assistant';
@@ -219,6 +224,7 @@ export class DataAgentAgentService {
         relevantDatasets: datasetNames,
         relevantDatasetDetails,
         userPreferences: effectivePreferences,
+        clarificationRound,
       });
 
       // ── Check if clarification was requested (graph terminated early at planner) ──
