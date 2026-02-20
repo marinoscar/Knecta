@@ -895,4 +895,220 @@ describe('AgentInsightsPanel', () => {
       expect(screen.queryByText('Join Graph')).not.toBeInTheDocument();
     });
   });
+
+  describe('Discovery Section', () => {
+    it('shows "Searching for relevant datasets..." when discovery_start event received but not complete', () => {
+      const message = makeAssistantMessage({
+        status: 'generating',
+        metadata: {
+          startedAt: Date.now(),
+        },
+      });
+
+      const events: DataAgentStreamEvent[] = [
+        { type: 'message_start', startedAt: Date.now() },
+        { type: 'discovery_start' },
+      ];
+
+      render(
+        <AgentInsightsPanel
+          messages={[message]}
+          streamEvents={events}
+          isStreaming={true}
+          onClose={() => {}}
+        />
+      );
+
+      expect(screen.getByText('Dataset Discovery')).toBeInTheDocument();
+      expect(screen.getByText('running')).toBeInTheDocument();
+      expect(screen.getByText('Searching for relevant datasets...')).toBeInTheDocument();
+    });
+
+    it('shows matched dataset chips with scores when discovery_complete event received', () => {
+      const message = makeAssistantMessage({
+        status: 'generating',
+        metadata: {
+          startedAt: Date.now(),
+        },
+      });
+
+      const events: DataAgentStreamEvent[] = [
+        { type: 'message_start', startedAt: Date.now() },
+        { type: 'discovery_start' },
+        {
+          type: 'discovery_complete',
+          embeddingDurationMs: 342,
+          vectorSearchDurationMs: 89,
+          yamlFetchDurationMs: 67,
+          matchedDatasets: [
+            { name: 'og_field_dw', score: 0.92 },
+            { name: 'og_well_dw', score: 0.87 },
+          ],
+          datasetsWithYaml: 2,
+          preferencesLoaded: 3,
+        },
+      ];
+
+      render(
+        <AgentInsightsPanel
+          messages={[message]}
+          streamEvents={events}
+          isStreaming={true}
+          onClose={() => {}}
+        />
+      );
+
+      expect(screen.getByText('Dataset Discovery')).toBeInTheDocument();
+      expect(screen.getByText('complete')).toBeInTheDocument();
+      expect(screen.getByText('og_field_dw (92%)')).toBeInTheDocument();
+      expect(screen.getByText('og_well_dw (87%)')).toBeInTheDocument();
+    });
+
+    it('shows timing breakdown values in complete state', () => {
+      const message = makeAssistantMessage({
+        status: 'generating',
+        metadata: {
+          startedAt: Date.now(),
+        },
+      });
+
+      const events: DataAgentStreamEvent[] = [
+        { type: 'message_start', startedAt: Date.now() },
+        {
+          type: 'discovery_complete',
+          embeddingDurationMs: 342,
+          vectorSearchDurationMs: 89,
+          yamlFetchDurationMs: 67,
+          matchedDatasets: [
+            { name: 'og_field_dw', score: 0.92 },
+          ],
+          datasetsWithYaml: 2,
+          preferencesLoaded: 3,
+        },
+      ];
+
+      render(
+        <AgentInsightsPanel
+          messages={[message]}
+          streamEvents={events}
+          isStreaming={true}
+          onClose={() => {}}
+        />
+      );
+
+      expect(screen.getByText('Timing')).toBeInTheDocument();
+      expect(screen.getByText(/Embedding: 342ms/)).toBeInTheDocument();
+      expect(screen.getByText(/Vector Search: 89ms/)).toBeInTheDocument();
+      expect(screen.getByText(/YAML Fetch: 67ms/)).toBeInTheDocument();
+    });
+
+    it('shows discovery data from metadata in history mode', () => {
+      const message = makeAssistantMessage({
+        metadata: {
+          durationMs: 5000,
+          tokensUsed: { prompt: 1000, completion: 500, total: 1500 },
+          discovery: {
+            embeddingDurationMs: 342,
+            vectorSearchDurationMs: 89,
+            yamlFetchDurationMs: 67,
+            matchedDatasets: [
+              { name: 'og_field_dw', score: 0.92 },
+              { name: 'og_well_dw', score: 0.87 },
+            ],
+            datasetsWithYaml: 2,
+            preferencesLoaded: 3,
+          },
+        },
+      });
+
+      render(
+        <AgentInsightsPanel
+          messages={[message]}
+          streamEvents={[]}
+          isStreaming={false}
+          onClose={() => {}}
+        />
+      );
+
+      expect(screen.getByText('Dataset Discovery')).toBeInTheDocument();
+      expect(screen.getByText('complete')).toBeInTheDocument();
+      expect(screen.getByText('og_field_dw (92%)')).toBeInTheDocument();
+      expect(screen.getByText('og_well_dw (87%)')).toBeInTheDocument();
+      expect(screen.getByText('2 schemas loaded')).toBeInTheDocument();
+      expect(screen.getByText('3 preferences')).toBeInTheDocument();
+    });
+
+    it('does not render "Dataset Discovery" section when no discovery data exists', () => {
+      const message = makeAssistantMessage({
+        metadata: {
+          durationMs: 5000,
+          tokensUsed: { prompt: 1000, completion: 500, total: 1500 },
+        },
+      });
+
+      render(
+        <AgentInsightsPanel
+          messages={[message]}
+          streamEvents={[]}
+          isStreaming={false}
+          onClose={() => {}}
+        />
+      );
+
+      expect(screen.queryByText('Dataset Discovery')).not.toBeInTheDocument();
+    });
+
+    it('shows summary stats with datasets loaded and preferences', () => {
+      const message = makeAssistantMessage({
+        metadata: {
+          discovery: {
+            embeddingDurationMs: 342,
+            vectorSearchDurationMs: 89,
+            yamlFetchDurationMs: 67,
+            matchedDatasets: [
+              { name: 'og_field_dw', score: 0.92 },
+            ],
+            datasetsWithYaml: 5,
+            preferencesLoaded: 7,
+          },
+        },
+      });
+
+      render(
+        <AgentInsightsPanel
+          messages={[message]}
+          streamEvents={[]}
+          isStreaming={false}
+          onClose={() => {}}
+        />
+      );
+
+      expect(screen.getByText('5 schemas loaded')).toBeInTheDocument();
+      expect(screen.getByText('7 preferences')).toBeInTheDocument();
+    });
+
+    it('does not show preferences chip when preferencesLoaded is 0', () => {
+      const message = makeAssistantMessage({
+        metadata: {
+          discovery: {
+            matchedDatasets: [{ name: 'og_field_dw', score: 0.92 }],
+            datasetsWithYaml: 2,
+            preferencesLoaded: 0,
+          },
+        },
+      });
+
+      render(
+        <AgentInsightsPanel
+          messages={[message]}
+          streamEvents={[]}
+          isStreaming={false}
+          onClose={() => {}}
+        />
+      );
+
+      expect(screen.getByText('2 schemas loaded')).toBeInTheDocument();
+      expect(screen.queryByText(/preferences/)).not.toBeInTheDocument();
+    });
+  });
 });

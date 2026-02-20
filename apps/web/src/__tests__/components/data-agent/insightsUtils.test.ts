@@ -9,6 +9,8 @@ import {
   extractJoinPlan,
   joinPlanToGraph,
   extractLiveLlmTraces,
+  extractDiscovery,
+  formatDurationMs,
 } from '../../../components/data-agent/insightsUtils';
 import type { DataAgentStreamEvent } from '../../../types';
 
@@ -781,6 +783,129 @@ describe('insightsUtils', () => {
         description: 'Customer orders',
         yaml: 'name: orders\nfields: []',
       });
+    });
+  });
+
+  describe('extractDiscovery - live mode', () => {
+    it('returns null when no discovery events exist', () => {
+      const events: DataAgentStreamEvent[] = [
+        { type: 'phase_start', phase: 'planner' },
+      ];
+
+      const result = extractDiscovery(events, null, true);
+
+      expect(result).toBeNull();
+    });
+
+    it('returns status running when only discovery_start event exists', () => {
+      const events: DataAgentStreamEvent[] = [
+        { type: 'discovery_start' },
+      ];
+
+      const result = extractDiscovery(events, null, true);
+
+      expect(result).toEqual({
+        status: 'running',
+        matchedDatasets: [],
+        datasetsWithYaml: 0,
+        preferencesLoaded: 0,
+      });
+    });
+
+    it('returns complete data when discovery_complete event exists', () => {
+      const events: DataAgentStreamEvent[] = [
+        { type: 'discovery_start' },
+        {
+          type: 'discovery_complete',
+          embeddingDurationMs: 342,
+          vectorSearchDurationMs: 89,
+          yamlFetchDurationMs: 67,
+          matchedDatasets: [
+            { name: 'og_field_dw', score: 0.92 },
+            { name: 'og_well_dw', score: 0.87 },
+          ],
+          datasetsWithYaml: 2,
+          preferencesLoaded: 3,
+        },
+      ];
+
+      const result = extractDiscovery(events, null, true);
+
+      expect(result).toEqual({
+        status: 'complete',
+        embeddingDurationMs: 342,
+        vectorSearchDurationMs: 89,
+        yamlFetchDurationMs: 67,
+        matchedDatasets: [
+          { name: 'og_field_dw', score: 0.92 },
+          { name: 'og_well_dw', score: 0.87 },
+        ],
+        datasetsWithYaml: 2,
+        preferencesLoaded: 3,
+      });
+    });
+  });
+
+  describe('extractDiscovery - history mode', () => {
+    it('returns null when metadata is null', () => {
+      const result = extractDiscovery([], null, false);
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null when metadata has no discovery field', () => {
+      const metadata = { durationMs: 5000 };
+
+      const result = extractDiscovery([], metadata, false);
+
+      expect(result).toBeNull();
+    });
+
+    it('returns complete data from metadata.discovery', () => {
+      const metadata = {
+        discovery: {
+          embeddingDurationMs: 342,
+          vectorSearchDurationMs: 89,
+          yamlFetchDurationMs: 67,
+          matchedDatasets: [
+            { name: 'og_field_dw', score: 0.92 },
+            { name: 'og_well_dw', score: 0.87 },
+          ],
+          datasetsWithYaml: 2,
+          preferencesLoaded: 3,
+        },
+      };
+
+      const result = extractDiscovery([], metadata, false);
+
+      expect(result).toEqual({
+        status: 'complete',
+        embeddingDurationMs: 342,
+        vectorSearchDurationMs: 89,
+        yamlFetchDurationMs: 67,
+        matchedDatasets: [
+          { name: 'og_field_dw', score: 0.92 },
+          { name: 'og_well_dw', score: 0.87 },
+        ],
+        datasetsWithYaml: 2,
+        preferencesLoaded: 3,
+      });
+    });
+  });
+
+  describe('formatDurationMs', () => {
+    it('returns "500ms" for value 500', () => {
+      expect(formatDurationMs(500)).toBe('500ms');
+    });
+
+    it('returns "0ms" for value 0', () => {
+      expect(formatDurationMs(0)).toBe('0ms');
+    });
+
+    it('returns formatted time string for values >= 1000', () => {
+      expect(formatDurationMs(1000)).toBe('0:01');
+      expect(formatDurationMs(5000)).toBe('0:05');
+      expect(formatDurationMs(92000)).toBe('1:32');
     });
   });
 
