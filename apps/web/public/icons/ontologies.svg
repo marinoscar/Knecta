@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <!-- Hub/Network icon in green -->
+  <g fill="#2e7d32">
+    <!-- Center hub -->
+    <circle cx="96" cy="96" r="18"/>
+
+    <!-- Top node -->
+    <line x1="96" y1="78" x2="96" y2="40" stroke="#2e7d32" stroke-width="4"/>
+    <circle cx="96" cy="30" r="12"/>
+
+    <!-- Top-right node -->
+    <line x1="108" y1="84" x2="140" y2="56" stroke="#2e7d32" stroke-width="4"/>
+    <circle cx="148" cy="48" r="12"/>
+
+    <!-- Right node -->
+    <line x1="114" y1="96" x2="152" y2="96" stroke="#2e7d32" stroke-width="4"/>
+    <circle cx="162" cy="96" r="12"/>
+
+    <!-- Bottom-right node -->
+    <line x1="108" y1="108" x2="140" y2="136" stroke="#2e7d32" stroke-width="4"/>
+    <circle cx="148" cy="144" r="12"/>
+
+    <!-- Bottom node -->
+    <line x1="96" y1="114" x2="96" y2="152" stroke="#2e7d32" stroke-width="4"/>
+    <circle cx="96" cy="162" r="12"/>
+
+    <!-- Bottom-left node -->
+    <line x1="84" y1="108" x2="52" y2="136" stroke="#2e7d32" stroke-width="4"/>
+    <circle cx="44" cy="144" r="12"/>
+
+    <!-- Left node -->
+    <line x1="78" y1="96" x2="40" y2="96" stroke="#2e7d32" stroke-width="4"/>
+    <circle cx="30" cy="96" r="12"/>
+
+    <!-- Top-left node -->
+    <line x1="84" y1="84" x2="52" y2="56" stroke="#2e7d32" stroke-width="4"/>
+    <circle cx="44" cy="48" r="12"/>
+  </g>
+</svg>
