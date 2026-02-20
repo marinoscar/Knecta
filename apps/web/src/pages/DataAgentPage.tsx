@@ -54,7 +54,6 @@ export default function DataAgentPage() {
     error: chatError,
     loadChat,
     sendMessage,
-    changeProvider,
     clearError,
     clearPreferenceSuggestions,
     clearAutoSavedPreferences,
