@@ -58,6 +58,7 @@ export function createPlannerNode(llm: any, emit: EmitFn, tracer: DataAgentTrace
         state.relevantDatasets,
         state.relevantDatasetDetails,
         state.userPreferences,
+        state.clarificationRound,
       );
 
       const structuredLlm = llm.withStructuredOutput(PlanArtifactSchema, {

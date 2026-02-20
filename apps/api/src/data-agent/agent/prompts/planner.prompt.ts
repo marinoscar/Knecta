@@ -3,6 +3,7 @@ export function buildPlannerPrompt(
   relevantDatasets: string[],
   relevantDatasetDetails?: Array<{ name: string; description: string; source: string; yaml: string }>,
   userPreferences?: Array<{ key: string; value: string }>,
+  clarificationRound?: number,
 ): string {
   let datasetsSection: string;
   if (relevantDatasetDetails && relevantDatasetDetails.length > 0) {
@@ -111,24 +112,44 @@ The datasets listed in "Available Datasets" below come from a semantic search an
 Do NOT assume a query is impossible just because you don't see a matching dataset below — the Navigator will make that determination.
 If no datasets are listed below AND the question requires data, still set complexity to "simple" and let the Navigator discover tables from the ontology.
 
-## Clarification Policy
+## Clarification Decision Framework
 
-You MUST set \`shouldClarify\` to true only when the question has **critical ambiguities** that would lead to a significantly different analysis.
+You MUST follow this structured framework to decide whether to ask clarifying questions.
 
-**Ask for clarification when:**
-- The question references an ambiguous metric that maps to multiple possible calculations (e.g., "revenue" could be gross or net)
-- A critical time window, grouping, or filter is missing AND cannot be reasonably assumed from context
-- The question could be interpreted in fundamentally different ways leading to different SQL queries
+### Current clarification round: ${clarificationRound ?? 0} of 3 maximum
+${(clarificationRound ?? 0) >= 3 ? '\n**ROUND LIMIT REACHED.** You MUST NOT set shouldClarify to true. Proceed with your best assumptions and document them in the ambiguities array.\n' : ''}
 
-**Do NOT ask for clarification when:**
-- Reasonable defaults exist (e.g., "recent" → last 30 days, "all" → no filter)
-- The previous conversation context already provides the answer
-- User preferences already cover the ambiguity
-- The ambiguity is minor and the assumption is safe
-- The question is about schema exploration or simple lookups
+### PROCEED IMMEDIATELY (set shouldClarify to false) when ALL of these are true:
+1. **Intent is clear enough** — The user's analytical goal can be reasonably interpreted
+2. **Metric has a default definition** — The referenced metric maps to a single known calculation, OR a standard interpretation exists (e.g., "revenue" defaults to gross revenue unless the schema only has net)
+3. **Grain and time window can be inferred** — Either explicitly stated, covered by user preferences, implied by context ("last quarter", "monthly"), or a reasonable default exists (e.g., "recent" = last 30 days)
+4. **Filters have known defaults** — Any missing filters have safe defaults (e.g., "all regions" when none specified)
+5. **Risk is low to medium** — The question is exploratory, ad-hoc analysis, or has a clear single interpretation
+
+When proceeding with assumptions, document each assumption in the \`ambiguities\` array with both the question and the assumption you made.
+
+### ASK CLARIFYING QUESTIONS (set shouldClarify to true) when ANY of these are true:
+1. **Multiple plausible metric definitions** — The metric maps to 2+ meaningfully different calculations (e.g., "revenue" could be gross, net, or recognized; "churn" could be logo churn or revenue churn) AND the schema contains both options
+2. **Missing grain or time window that materially changes results** — The question requires a specific grouping or time range AND different choices would produce fundamentally different answers (not just more/less detail)
+3. **Source-of-truth is unclear** — Multiple datasets could answer the question and they may give conflicting answers (e.g., billing system vs CRM for revenue)
+4. **High-stakes context** — The question implies financial reporting, compliance, audit, regulatory use, or executive decision-making (look for keywords: "board", "report", "official", "compliance", "audit", "investor")
+5. **User asks for "the" number but multiple defensible versions exist** — Phrasing like "what is THE revenue" or "the definitive count" when the schema supports multiple valid calculations
+6. **Question implies causality without causal design** — Phrasing like "did X cause Y?", "what is the impact of X on Y?", or "why did X happen?" — these require a causal inference methodology that a simple SQL query cannot provide
+
+### NEVER ask clarification for:
+- Schema exploration questions ("what tables exist?", "show me columns")
+- Questions where user preferences already resolve the ambiguity
+- Questions where the previous conversation context already provides the answer
+- Minor ambiguities where the assumption is safe and obvious
+- Questions that only have one reasonable interpretation given the available datasets
+
+### Confidence Level Assessment:
+- **high**: Clear intent, known metrics, reasonable defaults exist — proceed without asking
+- **medium**: Some ambiguity but safe assumptions are available — proceed and document assumptions
+- **low**: Critical ambiguity per the criteria above — ask for clarification (unless round limit reached)
 
 When \`shouldClarify\` is false, set \`clarificationQuestions\` to an empty array.
-When \`shouldClarify\` is true, provide 1-3 focused questions. Each question must have both a \`question\` and an \`assumption\`.
+When \`shouldClarify\` is true, provide 1-3 focused, specific questions. Each must have a \`question\` (what to ask) and an \`assumption\` (what you will use if they do not answer). Prioritize questions by impact — ask about the most result-changing ambiguity first.
 ${preferencesSection}
 ## Available Datasets
 
