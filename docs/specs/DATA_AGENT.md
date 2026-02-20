@@ -4,31 +4,32 @@
 
 1. [Feature Overview](#feature-overview)
 2. [Architecture](#architecture)
-3. [Multi-Phase Agent Architecture](#multi-phase-agent-architecture)
-4. [Phase Descriptions](#phase-descriptions)
-5. [Sub-Task Decomposition](#sub-task-decomposition)
-6. [Conditional Routing](#conditional-routing)
-7. [Clarifying Questions](#clarifying-questions)
-8. [User Preferences / Memory](#user-preferences--memory)
-9. [State Schema](#state-schema)
-10. [Tool Definitions](#tool-definitions)
-11. [SSE Streaming](#sse-streaming)
-12. [Message Metadata](#message-metadata)
-13. [Database Schema](#database-schema)
-14. [API Endpoints](#api-endpoints)
-15. [Security](#security)
-16. [RBAC Permissions](#rbac-permissions)
-17. [Embedding Service](#embedding-service)
-18. [Neo4j Vector Search](#neo4j-vector-search)
-19. [Docker Python Sandbox](#docker-python-sandbox)
-20. [Frontend Components](#frontend-components)
-21. [Model Selection](#model-selection)
-22. [Configuration](#configuration)
-23. [Token Usage Tracking](#token-usage-tracking)
-24. [LLM Interaction Tracing](#llm-interaction-tracing)
-25. [File Inventory](#file-inventory)
-26. [Testing](#testing)
-27. [Packages](#packages)
+3. [Dataset Discovery Pipeline](#dataset-discovery-pipeline)
+4. [Multi-Phase Agent Architecture](#multi-phase-agent-architecture)
+5. [Phase Descriptions](#phase-descriptions)
+6. [Sub-Task Decomposition](#sub-task-decomposition)
+7. [Conditional Routing](#conditional-routing)
+8. [Clarifying Questions](#clarifying-questions)
+9. [User Preferences / Memory](#user-preferences--memory)
+10. [State Schema](#state-schema)
+11. [Tool Definitions](#tool-definitions)
+12. [SSE Streaming](#sse-streaming)
+13. [Message Metadata](#message-metadata)
+14. [Database Schema](#database-schema)
+15. [API Endpoints](#api-endpoints)
+16. [Security](#security)
+17. [RBAC Permissions](#rbac-permissions)
+18. [Embedding Service](#embedding-service)
+19. [Neo4j Vector Search](#neo4j-vector-search)
+20. [Docker Python Sandbox](#docker-python-sandbox)
+21. [Frontend Components](#frontend-components)
+22. [Model Selection](#model-selection)
+23. [Configuration](#configuration)
+24. [Token Usage Tracking](#token-usage-tracking)
+25. [LLM Interaction Tracing](#llm-interaction-tracing)
+26. [File Inventory](#file-inventory)
+27. [Testing](#testing)
+28. [Packages](#packages)
 
 ---
 
@@ -102,6 +103,12 @@ The Data Agent uses a multi-service architecture combining NestJS backend, Neo4j
 │  AgentStreamController (SSE streaming endpoint)                      │
 │           ↓                                                           │
 │  DataAgentAgentService (StateGraph orchestration)                    │
+│           ↓                                                           │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │ Dataset Discovery Pipeline (pre-graph)                        │  │
+│  │   1. Embed question (OpenAI) → 2. Vector search (Neo4j)      │  │
+│  │   3. Fetch YAML schemas (Neo4j) → 4. Load preferences (PG)   │  │
+│  └───────────────────────────────────────────────────────────────┘  │
 │           ↓                                                           │
 │  ┌───────────────────────────────────────────────────────────────┐  │
 │  │ Multi-Phase StateGraph (LangGraph)                            │  │
@@ -187,6 +194,88 @@ The Data Agent uses a multi-service architecture combining NestJS backend, Neo4j
 - **Docker Sandbox**: Isolated Python execution environment
 - **OpenAI API**: Embedding generation (text-embedding-3-small)
 - **LLM Provider**: Chat completion (OpenAI, Anthropic, or Azure)
+
+---
+
+## Dataset Discovery Pipeline
+
+Before the multi-phase LangGraph StateGraph is invoked, the `DataAgentAgentService` runs a **Dataset Discovery** pre-fetch pipeline. This pipeline is executed on **every user question** and provides the context that all subsequent phases rely on.
+
+### Pipeline Steps
+
+```
+User Question
+      |
+      v
+[1. Embedding Generation]  ── OpenAI text-embedding-3-small (1536 dims)
+      |                        ~200-500ms, calls OpenAI API
+      v
+[2. Neo4j Vector Search]   ── db.index.vector.queryNodes, top-10, cosine similarity
+      |                        ~50-200ms, ALWAYS calls Neo4j
+      v
+[3. YAML Schema Fetch]     ── NeoOntologyService.getDatasetsByNames()
+      |                        ~50-150ms, ALWAYS calls Neo4j (second call)
+      v
+[4. Preferences Loading]   ── DataAgentService.getEffectivePreferences()
+      |                        ~10-50ms, PostgreSQL query
+      v
+ Context Ready → graph.invoke()
+```
+
+### Key Points
+
+- **Neo4j is called at minimum twice per question**: once for vector similarity search (finding relevant datasets), once for YAML schema fetch (loading full schemas). If vector search returns zero results, a third Neo4j call (`listDatasets`) may occur as fallback.
+- **Embedding generation** calls the OpenAI API externally (text-embedding-3-small, 1536 dimensions) and is typically the slowest step in the pipeline.
+- **Vector search** returns up to 10 datasets with cosine similarity scores. Dataset names are passed to the Planner as `relevantDatasets`.
+- **YAML schema fetch** retrieves full semantic model YAML for each matched dataset. These are passed as `relevantDatasetDetails` and flow through the entire pipeline — injected into Planner, carried in JoinPlanArtifact for Navigator/SQL Builder, and used by Executor for SQL repair.
+- **Preferences** include both global and ontology-scoped user preferences, resolved via override logic (ontology-scoped overrides global for same key).
+- All operations happen **synchronously before the graph is built**. The Planner receives pre-fetched data in its system prompt — it does not call tools to discover tables.
+
+### SSE Events
+
+The pipeline emits two SSE events to enable frontend progress display:
+
+| Event Type | Payload | Description |
+|------------|---------|-------------|
+| `discovery_start` | `{}` | Pre-fetch pipeline started |
+| `discovery_complete` | `{ embeddingDurationMs, vectorSearchDurationMs, yamlFetchDurationMs, matchedDatasets, datasetsWithYaml, preferencesLoaded }` | Pre-fetch complete with timing and results |
+
+**Example events**:
+
+```typescript
+// Discovery start
+event: discovery_start
+data: {}
+
+// Discovery complete
+event: discovery_complete
+data: {"embeddingDurationMs":342,"vectorSearchDurationMs":89,"yamlFetchDurationMs":67,"matchedDatasets":[{"name":"og_field_dw","score":0.92},{"name":"og_well_dw","score":0.87},{"name":"og_district_dw","score":0.83}],"datasetsWithYaml":3,"preferencesLoaded":2}
+```
+
+### Message Metadata
+
+The discovery results are persisted in the `discovery` field of message metadata for historical display:
+
+```typescript
+discovery?: {
+  embeddingDurationMs: number;
+  vectorSearchDurationMs: number;
+  yamlFetchDurationMs: number;
+  matchedDatasets: Array<{ name: string; score: number }>;
+  datasetsWithYaml: number;
+  preferencesLoaded: number;
+}
+```
+
+### Frontend Display
+
+The `AgentInsightsPanel` displays a "Dataset Discovery" section at the top of the panel showing:
+- Matched datasets with cosine similarity scores (displayed as percentages)
+- Number of YAML schemas loaded
+- Number of user preferences applied
+- Timing breakdown for each pipeline step (embedding, vector search, YAML fetch)
+
+Both live mode (from SSE stream events) and history mode (from persisted message metadata) are supported.
 
 ---
 
@@ -1932,6 +2021,8 @@ The agent streams execution progress via Server-Sent Events (SSE) using the same
 | Event Type | Payload | Emitted By | Description |
 |------------|---------|------------|-------------|
 | `message_start` | `{ messageId, chatId }` | Stream controller | Message generation started |
+| `discovery_start` | `{}` | Agent service | Dataset discovery pipeline started |
+| `discovery_complete` | `{ embeddingDurationMs, vectorSearchDurationMs, yamlFetchDurationMs, matchedDatasets, datasetsWithYaml, preferencesLoaded }` | Agent service | Dataset discovery complete with timing and results |
 | `message_chunk` | `{ chunk: string }` | Explainer | Streaming narrative chunks (if streaming enabled) |
 | `message_complete` | `{ messageId, metadata }` | Stream controller | Message generation complete |
 | `message_error` | `{ error: string, code: string }` | Stream controller | Fatal error occurred |
@@ -2110,6 +2201,16 @@ interface DataAgentMessageMetadata {
     question: string;
     assumption: string;
   }>;
+
+  // Dataset discovery results (NEW)
+  discovery?: {
+    embeddingDurationMs: number;
+    vectorSearchDurationMs: number;
+    yamlFetchDurationMs: number;
+    matchedDatasets: Array<{ name: string; score: number }>;
+    datasetsWithYaml: number;
+    preferencesLoaded: number;
+  };
 }
 ```
 
