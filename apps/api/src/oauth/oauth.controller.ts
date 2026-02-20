@@ -105,7 +105,7 @@ export class OAuthController {
     );
 
     // Redirect to client
-    return res.redirect(302, redirectUrl.toString());
+    return res.status(302).redirect(redirectUrl.toString());
   }
 
   /**
