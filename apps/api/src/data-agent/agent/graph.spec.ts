@@ -123,7 +123,7 @@ describe('buildDataAgentGraph', () => {
       );
     });
 
-    it('should pass regular llm to executor node', () => {
+    it('should pass both llm and structuredLlm to executor node', () => {
       buildDataAgentGraph({
         llm: mockRegularLlm,
         structuredLlm: mockStructuredLlm,
@@ -139,6 +139,7 @@ describe('buildDataAgentGraph', () => {
 
       expect(createExecutorNode).toHaveBeenCalledWith(
         mockRegularLlm,
+        mockStructuredLlm,
         mockDiscoveryService,
         mockSandboxService,
         'connection-123',
