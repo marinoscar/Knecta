@@ -81,7 +81,7 @@ export function buildDataAgentGraph(deps: DataAgentGraphDeps) {
     .addNode('planner', createPlannerNode(structuredLlm, emit, tracer))
     .addNode('navigator', createNavigatorNode(llm, neoOntologyService, ontologyId, emit, tracer))
     .addNode('sql_builder', createSqlBuilderNode(structuredLlm, neoOntologyService, ontologyId, databaseType, emit, tracer))
-    .addNode('executor', createExecutorNode(llm, discoveryService, sandboxService, connectionId, emit, tracer))
+    .addNode('executor', createExecutorNode(llm, structuredLlm, discoveryService, sandboxService, connectionId, emit, tracer))
     .addNode('verifier', createVerifierNode(llm, sandboxService, emit, tracer))
     .addNode('explainer', createExplainerNode(llm, sandboxService, emit, tracer))
     .addEdge(START, 'planner')

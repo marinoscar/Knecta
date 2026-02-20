@@ -54,6 +54,7 @@ export const ChartSpecSchema = z.object({
 
 export function createExecutorNode(
   llm: any,
+  structuredLlm: any,
   discoveryService: DiscoveryService,
   sandboxService: SandboxService,
   connectionId: string,
@@ -179,7 +180,7 @@ export function createExecutorNode(
               new HumanMessage(chartPrompt),
             ];
 
-            const structuredLlm = llm.withStructuredOutput(ChartSpecSchema, {
+            const structuredChart = structuredLlm.withStructuredOutput(ChartSpecSchema, {
               name: 'create_chart',
               includeRaw: true,
             });
@@ -192,7 +193,7 @@ export function createExecutorNode(
                 structuredOutput: true,
               },
               chartMessages,
-              () => structuredLlm.invoke(chartMessages),
+              () => structuredChart.invoke(chartMessages),
             );
 
             stepResult.chartSpec = chartResponse.parsed as ChartSpec;
