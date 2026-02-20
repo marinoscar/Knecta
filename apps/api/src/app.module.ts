@@ -25,6 +25,7 @@ import { TestAuthModule } from './test-auth/test-auth.module';
 import { SemanticModelsModule } from './semantic-models/semantic-models.module';
 import { OntologiesModule } from './ontologies/ontologies.module';
 import { DataAgentModule } from './data-agent/data-agent.module';
+import { OAuthModule } from './oauth/oauth.module';
 
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -71,6 +72,7 @@ import configuration from './config/configuration';
     SemanticModelsModule,
     OntologiesModule,
     DataAgentModule,
+    OAuthModule,
 
     // Test modules (non-production only)
     ...(process.env.NODE_ENV !== 'production' ? [TestAuthModule] : []),
