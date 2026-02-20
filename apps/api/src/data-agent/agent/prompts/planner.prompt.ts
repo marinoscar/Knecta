@@ -48,32 +48,33 @@ Analyze the question and produce a structured plan with ordered sub-tasks. Each 
 6. Be specific about what columns, metrics, and dimensions are relevant.
 7. Include acceptance checks that the verifier should run.
 
-## Visualization Guidance
+## Visualization Guidance — Proactive by Default
 
-You MUST include a visualization step (with chartType set) when any of these conditions apply:
+**Visualization is the DEFAULT for data queries.** You SHOULD add a visualization step (with chartType set) for any data query that returns multiple rows or groups. Only skip visualization when it would add no value.
 
-1. **Explicit Request**: User explicitly requests a chart, graph, plot, visualization, or visual representation
-   - "show me a chart of...", "plot the trend...", "visualize the breakdown..."
+### ALWAYS add a chart when ANY of these apply:
+1. **Grouped/aggregated results** — Query uses GROUP BY producing 2+ groups (e.g., "revenue by region", "sales by product")
+2. **Time-series data** — Query involves date, month, quarter, year, or any temporal dimension (e.g., "monthly trend", "quarterly revenue", "sales over time")
+3. **Comparisons across categories** — Question compares values across entities (e.g., "compare", "vs", "which is better", "difference between")
+4. **Rankings or ordering** — Question ranks by a metric (e.g., "top", "bottom", "best", "worst", "highest", "lowest", "most", "least")
+5. **Proportions or composition** — Question asks about parts of a whole (e.g., "breakdown", "share", "percentage", "distribution", "split")
+6. **Correlations** — Question explores relationship between two numeric variables
+7. **Analytical phrasing** — User uses analytical language: "how", "trend", "performance", "growth", "decline", "across", "by region/product/time"
+8. **Explicit request** — User explicitly requests a chart, graph, plot, or visualization
 
-2. **Comparisons**: Question involves comparing values across categories
-   - Examples: "compare revenue by region", "which product sells more", "rank stores by profit"
-   - **chartType: "bar"** (use horizontal layout for rankings/top N)
+### Skip visualization ONLY when:
+- Result is a **single scalar value** (e.g., "what is total revenue?" → one number)
+- Question is **schema exploration** ("what tables exist?", "show me columns")
+- Question is **conversational** (no data query involved)
+- User explicitly says "just the number" or "no chart"
 
-3. **Trends Over Time**: Question involves temporal patterns or time series
-   - Examples: "how did sales change this year", "monthly revenue trend", "growth over quarters"
-   - **chartType: "line"**
-
-4. **Proportions/Composition**: Question involves parts of a whole or percentage breakdown
-   - Examples: "breakdown of expenses by category", "market share distribution", "what percent..."
-   - **chartType: "pie"** (ONLY if result has ≤6 categories; otherwise use bar chart)
-
-5. **Correlations**: Question involves relationship between two numeric variables
-   - Examples: "relationship between price and sales", "does discount affect quantity", "correlation..."
-   - **chartType: "scatter"**
-
-6. **Rankings/Top N**: Question asks for top/bottom N items by some metric
-   - Examples: "top 10 customers", "best performing products", "worst regions"
-   - **chartType: "bar"** with layout: "horizontal"
+### Chart Type Selection:
+- Comparison across categories → **bar** (vertical)
+- Rankings/top N/bottom N → **bar** (horizontal layout)
+- Trend over time or any temporal grouping → **line**
+- Part-of-whole with ≤6 categories → **pie**; >6 categories → **bar** (horizontal)
+- Correlation between two numeric variables → **scatter**
+- **When uncertain** → default to **bar** chart (most versatile)
 
 ### Strategy Selection with chartType
 
@@ -89,23 +90,8 @@ When adding a visualization step, choose strategy based on data availability:
   - Executor generates ChartSpec directly from prior stepResults
   - Example: Step 1 gets raw data, Step 2 (strategy: python, chartType: bar) visualizes it
 
-### When NOT to Add Visualization
-
-Do NOT add a visualization step when:
-
-- User asks for a specific number or single-value lookup ("what is total revenue?")
-- Result is a single row or scalar value (no distribution to visualize)
-- User asks a schema exploration question ("what tables exist?", "show me columns")
-- Question is purely analytical without comparative/trend/composition aspects
-- Result set is too large (>100 categories) — summarize with top N + "Other" instead
-
-### Chart Type Decision Tree
-
-- Comparison across categories? → bar (vertical or horizontal)
-- Trend over time? → line
-- Part-of-whole (≤6 categories)? → pie
-- Correlation between two variables? → scatter
-- Ranking/top N? → bar (horizontal layout)
+### Multi-Step Queries
+If your plan has multiple steps producing tabular data, add a visualization step for at minimum the final/summary step. If intermediate steps also produce meaningful aggregations, consider visualizing those too.
 
 ## CRITICAL: Ontology as Source of Truth
 The datasets listed in "Available Datasets" below come from a semantic search and may not be complete. The Navigator phase will query the full ontology to verify what is available.
