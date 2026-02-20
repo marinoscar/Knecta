@@ -34,6 +34,8 @@ interface ChatSidebarProps {
   onDeleteChat: (chatId: string) => Promise<void>;
   onRenameChat: (chatId: string, name: string) => Promise<void>;
   isLoading: boolean;
+  open: boolean;
+  onClose: () => void;
 }
 
 const SIDEBAR_WIDTH = 280;
@@ -150,6 +152,8 @@ export function ChatSidebar({
   onDeleteChat,
   onRenameChat,
   isLoading,
+  open,
+  onClose,
 }: ChatSidebarProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -308,7 +312,8 @@ export function ChatSidebar({
     return (
       <Drawer
         variant="temporary"
-        open
+        open={open}
+        onClose={onClose}
         sx={{
           width: SIDEBAR_WIDTH,
           flexShrink: 0,
@@ -321,6 +326,11 @@ export function ChatSidebar({
         {content}
       </Drawer>
     );
+  }
+
+  // Desktop: Don't render sidebar at all when closed
+  if (!open) {
+    return null;
   }
 
   return (

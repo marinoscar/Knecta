@@ -18,6 +18,8 @@ import {
   Edit as EditIcon,
   Analytics as AnalyticsIcon,
   Tune as TuneIcon,
+  Menu as MenuIcon,
+  ChevronLeft as ChevronLeftIcon,
 } from '@mui/icons-material';
 import { ChatMessage } from './ChatMessage';
 import { PhaseIndicator } from './PhaseIndicator';
@@ -37,6 +39,8 @@ interface ChatViewProps {
   onOpenPreferences?: () => void;
   selectedMessageId?: string;
   onMessageSelect?: (messageId: string) => void;
+  sidebarOpen: boolean;
+  onToggleSidebar: () => void;
 }
 
 export function ChatView({
@@ -53,6 +57,8 @@ export function ChatView({
   onOpenPreferences,
   selectedMessageId,
   onMessageSelect,
+  sidebarOpen,
+  onToggleSidebar,
 }: ChatViewProps) {
   const theme = useTheme();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -130,6 +136,9 @@ export function ChatView({
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1 }}>
+          <IconButton size="small" onClick={onToggleSidebar}>
+            {sidebarOpen ? <ChevronLeftIcon /> : <MenuIcon />}
+          </IconButton>
           <Typography
             variant="h6"
             sx={{

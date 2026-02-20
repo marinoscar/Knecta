@@ -24,9 +24,11 @@ export default function DataAgentPage() {
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [preferencesDialogOpen, setPreferencesDialogOpen] = useState(false);
   const [autoSavedSnackbarOpen, setAutoSavedSnackbarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const theme = useTheme();
   const isLargeScreen = useMediaQuery(theme.breakpoints.up('lg'));
   const isMediumScreen = useMediaQuery(theme.breakpoints.between('md', 'lg'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const { settings: userSettings } = useUserSettings();
   const { providers, defaultProvider } = useLlmProviders(userSettings?.defaultProvider);
@@ -114,6 +116,11 @@ export default function DataAgentPage() {
         const newChat = await createChat({ name, ontologyId, llmProvider: llmProvider || defaultProvider });
         navigate(`/agent/${newChat.id}`);
 
+        // Close sidebar on mobile after creating chat
+        if (isMobile) {
+          setSidebarOpen(false);
+        }
+
         // If there's a pending suggestion, send it after a brief delay
         if (pendingSuggestion) {
           setTimeout(() => {
@@ -126,14 +133,18 @@ export default function DataAgentPage() {
         console.error('Failed to create chat:', err);
       }
     },
-    [createChat, navigate, pendingSuggestion, sendMessage, defaultProvider],
+    [createChat, navigate, pendingSuggestion, sendMessage, defaultProvider, isMobile],
   );
 
   const handleSelectChat = useCallback(
     (selectedChatId: string) => {
       navigate(`/agent/${selectedChatId}`);
+      // Close sidebar on mobile when selecting a chat
+      if (isMobile) {
+        setSidebarOpen(false);
+      }
     },
-    [navigate],
+    [navigate, isMobile],
   );
 
   const handleDeleteChat = useCallback(
@@ -208,6 +219,13 @@ export default function DataAgentPage() {
     }
   }, [isStreaming, isLargeScreen]);
 
+  // Auto-close sidebar on mobile
+  useEffect(() => {
+    if (isMobile) {
+      setSidebarOpen(false);
+    }
+  }, [isMobile]);
+
   const showWelcome = !chatId;
 
   return (
@@ -227,6 +245,8 @@ export default function DataAgentPage() {
         onDeleteChat={handleDeleteChat}
         onRenameChat={renameChat}
         isLoading={chatsLoading}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
 
       {/* Main content area */}
@@ -262,6 +282,8 @@ export default function DataAgentPage() {
               onClarificationAnswer={handleClarificationAnswer}
               onProceedWithAssumptions={handleProceedWithAssumptions}
               onOpenPreferences={() => setPreferencesDialogOpen(true)}
+              sidebarOpen={sidebarOpen}
+              onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
             />
             {/* Preference suggestion banner sits above the chat input */}
             {preferenceSuggestions.length > 0 && (
