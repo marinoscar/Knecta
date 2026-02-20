@@ -275,9 +275,6 @@ export default function DataAgentPage() {
               onSend={sendMessage}
               isStreaming={isStreaming}
               disabled={chatLoading || !chat}
-              providers={providers}
-              selectedProvider={chat?.llmProvider || defaultProvider}
-              onProviderChange={changeProvider}
             />
           </>
         )}
