@@ -239,7 +239,8 @@ export class OAuthController {
         secret: this.configService.get<string>('jwt.secret'),
       });
     } catch (error) {
-      this.logger.warn(`Invalid JWT token: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.warn(`Invalid JWT token: ${errorMessage}`);
       throw new UnauthorizedException('Invalid token');
     }
 

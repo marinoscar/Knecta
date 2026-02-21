@@ -93,11 +93,11 @@ export class McpServerService {
     server.resource(
       'ontology-details',
       new ResourceTemplate('knecta://ontologies/{id}'),
-      async (uri) => {
+      async (uri: URL) => {
         this.checkPermission(userPermissions, PERMISSIONS.ONTOLOGIES_READ);
 
         // Extract ID from URI
-        const match = uri.match(/knecta:\/\/ontologies\/([^/]+)$/);
+        const match = uri.href.match(/knecta:\/\/ontologies\/([^/]+)$/);
         if (!match) {
           throw new Error('Invalid ontology URI');
         }
@@ -141,11 +141,11 @@ export class McpServerService {
     server.resource(
       'dataset-schema',
       new ResourceTemplate('knecta://ontologies/{ontologyId}/datasets/{datasetName}'),
-      async (uri) => {
+      async (uri: URL) => {
         this.checkPermission(userPermissions, PERMISSIONS.ONTOLOGIES_READ);
 
         // Extract ontologyId and datasetName from URI
-        const match = uri.match(
+        const match = uri.href.match(
           /knecta:\/\/ontologies\/([^/]+)\/datasets\/(.+)$/,
         );
         if (!match) {
@@ -192,7 +192,7 @@ export class McpServerService {
           .max(2000)
           .describe('The natural language question about the data.'),
       },
-      async ({ ontologyId, question }) => {
+      async ({ ontologyId, question }: { ontologyId: string; question: string }) => {
         this.checkPermission(userPermissions, PERMISSIONS.DATA_AGENT_WRITE);
 
         // 1. Load user's default provider
