@@ -43,6 +43,7 @@ model User {
   ontologies                Ontology[]       @relation("UserOntologies")
   dataChats                 DataChat[]       @relation("UserDataChats")
   dataAgentPreferences      DataAgentPreference[] @relation("UserDataAgentPreferences")
+  spreadsheetRuns           SpreadsheetRun[]      @relation("UserSpreadsheetRuns")
   oauthCodes                OAuthAuthorizationCode[] @relation("UserOAuthCodes")
 
   @@map("users")
@@ -569,4 +570,75 @@ model DataAgentPreference {
   @@index([userId])
   @@index([ontologyId])
   @@map("data_agent_preferences")
+}
+
+// =============================================================================
+// Spreadsheet Agent
+// =============================================================================
+
+enum SpreadsheetRunStatus {
+  pending
+  executing
+  completed
+  failed
+  cancelled
+}
+
+enum SpreadsheetTableStatus {
+  pending
+  processing
+  ready
+  failed
+}
+
+model SpreadsheetRun {
+  id               String               @id @default(uuid()) @db.Uuid
+  name             String
+  status           SpreadsheetRunStatus @default(pending)
+  storageObjectIds String[]             @map("storage_object_ids")
+  s3OutputPrefix   String?              @map("s3_output_prefix")
+  plan             Json?
+  progress         Json?
+  errorMessage     String?              @map("error_message")
+  tableCount       Int                  @default(0) @map("table_count")
+  totalRows        BigInt               @default(0) @map("total_rows")
+  totalSizeBytes   BigInt               @default(0) @map("total_size_bytes")
+  instructions     String?              @db.Text
+  startedAt        DateTime?            @map("started_at") @db.Timestamptz
+  completedAt      DateTime?            @map("completed_at") @db.Timestamptz
+  createdByUserId  String?              @map("created_by_user_id") @db.Uuid
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime             @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  createdByUser User?              @relation("UserSpreadsheetRuns", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  tables        SpreadsheetTable[]
+
+  @@index([createdByUserId])
+  @@index([status])
+  @@map("spreadsheet_runs")
+}
+
+model SpreadsheetTable {
+  id           String                 @id @default(uuid()) @db.Uuid
+  runId        String                 @map("run_id") @db.Uuid
+  sourceFile   String                 @map("source_file")
+  sourceSheet  String                 @map("source_sheet")
+  tableName    String                 @map("table_name")
+  schema       Json
+  rowCount     BigInt                 @default(0) @map("row_count")
+  sizeBytes    BigInt                 @default(0) @map("size_bytes")
+  storageKey   String?                @map("storage_key")
+  status       SpreadsheetTableStatus @default(pending)
+  errorMessage String?                @map("error_message")
+  metadata     Json?
+  createdAt    DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime               @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  run SpreadsheetRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([status])
+  @@map("spreadsheet_tables")
 }

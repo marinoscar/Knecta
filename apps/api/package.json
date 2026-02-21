@@ -62,6 +62,7 @@
     "@types/n3": "^1.26.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
+    "duckdb-async": "^1.4.2",
     "js-yaml": "^4.1.1",
     "mssql": "^12.2.0",
     "mysql2": "^3.16.3",
