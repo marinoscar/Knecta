@@ -527,6 +527,38 @@ export class ObjectsService {
   }
 
   /**
+   * Get a storage object record by ID without any ownership check.
+   * Intended for internal server-side use only (e.g., agent nodes).
+   */
+  async getByIdInternal(id: string): Promise<any> {
+    const object = await this.prisma.storageObject.findUnique({
+      where: { id },
+    });
+
+    if (!object) {
+      throw new NotFoundException('Object not found');
+    }
+
+    return object;
+  }
+
+  /**
+   * Download a storage object as a Readable stream without an ownership check.
+   * Intended for internal server-side use only (e.g., agent nodes).
+   */
+  async downloadStream(id: string): Promise<Readable> {
+    const object = await this.getByIdInternal(id);
+
+    if (object.status !== 'ready') {
+      throw new BadRequestException(
+        `Object is not ready for download. Current status: ${object.status}`,
+      );
+    }
+
+    return this.storageProvider.download(object.storageKey);
+  }
+
+  /**
    * Helper method to get object with ownership check
    * @private
    */
