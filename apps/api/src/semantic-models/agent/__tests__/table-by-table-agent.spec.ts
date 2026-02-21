@@ -21,6 +21,7 @@ function createValidField() {
 function createValidDataset() {
   return {
     name: 'orders',
+    label: 'Customer Orders',
     source: 'mydb.public.orders',
     primary_key: ['id'],
     description: 'Order records',
@@ -56,6 +57,28 @@ describe('validateAndFixModel', () => {
     const result = validateAndFixModel(model);
     expect(result.isValid).toBe(true);
     expect(result.fatalIssues).toHaveLength(0);
+  });
+
+  it('should warn when dataset is missing label', () => {
+    const model = createValidModel();
+    delete (model.semantic_model[0].datasets[0] as any).label;
+    const result = validateAndFixModel(model);
+    expect(result.isValid).toBe(true);
+    expect(result.warnings.some(w => w.includes('label'))).toBe(true);
+  });
+
+  it('should warn when field is missing label', () => {
+    const model = createValidModel();
+    delete (model.semantic_model[0].datasets[0].fields![0] as any).label;
+    const result = validateAndFixModel(model);
+    expect(result.isValid).toBe(true);
+    expect(result.warnings.some(w => w.includes('label'))).toBe(true);
+  });
+
+  it('should not warn about label when dataset and field have labels', () => {
+    const model = createValidModel();
+    const result = validateAndFixModel(model);
+    expect(result.warnings.filter(w => w.includes('"label"')).length).toBe(0);
   });
 
   it('should fail when root has no semantic_model array', () => {

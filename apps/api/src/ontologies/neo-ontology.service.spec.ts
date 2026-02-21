@@ -39,11 +39,13 @@ describe('NeoOntologyService', () => {
             records: [
               mockRecord({
                 name: 'customers',
+                label: 'Customer Data',
                 description: 'Customer data',
                 source: 'public.customers',
               }),
               mockRecord({
                 name: 'orders',
+                label: 'Order Records',
                 description: 'Order transactions',
                 source: 'public.orders',
               }),
@@ -56,8 +58,8 @@ describe('NeoOntologyService', () => {
       const result = await service.listDatasets('ontology-123');
 
       expect(result).toEqual([
-        { name: 'customers', description: 'Customer data', source: 'public.customers' },
-        { name: 'orders', description: 'Order transactions', source: 'public.orders' },
+        { name: 'customers', label: 'Customer Data', description: 'Customer data', source: 'public.customers' },
+        { name: 'orders', label: 'Order Records', description: 'Order transactions', source: 'public.orders' },
       ]);
       expect(mockNeoGraphService.readTransaction).toHaveBeenCalledTimes(1);
     });
@@ -84,11 +86,13 @@ describe('NeoOntologyService', () => {
             records: [
               mockRecord({
                 name: 'products',
+                label: null,
                 description: null,
                 source: null,
               }),
               mockRecord({
                 name: 'inventory',
+                label: undefined,
                 description: undefined,
                 source: undefined,
               }),
@@ -101,8 +105,8 @@ describe('NeoOntologyService', () => {
       const result = await service.listDatasets('ontology-123');
 
       expect(result).toEqual([
-        { name: 'products', description: '', source: '' },
-        { name: 'inventory', description: '', source: '' },
+        { name: 'products', label: '', description: '', source: '' },
+        { name: 'inventory', label: '', description: '', source: '' },
       ]);
     });
 
