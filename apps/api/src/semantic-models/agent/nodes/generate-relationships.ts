@@ -48,18 +48,18 @@ export function createGenerateRelationshipsNode(
         includeRaw: true,
       });
       const result = await structured.invoke([new HumanMessage(prompt)]);
-      return { parsed: result.parsed, rawResponse: result.raw };
+      return { parsed: result.parsed as z.infer<typeof RelationshipOutputSchema>, rawResponse: result.raw };
     } catch (err) {
       logger.warn(`withStructuredOutput failed, falling back to plain invoke: ${(err as Error).message}`);
       const response = await llmInstance.invoke([new HumanMessage(prompt)]);
       const content = extractTextContent(response.content);
       const extracted = extractJson(content);
       const parsed = extracted
-        ? {
-            relationships: extracted.relationships || [],
-            model_metrics: extracted.model_metrics || [],
-            model_ai_context: extracted.model_ai_context || null,
-          }
+        ? ({
+            relationships: (extracted.relationships || []) as any[],
+            model_metrics: (extracted.model_metrics || []) as any[],
+            model_ai_context: (extracted.model_ai_context || null) as any,
+          } as z.infer<typeof RelationshipOutputSchema>)
         : null;
       return { parsed, rawResponse: response };
     }
@@ -130,7 +130,7 @@ export function createGenerateRelationshipsNode(
       });
 
       // Retry with slightly elevated temperature to get different output
-      const retryLlm = llm.bind({ temperature: 0.2 } as any);
+      const retryLlm = (llm as any).bind({ temperature: 0.2 });
       const retryResult = await invokeAndParse(retryLlm, prompt);
 
       const retryTokens = extractTokenUsage(retryResult.rawResponse);
