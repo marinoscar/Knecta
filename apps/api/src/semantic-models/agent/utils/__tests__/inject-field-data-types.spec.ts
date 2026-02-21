@@ -167,59 +167,83 @@ describe('injectFieldDataTypes', () => {
 });
 
 describe('isEligibleForSampleData', () => {
-  it('should return true for varchar with maxLength < 50', () => {
+  // Text types that should return TRUE (non-PK, within length cap)
+  it('should return true for varchar with maxLength 30 (non-PK)', () => {
     expect(isEligibleForSampleData({ name: 'status', dataType: 'varchar', nativeType: 'varchar(30)', isNullable: true, isPrimaryKey: false, maxLength: 30 })).toBe(true);
   });
 
-  it('should return true for character varying with maxLength < 50', () => {
+  it('should return true for character varying with maxLength 20 (non-PK)', () => {
     expect(isEligibleForSampleData({ name: 'code', dataType: 'character varying', nativeType: 'varchar(20)', isNullable: true, isPrimaryKey: false, maxLength: 20 })).toBe(true);
   });
 
-  it('should return true for nvarchar with maxLength < 50', () => {
+  it('should return true for nvarchar with maxLength 45 (non-PK)', () => {
     expect(isEligibleForSampleData({ name: 'label', dataType: 'nvarchar', nativeType: 'nvarchar(45)', isNullable: true, isPrimaryKey: false, maxLength: 45 })).toBe(true);
   });
 
-  it('should return true for char with maxLength < 50', () => {
+  it('should return true for char with maxLength 2 (non-PK)', () => {
     expect(isEligibleForSampleData({ name: 'flag', dataType: 'char', nativeType: 'char(2)', isNullable: true, isPrimaryKey: false, maxLength: 2 })).toBe(true);
   });
 
-  it('should return false for varchar with maxLength >= 50', () => {
-    expect(isEligibleForSampleData({ name: 'description', dataType: 'varchar', nativeType: 'varchar(255)', isNullable: true, isPrimaryKey: false, maxLength: 255 })).toBe(false);
+  it('should return true for text without maxLength (non-PK)', () => {
+    expect(isEligibleForSampleData({ name: 'body', dataType: 'text', nativeType: 'text', isNullable: true, isPrimaryKey: false })).toBe(true);
   });
 
-  it('should return false for varchar without maxLength', () => {
-    expect(isEligibleForSampleData({ name: 'notes', dataType: 'varchar', nativeType: 'varchar', isNullable: true, isPrimaryKey: false })).toBe(false);
+  it('should return true for varchar without maxLength (non-PK)', () => {
+    expect(isEligibleForSampleData({ name: 'notes', dataType: 'varchar', nativeType: 'varchar', isNullable: true, isPrimaryKey: false })).toBe(true);
   });
 
-  it('should return false for text type (unlimited)', () => {
-    expect(isEligibleForSampleData({ name: 'body', dataType: 'text', nativeType: 'text', isNullable: true, isPrimaryKey: false })).toBe(false);
+  it('should return true for varchar with maxLength 255 (non-PK, cap raised to 500)', () => {
+    expect(isEligibleForSampleData({ name: 'description', dataType: 'varchar', nativeType: 'varchar(255)', isNullable: true, isPrimaryKey: false, maxLength: 255 })).toBe(true);
   });
 
-  it('should return false for integer', () => {
-    expect(isEligibleForSampleData({ name: 'id', dataType: 'integer', nativeType: 'int4', isNullable: false, isPrimaryKey: true })).toBe(false);
+  it('should return true for string type (Snowflake) with maxLength 100 (non-PK)', () => {
+    expect(isEligibleForSampleData({ name: 'category', dataType: 'string', nativeType: 'STRING(100)', isNullable: true, isPrimaryKey: false, maxLength: 100 })).toBe(true);
   });
 
-  it('should return false for boolean', () => {
+  it('should return true for user-defined type (PG enum, non-PK)', () => {
+    expect(isEligibleForSampleData({ name: 'status_enum', dataType: 'user-defined', nativeType: 'status_type', isNullable: true, isPrimaryKey: false })).toBe(true);
+  });
+
+  // Primary key exclusion
+  it('should return false for varchar primary key (PK exclusion)', () => {
+    expect(isEligibleForSampleData({ name: 'user_id', dataType: 'varchar', nativeType: 'varchar(30)', isNullable: false, isPrimaryKey: true, maxLength: 30 })).toBe(false);
+  });
+
+  // Length cap exclusion
+  it('should return false for varchar with maxLength > 500 (cap)', () => {
+    expect(isEligibleForSampleData({ name: 'long_text', dataType: 'varchar', nativeType: 'varchar(1000)', isNullable: true, isPrimaryKey: false, maxLength: 1000 })).toBe(false);
+  });
+
+  // Non-text types
+  it('should return false for integer (non-text)', () => {
+    expect(isEligibleForSampleData({ name: 'id', dataType: 'integer', nativeType: 'int4', isNullable: false, isPrimaryKey: false })).toBe(false);
+  });
+
+  it('should return false for boolean (non-text)', () => {
     expect(isEligibleForSampleData({ name: 'active', dataType: 'boolean', nativeType: 'bool', isNullable: false, isPrimaryKey: false })).toBe(false);
   });
 
-  it('should return false for json', () => {
+  it('should return false for json (non-text)', () => {
     expect(isEligibleForSampleData({ name: 'metadata', dataType: 'json', nativeType: 'json', isNullable: true, isPrimaryKey: false })).toBe(false);
   });
 
-  it('should return false for uuid', () => {
+  it('should return false for jsonb (non-text)', () => {
+    expect(isEligibleForSampleData({ name: 'settings', dataType: 'jsonb', nativeType: 'jsonb', isNullable: true, isPrimaryKey: false })).toBe(false);
+  });
+
+  it('should return false for uuid (non-text)', () => {
     expect(isEligibleForSampleData({ name: 'ref', dataType: 'uuid', nativeType: 'uuid', isNullable: false, isPrimaryKey: false })).toBe(false);
   });
 
-  it('should return false for date', () => {
+  it('should return false for date (non-text)', () => {
     expect(isEligibleForSampleData({ name: 'created', dataType: 'date', nativeType: 'date', isNullable: true, isPrimaryKey: false })).toBe(false);
   });
 
-  it('should return false for timestamp', () => {
+  it('should return false for timestamp (non-text)', () => {
     expect(isEligibleForSampleData({ name: 'ts', dataType: 'timestamp', nativeType: 'timestamptz', isNullable: true, isPrimaryKey: false })).toBe(false);
   });
 
-  it('should return false for bytea', () => {
+  it('should return false for bytea (non-text)', () => {
     expect(isEligibleForSampleData({ name: 'data', dataType: 'bytea', nativeType: 'bytea', isNullable: true, isPrimaryKey: false })).toBe(false);
   });
 });
@@ -321,6 +345,50 @@ describe('sample_data injection', () => {
 
     const statusField = dataset.fields![4];
     expect((statusField.ai_context as OSIAIContext).sample_data).toBeUndefined();
+  });
+
+  it('should inject sample_data for text column without maxLength', () => {
+    const dataset = createTestDataset();
+    dataset.fields!.push({
+      name: 'notes',
+      expression: { dialects: [{ dialect: 'ANSI_SQL' as OSIDialect, expression: 'notes' }] },
+      ai_context: { synonyms: ['comments'] },
+    });
+    const columns = [
+      ...createTestColumns(),
+      { name: 'notes', dataType: 'text', nativeType: 'text', isNullable: true, isPrimaryKey: false },
+    ];
+    const sampleDataMap = new Map<string, string[]>();
+    sampleDataMap.set('notes', ['note1', 'note2', 'note3']);
+
+    injectFieldDataTypes(dataset, columns, sampleDataMap);
+
+    const notesField = dataset.fields![4];
+    const ctx = notesField.ai_context as OSIAIContext;
+    expect(ctx.sample_data).toBeDefined();
+    expect(ctx.sample_data).toEqual(['note1', 'note2', 'note3']);
+  });
+
+  it('should not inject sample_data for primary key varchar column', () => {
+    const dataset = createTestDataset();
+    dataset.fields!.push({
+      name: 'user_id',
+      expression: { dialects: [{ dialect: 'ANSI_SQL' as OSIDialect, expression: 'user_id' }] },
+      ai_context: { synonyms: ['uid'] },
+    });
+    const columns = [
+      ...createTestColumns(),
+      { name: 'user_id', dataType: 'varchar', nativeType: 'varchar(30)', isNullable: false, isPrimaryKey: true, maxLength: 30 },
+    ];
+    const sampleDataMap = new Map<string, string[]>();
+    sampleDataMap.set('user_id', ['usr123', 'usr456', 'usr789']);
+
+    injectFieldDataTypes(dataset, columns, sampleDataMap);
+
+    const userIdField = dataset.fields![4];
+    const ctx = userIdField.ai_context as OSIAIContext;
+    // Should NOT have sample_data because it's a primary key
+    expect(ctx.sample_data).toBeUndefined();
   });
 });
 
