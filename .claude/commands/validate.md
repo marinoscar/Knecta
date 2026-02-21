@@ -12,46 +12,91 @@ If running inside a **git worktree**, resolve all paths relative to the worktree
 
 ---
 
-## Step 1: Load Environment
+## Step 0: Detect Docker Containers (do this FIRST)
 
-Read `infra/compose/.env` from the repo root. Extract the `POSTGRES_*` variables — you will need them for Prisma commands in subsequent steps.
+Before anything else, check if Docker Compose dev stack is running:
 
-Construct the env var export string for bash:
+```bash
+docker compose -f infra/compose/base.compose.yml -f infra/compose/dev.compose.yml ps --format '{{.Name}}' 2>/dev/null
 ```
-export POSTGRES_HOST=<value> POSTGRES_PORT=<value> POSTGRES_USER=<value> POSTGRES_PASSWORD=<value> POSTGRES_DB=<value> POSTGRES_SSL=<value>
+
+Save whether the API container exists (look for `compose-api-1` in the output).
+You will need this for Steps 2, 3, 6, and 7.
+
+---
+
+## Step 1: Load Environment & Construct DATABASE_URL
+
+Read `infra/compose/.env` from the repo root. Extract these variables:
+- `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_SSL`
+
+**Construct `DATABASE_URL`** from these values using this format:
 ```
+postgresql://<USER>:<PASSWORD_URL_ENCODED>@<HOST>:<PORT>/<DB>
+```
+
+If `POSTGRES_SSL=true`, append `?sslmode=require`.
+
+**URL-encode the password** — special characters like `!`, `@`, `#`, `$` must be percent-encoded (e.g. `!` → `%21`). Common encodings:
+- `!` → `%21`, `@` → `%40`, `#` → `%23`, `$` → `%24`, `%` → `%25`, `^` → `%5E`, `&` → `%26`
+
+Example with password `P@ss!word`:
+```
+DATABASE_URL=postgresql://myuser:P%40ss%21word@dbhost.local:5432/mydb
+```
+
+Save this `DATABASE_URL` — you will pass it to all Prisma commands in Steps 2 and 3.
+
+**IMPORTANT — Database connectivity:**
+- The `.env` `POSTGRES_HOST` (e.g. `pgadmin.local`) is only resolvable **inside the Docker API container** (via `extra_hosts: "pgadmin.local:host-gateway"` in `dev.compose.yml`).
+- It is **NOT resolvable from the host machine** shell.
+- **Therefore: all Prisma commands that connect to the database (migrate) MUST run inside the API container.**
+- Prisma `generate` does NOT connect to the database — it runs on the host.
 
 ---
 
 ## Step 2: Check & Run Database Migrations
 
-From `apps/api/`, with the env vars from Step 1 exported, run:
+### MUST run inside Docker
+The database host is only reachable from inside the Docker network. Running from the host shell will fail with `P1000: Authentication failed`.
 
+**If Docker is NOT running** (from Step 0), skip this step and mark as SKIP.
+
+**Check migration status** — pass `DATABASE_URL` directly to Prisma inside the container:
 ```bash
-node scripts/prisma-env.js migrate status
+docker exec -e DATABASE_URL="<constructed_url>" compose-api-1 npx prisma migrate status --schema=/app/prisma/schema.prisma
 ```
 
-- If there are **pending migrations**, run: `npm run prisma:migrate` (this runs `prisma migrate deploy`)
-- If already up to date, note it and move on
-- Report: how many migrations applied (or "already current")
+**If there are pending migrations**, apply them:
+```bash
+docker exec -e DATABASE_URL="<constructed_url>" compose-api-1 npx prisma migrate deploy --schema=/app/prisma/schema.prisma
+```
+
+Key details:
+- Pass `DATABASE_URL` via `docker exec -e` — this injects the env var directly, bypassing the need for `prisma-env.js`.
+- Use `--schema=/app/prisma/schema.prisma` to point Prisma to the schema file inside the container.
+- Do NOT use `sh -c` wrapping — passing args directly to `npx` avoids shell quoting issues.
+
+Report: how many migrations applied (or "already current").
 
 ---
 
 ## Step 3: Generate Prisma Client
 
-From `apps/api/`, with the env vars from Step 1 exported, run:
+This runs on the **host machine** (not in Docker) so the generated client is available to the local `node_modules` for typecheck and tests.
 
+From `apps/api/`, pass `DATABASE_URL` directly:
 ```bash
-npm run prisma:generate
+cd apps/api && DATABASE_URL="<constructed_url>" npx prisma generate
 ```
 
-This is idempotent and fast if already current. Always run it to ensure the client matches the schema.
+This is idempotent and fast. It does NOT connect to the database — it only reads `schema.prisma` and generates TypeScript types. `DATABASE_URL` is required because the schema references `env("DATABASE_URL")`, but Prisma only validates the variable exists, it doesn't connect.
 
 ---
 
 ## Step 4: TypeScript Typecheck
 
-Run typecheck in **both** projects. Fix any errors before moving on.
+Run typecheck in **both** projects (can run in parallel since they are independent). Fix any errors before moving on.
 
 ```bash
 cd apps/api && npm run typecheck
@@ -64,13 +109,17 @@ If either fails:
 3. Re-run typecheck to confirm the fix
 4. Commit the fix: `fix(api): resolve type errors` or `fix(web): resolve type errors`
 
+Common type error patterns:
+- `TS2352` mock cast errors in test files: add `as unknown as <Type>` intermediate cast
+- Missing properties after Prisma schema changes: regenerate Prisma client (Step 3)
+
 Repeat until both pass clean.
 
 ---
 
 ## Step 5: Run All Tests
 
-Run tests in **both** projects. Fix any failures before moving on.
+Run tests in **both** projects (can run in parallel as background tasks). Fix any failures before moving on.
 
 **Backend** (Jest — MUST use npm script, not direct jest):
 ```bash
@@ -95,62 +144,64 @@ Repeat until all tests pass.
 
 ## Step 6: Restart API & Verify
 
-Detect which Docker Compose config is running:
+**If Docker is NOT running** (from Step 0), skip this step and mark SKIP.
 
-```bash
-docker compose -f infra/compose/base.compose.yml -f infra/compose/dev.compose.yml ps --format '{{.Name}}' 2>/dev/null
-```
-
-If containers are running, restart the API:
-
+Restart the API container:
 ```bash
 cd infra/compose && docker compose -f base.compose.yml -f dev.compose.yml restart api
 ```
 
 Wait 10 seconds, then check for errors:
-
 ```bash
-cd infra/compose && docker compose -f base.compose.yml -f dev.compose.yml logs --tail 80 api
+sleep 10 && cd infra/compose && docker compose -f base.compose.yml -f dev.compose.yml logs --tail 80 api
 ```
+
+Look for:
+- `Nest application successfully started` — good
+- `Server listening at http://...` — good
+- `Database connected` — good
+- Any ERROR or stack trace — investigate and fix
 
 Verify health:
 ```bash
 curl -s http://localhost:8319/api/health/ready
 ```
 
+Expected: JSON with `"status":"ok"`, database `"status":"up"`, neo4j `"status":"up"`.
+
 If errors appear in the logs:
 1. Analyze the error
 2. Fix the root cause in the source code
-3. Wait for hot-reload to pick up the change (dev mode auto-reloads)
+3. Wait for hot-reload to pick up the change (dev mode auto-reloads via volume mounts)
 4. Re-check logs and health
 5. Commit the fix
-
-If no Docker containers are running, skip this step and note it in the summary.
 
 ---
 
 ## Step 7: Restart Web & Verify
 
-Using the same Docker Compose files:
+**If Docker is NOT running** (from Step 0), skip this step and mark SKIP.
 
+Restart the web container:
 ```bash
 cd infra/compose && docker compose -f base.compose.yml -f dev.compose.yml restart web
 ```
 
 Wait 5 seconds, then check:
-
 ```bash
-cd infra/compose && docker compose -f base.compose.yml -f dev.compose.yml logs --tail 50 web
+sleep 5 && cd infra/compose && docker compose -f base.compose.yml -f dev.compose.yml logs --tail 50 web
 ```
 
-Verify:
+Look for: `VITE vX.X.X ready in XXX ms` — good.
+
+Verify HTTP response:
 ```bash
 curl -s -o /dev/null -w "%{http_code}" http://localhost:8319/
 ```
 
-If errors appear, fix, wait for reload, re-check, and commit.
+Expected: `200`.
 
-If no Docker containers are running, skip and note it.
+If errors appear, fix, wait for reload, re-check, and commit.
 
 ---
 
