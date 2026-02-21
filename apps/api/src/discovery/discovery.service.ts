@@ -277,7 +277,8 @@ LIMIT ${limit}`;
     // ------------------------------------------------------------------
     // Execute and extract
     // ------------------------------------------------------------------
-    const result = await driver.executeReadOnlyQuery(params, sql, limit);
+    const queryParams = { ...params, databaseName: database };
+    const result = await driver.executeReadOnlyQuery(queryParams, sql, limit);
     const values = result.rows.map(row => String(row[0]));
 
     this.logger.log(
