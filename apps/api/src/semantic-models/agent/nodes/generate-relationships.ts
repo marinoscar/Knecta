@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { AgentStateType } from '../state';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { HumanMessage } from '@langchain/core/messages';
@@ -5,9 +6,31 @@ import { SemanticModelsService } from '../../semantic-models.service';
 import { OSIRelationship, OSIMetric, OSIAIContext } from '../osi/types';
 import { buildGenerateRelationshipsPrompt } from '../prompts/generate-relationships-prompt';
 import { extractJson, extractTokenUsage } from '../utils';
+import { extractTextContent } from '../../../data-agent/agent/utils/content-extractor';
 import { Logger } from '@nestjs/common';
 
 const logger = new Logger('GenerateRelationships');
+
+const RelationshipOutputSchema = z.object({
+  relationships: z.array(z.object({
+    name: z.string(),
+    from: z.string(),
+    to: z.string(),
+    from_columns: z.array(z.string()),
+    to_columns: z.array(z.string()),
+    ai_context: z.record(z.unknown()).optional(),
+  })),
+  model_metrics: z.array(z.object({
+    name: z.string(),
+    expression: z.record(z.unknown()),
+    description: z.string().optional(),
+    ai_context: z.record(z.unknown()).optional(),
+  })).optional().default([]),
+  model_ai_context: z.object({
+    instructions: z.string().optional(),
+    synonyms: z.array(z.string()).optional(),
+  }).nullable().optional().default(null),
+});
 
 export function createGenerateRelationshipsNode(
   llm: BaseChatModel,
