@@ -46,10 +46,11 @@ export function OntologyGraph({ graph, onNodeClick, showFields = false }: Ontolo
       nodes: filteredNodes.map(n => ({
         id: n.id,
         name: n.name,
+        displayLabel: (n.properties.label as string) || n.name,
         label: n.label,
         color: n.label === 'Dataset' ? theme.palette.primary.main : theme.palette.success.main,
         val: n.label === 'Dataset' ? 10 : 3,
-        graphNode: n, // Store original node for click handler
+        graphNode: n,
         ...n.properties,
       })),
       links: filteredEdges.map(e => ({
@@ -70,7 +71,7 @@ export function OntologyGraph({ graph, onNodeClick, showFields = false }: Ontolo
 
   // Custom node rendering
   const nodeCanvasObject = (node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
-    const label = node.name;
+    const label = node.displayLabel || node.name;
     const fontSize = 12 / globalScale;
     const isDataset = node.label === 'Dataset';
     const nodeRadius = isDataset ? 8 : 3;
@@ -97,7 +98,10 @@ export function OntologyGraph({ graph, onNodeClick, showFields = false }: Ontolo
         graphData={graphData}
         width={dimensions.width}
         height={dimensions.height}
-        nodeLabel={(node: any) => node.name}
+        nodeLabel={(node: any) => {
+          const dl = node.displayLabel;
+          return dl && dl !== node.name ? `${dl} (${node.name})` : node.name;
+        }}
         nodeColor={(node: any) => node.color}
         nodeVal={(node: any) => node.val}
         nodeCanvasObject={nodeCanvasObject}

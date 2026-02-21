@@ -46,7 +46,9 @@ export function NodeInspector({ node, open, onClose }: NodeInspectorProps) {
             color={isDataset ? 'primary' : 'success'}
             size="small"
           />
-          <Typography variant="h6">{node.name}</Typography>
+          <Typography variant="h6">
+            {(node.properties.label as string) || node.name}
+          </Typography>
         </Box>
         <IconButton onClick={onClose} edge="end">
           <CloseIcon />
@@ -70,6 +72,16 @@ export function NodeInspector({ node, open, onClose }: NodeInspectorProps) {
                   {asString(node.properties.name || node.name)}
                 </Typography>
               </Box>
+              {node.properties.label ? (
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Label
+                  </Typography>
+                  <Typography variant="body2">
+                    {asString(node.properties.label)}
+                  </Typography>
+                </Box>
+              ) : null}
               {node.properties.source ? (
                 <Box>
                   <Typography variant="caption" color="text.secondary">
