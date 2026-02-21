@@ -108,7 +108,7 @@ async function parseExcelFile(
   let workbook: ExcelJS.Workbook;
   try {
     workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer);
+    await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
   } catch (fileError: unknown) {
     const message = fileError instanceof Error ? fileError.message : String(fileError);
     errors.push(`Error parsing file ${fileName}: ${message}`);
