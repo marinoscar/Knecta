@@ -65,7 +65,7 @@ describe('DiscoveryService', () => {
     mockPrisma.dataConnection.findUnique.mockResolvedValue(mockConnection as any);
 
     // Instantiate service directly (no NestJS TestingModule needed)
-    service = new DiscoveryService(mockPrisma as PrismaService);
+    service = new DiscoveryService(mockPrisma as unknown as PrismaService);
   });
 
   afterEach(() => {
