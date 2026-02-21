@@ -234,10 +234,12 @@ describe('DiscoveryService', () => {
 
         expect(sql).toContain('SELECT DISTINCT');
         expect(sql).toContain('"description"::text AS value');
+        expect(sql).toContain('FROM (');
         expect(sql).toContain('"public"."products"');
         expect(sql).toContain('WHERE "description" IS NOT NULL');
-        expect(sql).toContain('LIMIT 5');
-        expect(sql).not.toContain('ORDER BY'); // No subquery
+        expect(sql).toContain('LIMIT 100'); // Subquery sample limit
+        expect(sql).toContain('LIMIT 5'); // Outer distinct limit
+        expect(sql).not.toContain('ORDER BY'); // No ordering without recency column
       });
 
       it('should build correct SQL with orderByColumn', async () => {
