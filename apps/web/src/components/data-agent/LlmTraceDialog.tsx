@@ -351,7 +351,7 @@ export function LlmTraceDialog({ trace, open, onClose }: LlmTraceDialogProps) {
         </Box>
 
         {/* Tool Calls Section */}
-        {trace.toolCalls && trace.toolCalls.length > 0 && (
+        {Array.isArray(trace.toolCalls) && trace.toolCalls.length > 0 && (
           <Box>
             <Accordion disableGutters elevation={0}>
               <AccordionSummary

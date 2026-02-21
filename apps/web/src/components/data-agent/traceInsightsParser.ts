@@ -96,7 +96,7 @@ export function extractStepStatusesFromTraces(
       } else {
         // Look for query_database tool call results to extract row count
         for (const trace of stepTraces) {
-          if (!trace.toolCalls) continue;
+          if (!Array.isArray(trace.toolCalls)) continue;
           for (const tc of trace.toolCalls) {
             if (tc.name === 'query_database' && tc.args) {
               const result = tc.args.result as any;
@@ -158,7 +158,7 @@ export function extractPhaseDetailsFromTraces(
     // Collect tool calls from all traces in this phase
     const toolCalls: PhaseDetail['toolCalls'] = [];
     for (const trace of phaseTraces) {
-      if (trace.toolCalls) {
+      if (Array.isArray(trace.toolCalls)) {
         for (const tc of trace.toolCalls) {
           toolCalls.push({
             name: tc.name,
