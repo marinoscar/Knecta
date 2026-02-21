@@ -251,8 +251,11 @@ FROM (
 ) sub`;
       } else {
         sql = `SELECT DISTINCT TOP ${limit} ${castCol(column)} AS value
-FROM ${tableRef}
-WHERE ${quotedCol} IS NOT NULL`;
+FROM (
+  SELECT TOP 100 ${quotedCol}
+  FROM ${tableRef}
+  WHERE ${quotedCol} IS NOT NULL
+) sub`;
       }
     } else {
       if (orderByColumn) {
@@ -268,8 +271,12 @@ FROM (
 LIMIT ${limit}`;
       } else {
         sql = `SELECT DISTINCT ${castedCol} AS value
-FROM ${tableRef}
-WHERE ${quotedCol} IS NOT NULL
+FROM (
+  SELECT ${quotedCol}
+  FROM ${tableRef}
+  WHERE ${quotedCol} IS NOT NULL
+  LIMIT 100
+) sub
 LIMIT ${limit}`;
       }
     }
