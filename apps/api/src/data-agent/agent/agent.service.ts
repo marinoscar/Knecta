@@ -54,6 +54,7 @@ export class DataAgentAgentService {
               select: {
                 id: true,
                 connectionId: true,
+                databaseName: true,
                 connection: {
                   select: {
                     id: true,
@@ -77,6 +78,7 @@ export class DataAgentAgentService {
     if (!semanticModel) throw new NotFoundException('Semantic model not found');
 
     const connectionId = semanticModel.connectionId;
+    const databaseName = semanticModel.databaseName;
     const databaseType = semanticModel.connection.dbType;
     if (!connectionId) throw new Error('No connection associated with this semantic model');
 
@@ -206,6 +208,7 @@ export class DataAgentAgentService {
       sandboxService: this.sandboxService,
       ontologyId: ontology.id,
       connectionId,
+      databaseName,
       databaseType,
       emit: onEvent,
       tracer,
@@ -219,6 +222,7 @@ export class DataAgentAgentService {
         userId,
         ontologyId: ontology.id,
         connectionId,
+        databaseName,
         databaseType,
         conversationContext,
         relevantDatasets: datasetNames,
