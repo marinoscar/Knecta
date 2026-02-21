@@ -37,6 +37,7 @@ interface OSIField {
 
 interface OSIDataset {
   name: string;
+  label?: string;
   source?: string;
   primary_key?: string[];
   fields?: OSIField[];
@@ -79,8 +80,11 @@ export function ModelViewer({ model }: ModelViewerProps) {
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography variant="subtitle1" fontWeight="medium">
-                {dataset.name}
+                {dataset.label || dataset.name}
               </Typography>
+              {dataset.label && dataset.label !== dataset.name && (
+                <Typography variant="body2" color="text.secondary">({dataset.name})</Typography>
+              )}
               <Chip label={`${(dataset.fields || []).length} fields`} size="small" />
             </Box>
           </AccordionSummary>
@@ -90,6 +94,7 @@ export function ModelViewer({ model }: ModelViewerProps) {
                 <TableHead>
                   <TableRow>
                     <TableCell>Field Name</TableCell>
+                    <TableCell>Label</TableCell>
                     <TableCell>Expression</TableCell>
                     <TableCell>Primary Key</TableCell>
                     <TableCell>Dimension</TableCell>
@@ -99,6 +104,7 @@ export function ModelViewer({ model }: ModelViewerProps) {
                   {(dataset.fields || []).map((field, fieldIndex) => (
                     <TableRow key={fieldIndex}>
                       <TableCell>{field.name}</TableCell>
+                      <TableCell>{field.label || '-'}</TableCell>
                       <TableCell>
                         <Chip label={field.expression?.dialects?.[0]?.expression || '-'} size="small" variant="outlined" />
                       </TableCell>
