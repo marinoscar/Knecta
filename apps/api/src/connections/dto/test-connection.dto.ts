@@ -2,7 +2,7 @@ import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
 export const testConnectionSchema = z.object({
-  dbType: z.enum(['postgresql', 'mysql', 'sqlserver', 'databricks', 'snowflake'], {
+  dbType: z.enum(['postgresql', 'mysql', 'sqlserver', 'databricks', 'snowflake', 's3', 'azure_blob'], {
     errorMap: () => ({ message: 'Invalid database type' }),
   }),
   host: z.string().min(1, 'Host is required').max(255, 'Host must be 255 characters or less'),

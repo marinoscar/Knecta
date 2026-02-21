@@ -39,7 +39,7 @@ export class ConnectionsController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'pageSize', required: false, type: Number })
   @ApiQuery({ name: 'search', required: false, type: String })
-  @ApiQuery({ name: 'dbType', required: false, enum: ['postgresql', 'mysql', 'sqlserver', 'databricks', 'snowflake'] })
+  @ApiQuery({ name: 'dbType', required: false, enum: ['postgresql', 'mysql', 'sqlserver', 'databricks', 'snowflake', 's3', 'azure_blob'] })
   @ApiQuery({ name: 'sortBy', required: false, enum: ['name', 'dbType', 'createdAt', 'lastTestedAt'] })
   @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
   @ApiResponse({ status: 200, description: 'Paginated list of connections' })
