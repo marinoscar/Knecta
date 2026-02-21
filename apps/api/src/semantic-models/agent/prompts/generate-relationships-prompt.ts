@@ -139,5 +139,5 @@ Output ONLY a valid JSON object:
   "model_ai_context": { "instructions": "...", "synonyms": [...] }
 }
 
-Do not include any text before or after the JSON. Do not wrap in markdown code blocks.`;
+IMPORTANT: Output ONLY the raw JSON object. Do not include any text, explanation, or commentary before or after the JSON. Do not wrap in markdown code blocks. Your entire response must be parseable by JSON.parse().`;
 }

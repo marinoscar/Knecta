@@ -8,16 +8,11 @@ const logger = new Logger('AgentUtils');
 export function extractJson(content: string): Record<string, unknown> | null {
   let cleaned = content.trim();
 
-  // Strip markdown code blocks
-  if (cleaned.startsWith('```json')) {
-    cleaned = cleaned.slice(7);
-  } else if (cleaned.startsWith('```')) {
-    cleaned = cleaned.slice(3);
+  // Strip markdown code blocks (```json, ```JSON, ```javascript, bare ```)
+  const codeBlockMatch = cleaned.match(/^```\w*\s*\n?([\s\S]*?)\n?\s*```$/);
+  if (codeBlockMatch) {
+    cleaned = codeBlockMatch[1].trim();
   }
-  if (cleaned.endsWith('```')) {
-    cleaned = cleaned.slice(0, -3);
-  }
-  cleaned = cleaned.trim();
 
   try {
     return JSON.parse(cleaned);

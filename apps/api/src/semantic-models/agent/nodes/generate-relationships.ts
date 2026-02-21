@@ -38,6 +38,33 @@ export function createGenerateRelationshipsNode(
   runId: string,
   emitProgress: (event: object) => void,
 ) {
+  async function invokeAndParse(
+    llmInstance: BaseChatModel,
+    prompt: string,
+  ): Promise<{ parsed: z.infer<typeof RelationshipOutputSchema> | null; rawResponse: any }> {
+    try {
+      const structured = llmInstance.withStructuredOutput(RelationshipOutputSchema, {
+        name: 'generate_relationships',
+        includeRaw: true,
+      });
+      const result = await structured.invoke([new HumanMessage(prompt)]);
+      return { parsed: result.parsed, rawResponse: result.raw };
+    } catch (err) {
+      logger.warn(`withStructuredOutput failed, falling back to plain invoke: ${(err as Error).message}`);
+      const response = await llmInstance.invoke([new HumanMessage(prompt)]);
+      const content = extractTextContent(response.content);
+      const extracted = extractJson(content);
+      const parsed = extracted
+        ? {
+            relationships: extracted.relationships || [],
+            model_metrics: extracted.model_metrics || [],
+            model_ai_context: extracted.model_ai_context || null,
+          }
+        : null;
+      return { parsed, rawResponse: response };
+    }
+  }
+
   return async (state: AgentStateType) => {
     if (state.datasets.length === 0) {
       logger.warn('No datasets available for relationship generation');
@@ -65,10 +92,9 @@ export function createGenerateRelationshipsNode(
       osiSpecText: state.osiSpecText || undefined,
     });
 
-    const response = await llm.invoke([new HumanMessage(prompt)]);
+    const { parsed, rawResponse } = await invokeAndParse(llm, prompt);
 
-    // Track tokens
-    const callTokens = extractTokenUsage(response);
+    const callTokens = extractTokenUsage(rawResponse);
     const tokensUsed = {
       prompt: state.tokensUsed.prompt + callTokens.prompt,
       completion: state.tokensUsed.completion + callTokens.completion,
@@ -77,21 +103,14 @@ export function createGenerateRelationshipsNode(
 
     emitProgress({ type: 'token_update', tokensUsed });
 
-    // Parse response
-    const content = typeof response.content === 'string'
-      ? response.content
-      : JSON.stringify(response.content);
-
-    const parsed = extractJson(content);
-
     let relationships: OSIRelationship[] = [];
     let modelMetrics: OSIMetric[] = [];
     let modelAiContext: OSIAIContext | null = null;
 
     if (parsed) {
       relationships = (parsed.relationships || []) as OSIRelationship[];
-      modelMetrics = (parsed.model_metrics || []) as OSIMetric[];
-      modelAiContext = (parsed.model_ai_context || null) as OSIAIContext | null;
+      modelMetrics = ((parsed as any).model_metrics || []) as OSIMetric[];
+      modelAiContext = ((parsed as any).model_ai_context || null) as OSIAIContext | null;
     } else {
       logger.warn('Failed to parse relationship generation response');
     }
