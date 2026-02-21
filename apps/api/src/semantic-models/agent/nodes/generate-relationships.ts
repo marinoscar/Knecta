@@ -95,7 +95,7 @@ export function createGenerateRelationshipsNode(
     const { parsed, rawResponse } = await invokeAndParse(llm, prompt);
 
     const callTokens = extractTokenUsage(rawResponse);
-    const tokensUsed = {
+    let tokensUsed = {
       prompt: state.tokensUsed.prompt + callTokens.prompt,
       completion: state.tokensUsed.completion + callTokens.completion,
       total: state.tokensUsed.total + callTokens.total,
@@ -113,6 +113,50 @@ export function createGenerateRelationshipsNode(
       modelAiContext = ((parsed as any).model_ai_context || null) as OSIAIContext | null;
     } else {
       logger.warn('Failed to parse relationship generation response');
+    }
+
+    // Retry if candidates existed but zero relationships were produced
+    const hadCandidates = state.relationshipCandidates.length > 0;
+    const gotZeroRelationships = relationships.length === 0;
+
+    if (hadCandidates && gotZeroRelationships) {
+      logger.warn(
+        `Got 0 relationships from ${state.relationshipCandidates.length} candidates. Retrying with temperature=0.2...`,
+      );
+
+      emitProgress({
+        type: 'text',
+        content: `Relationship generation produced no results from ${state.relationshipCandidates.length} candidates. Retrying...`,
+      });
+
+      // Retry with slightly elevated temperature to get different output
+      const retryLlm = llm.bind({ temperature: 0.2 } as any);
+      const retryResult = await invokeAndParse(retryLlm, prompt);
+
+      const retryTokens = extractTokenUsage(retryResult.rawResponse);
+      tokensUsed.prompt += retryTokens.prompt;
+      tokensUsed.completion += retryTokens.completion;
+      tokensUsed.total += retryTokens.total;
+
+      if (retryResult.parsed) {
+        relationships = (retryResult.parsed.relationships || []) as OSIRelationship[];
+        modelMetrics = ((retryResult.parsed as any).model_metrics || []) as OSIMetric[];
+        modelAiContext = ((retryResult.parsed as any).model_ai_context || null) as OSIAIContext | null;
+        logger.log(`Retry succeeded: ${relationships.length} relationships generated`);
+      } else {
+        logger.error(
+          `Retry also failed to generate relationships from ${state.relationshipCandidates.length} candidates`,
+        );
+      }
+
+      emitProgress({ type: 'token_update', tokensUsed });
+    }
+
+    if (hadCandidates && relationships.length === 0) {
+      emitProgress({
+        type: 'text',
+        content: `Warning: Could not generate relationships despite ${state.relationshipCandidates.length} candidates being available. The model will be saved without relationships.`,
+      });
     }
 
     // Update progress
