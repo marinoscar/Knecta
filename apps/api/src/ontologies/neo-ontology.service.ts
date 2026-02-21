@@ -61,6 +61,7 @@ export class NeoOntologyService {
     // Build arrays for batch Cypher
     const datasetNodes: Array<{
       name: string;
+      label: string;
       source: string;
       description: string;
       yaml: string;
@@ -89,6 +90,7 @@ export class NeoOntologyService {
 
       datasetNodes.push({
         name: dataset.name || '',
+        label: dataset.label || '',
         source: dataset.source || '',
         description: dataset.description || '',
         yaml: datasetYaml,
@@ -169,6 +171,7 @@ export class NeoOntologyService {
           CREATE (ds:Dataset {
             ontologyId: $ontologyId,
             name: d.name,
+            label: d.label,
             source: d.source,
             description: d.description,
             yaml: d.yaml
@@ -379,12 +382,12 @@ export class NeoOntologyService {
    */
   async listDatasets(
     ontologyId: string,
-  ): Promise<Array<{ name: string; description: string; source: string }>> {
+  ): Promise<Array<{ name: string; label: string; description: string; source: string }>> {
     return this.neoGraphService.readTransaction(async (tx) => {
       const result = await tx.run(
         `
         MATCH (d:Dataset {ontologyId: $ontologyId})
-        RETURN d.name AS name, d.description AS description, d.source AS source
+        RETURN d.name AS name, d.label AS label, d.description AS description, d.source AS source
         ORDER BY d.name
         `,
         { ontologyId },
@@ -392,6 +395,7 @@ export class NeoOntologyService {
 
       return result.records.map((record) => ({
         name: record.get('name') as string,
+        label: (record.get('label') as string) || '',
         description: (record.get('description') as string) || '',
         source: (record.get('source') as string) || '',
       }));
