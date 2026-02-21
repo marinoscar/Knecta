@@ -23,7 +23,10 @@ export function createListDatasetsTool(
         }
 
         const lines = datasets.map(
-          (ds) => `- **${ds.name}**: ${ds.description || 'No description'} (source: ${ds.source || 'unknown'})`,
+          (ds) => {
+            const displayName = ds.label ? `${ds.name} (${ds.label})` : ds.name;
+            return `- **${displayName}**: ${ds.description || 'No description'} (source: ${ds.source || 'unknown'})`;
+          },
         );
 
         return `${datasets.length} datasets available:\n\n${lines.join('\n')}`;
