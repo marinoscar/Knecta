@@ -51,6 +51,7 @@ Generate a JSON object for this table as an OSI dataset definition.
 
 ### Dataset Requirements:
 - **name**: Use the table name (without schema prefix)
+- **label**: Human-readable display label (e.g., "Customer Accounts" for users, "Order Line Items" for order_items)
 - **source**: "${params.databaseName}.${params.tableName}"
 - **primary_key**: Array of primary key column names (from column metadata where isPrimaryKey is true)
 - **description**: A meaningful business description of what this table represents
