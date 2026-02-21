@@ -43,6 +43,7 @@ model User {
   ontologies                Ontology[]       @relation("UserOntologies")
   dataChats                 DataChat[]       @relation("UserDataChats")
   dataAgentPreferences      DataAgentPreference[] @relation("UserDataAgentPreferences")
+  oauthCodes                OAuthAuthorizationCode[] @relation("UserOAuthCodes")
 
   @@map("users")
 }
@@ -237,6 +238,33 @@ model DeviceCode {
   @@index([status, expiresAt])
   @@index([userId])
   @@map("device_codes")
+}
+
+// =============================================================================
+// OAuth Authorization Codes (for MCP OAuth 2.1)
+// =============================================================================
+
+model OAuthAuthorizationCode {
+  id                    String   @id @default(uuid()) @db.Uuid
+  code                  String   @unique @db.VarChar(128)
+  userId                String   @map("user_id") @db.Uuid
+  clientId              String   @map("client_id") @db.VarChar(2048)
+  redirectUri           String   @map("redirect_uri") @db.VarChar(2048)
+  scope                 String   @db.VarChar(512)
+  codeChallenge         String   @map("code_challenge") @db.VarChar(128)
+  codeChallengeMethod   String   @map("code_challenge_method") @db.VarChar(10)
+  resource              String?  @db.VarChar(2048)
+  expiresAt             DateTime @map("expires_at") @db.Timestamptz
+  used                  Boolean  @default(false)
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // Relations
+  user User @relation("UserOAuthCodes", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([code])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("oauth_authorization_codes")
 }
 
 // =============================================================================
