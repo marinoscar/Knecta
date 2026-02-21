@@ -25,6 +25,7 @@ import { TestAuthModule } from './test-auth/test-auth.module';
 import { SemanticModelsModule } from './semantic-models/semantic-models.module';
 import { OntologiesModule } from './ontologies/ontologies.module';
 import { DataAgentModule } from './data-agent/data-agent.module';
+import { SpreadsheetAgentModule } from './spreadsheet-agent/spreadsheet-agent.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OAuthModule } from './oauth/oauth.module';
 import { McpModule } from './mcp/mcp.module';
@@ -74,6 +75,7 @@ import configuration from './config/configuration';
     SemanticModelsModule,
     OntologiesModule,
     DataAgentModule,
+    SpreadsheetAgentModule,
     NotificationsModule,
     OAuthModule,
     McpModule,
