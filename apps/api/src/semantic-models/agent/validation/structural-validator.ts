@@ -82,6 +82,11 @@ export function validateAndFixModel(model: Record<string, unknown>): ValidationR
       }
     }
 
+    // Dataset label warning
+    if (!ds.label || typeof ds.label !== 'string' || ds.label.trim() === '') {
+      warnings.push(`${dsLabel}: missing "label" — graph display will use technical name`);
+    }
+
     // 6. Validate each field
     for (let j = 0; j < ds.fields.length; j++) {
       const field = ds.fields[j];
@@ -129,6 +134,11 @@ export function validateAndFixModel(model: Record<string, unknown>): ValidationR
         if (!(field.ai_context as any).data_type) {
           warnings.push(`${fieldLabel}: ai_context missing "data_type" — SQL generation may be less accurate`);
         }
+      }
+
+      // Field label warning
+      if (!field.label || typeof field.label !== 'string' || field.label.trim() === '') {
+        warnings.push(`${fieldLabel}: missing "label" — display will use technical name`);
       }
     }
   }
