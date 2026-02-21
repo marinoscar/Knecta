@@ -20,6 +20,7 @@ export const DataAgentState = Annotation.Root({
   userId: Annotation<string>,
   ontologyId: Annotation<string>,
   connectionId: Annotation<string>,
+  databaseName: Annotation<string>,
   databaseType: Annotation<string>,
   conversationContext: Annotation<string>({
     reducer: (_, next) => next,

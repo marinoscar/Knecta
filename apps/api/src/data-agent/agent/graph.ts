@@ -22,6 +22,7 @@ export interface DataAgentGraphDeps {
   sandboxService: any;
   ontologyId: string;
   connectionId: string;
+  databaseName: string;
   databaseType: string;
   emit: EmitFn;
   tracer: DataAgentTracer;
@@ -75,13 +76,13 @@ function routeAfterVerification(
 
 // ─── Graph builder ───
 export function buildDataAgentGraph(deps: DataAgentGraphDeps) {
-  const { llm, structuredLlm, neoOntologyService, discoveryService, sandboxService, ontologyId, connectionId, databaseType, emit, tracer } = deps;
+  const { llm, structuredLlm, neoOntologyService, discoveryService, sandboxService, ontologyId, connectionId, databaseName, databaseType, emit, tracer } = deps;
 
   const workflow = new StateGraph(DataAgentState)
     .addNode('planner', createPlannerNode(structuredLlm, emit, tracer))
     .addNode('navigator', createNavigatorNode(llm, neoOntologyService, ontologyId, emit, tracer))
     .addNode('sql_builder', createSqlBuilderNode(structuredLlm, neoOntologyService, ontologyId, databaseType, emit, tracer))
-    .addNode('executor', createExecutorNode(llm, structuredLlm, discoveryService, sandboxService, connectionId, emit, tracer))
+    .addNode('executor', createExecutorNode(llm, structuredLlm, discoveryService, sandboxService, connectionId, databaseName, emit, tracer))
     .addNode('verifier', createVerifierNode(llm, sandboxService, emit, tracer))
     .addNode('explainer', createExplainerNode(llm, sandboxService, emit, tracer))
     .addEdge(START, 'planner')

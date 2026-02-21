@@ -162,8 +162,11 @@ export class DiscoveryService {
   /**
    * Execute a read-only SQL query
    */
-  async executeQuery(connectionId: string, sql: string, maxRows: number = 100) {
+  async executeQuery(connectionId: string, sql: string, maxRows: number = 100, databaseName?: string) {
     const { params, dbType } = await this.getConnectionParams(connectionId);
+    if (databaseName) {
+      params.databaseName = databaseName;
+    }
     const driver = getDiscoveryDriver(dbType);
     const result = await driver.executeReadOnlyQuery(params, sql, maxRows);
 
