@@ -285,6 +285,8 @@ enum DatabaseType {
   sqlserver
   databricks
   snowflake
+  s3
+  azure_blob
 }
 
 enum SemanticModelStatus {
