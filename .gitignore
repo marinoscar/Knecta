@@ -48,6 +48,9 @@ sync.db-journal
 infra/deploy/data/
 infra/deploy/repo/
 
+# Worktrees (feature development)
+worktrees/
+
 # Misc
 *.tgz
 .cache/
