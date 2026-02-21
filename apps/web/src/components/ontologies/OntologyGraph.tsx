@@ -69,10 +69,9 @@ export function OntologyGraph({ graph, onNodeClick, showFields = false }: Ontolo
     }
   };
 
-  // Custom node rendering
+  // Custom node rendering with readable labels
   const nodeCanvasObject = (node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const label = node.displayLabel || node.name;
-    const fontSize = 12 / globalScale;
     const isDataset = node.label === 'Dataset';
     const nodeRadius = isDataset ? 8 : 3;
 
@@ -82,14 +81,36 @@ export function OntologyGraph({ graph, onNodeClick, showFields = false }: Ontolo
     ctx.fillStyle = node.color;
     ctx.fill();
 
-    // Draw label for Dataset nodes
+    // Draw label for Dataset nodes with contrast halo
     if (isDataset) {
-      ctx.font = `${fontSize}px Sans-Serif`;
+      const fontSize = Math.max(12 / globalScale, 4);
+      ctx.font = `bold ${fontSize}px Sans-Serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+
+      const labelY = node.y + nodeRadius + fontSize;
+
+      // Stroke halo for contrast against any background
+      ctx.strokeStyle = theme.palette.background.default;
+      ctx.lineWidth = 3 / globalScale;
+      ctx.lineJoin = 'round';
+      ctx.miterLimit = 2;
+      ctx.strokeText(label, node.x, labelY);
+
+      // Text fill on top of halo
       ctx.fillStyle = theme.palette.text.primary;
-      ctx.fillText(label, node.x, node.y + nodeRadius + fontSize);
+      ctx.fillText(label, node.x, labelY);
     }
+  };
+
+  // Hit area for click/hover detection (circle only, not label)
+  const nodePointerAreaPaint = (node: any, color: string, ctx: CanvasRenderingContext2D) => {
+    const isDataset = node.label === 'Dataset';
+    const nodeRadius = isDataset ? 8 : 3;
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, nodeRadius, 0, 2 * Math.PI);
+    ctx.fillStyle = color;
+    ctx.fill();
   };
 
   return (
@@ -105,6 +126,7 @@ export function OntologyGraph({ graph, onNodeClick, showFields = false }: Ontolo
         nodeColor={(node: any) => node.color}
         nodeVal={(node: any) => node.val}
         nodeCanvasObject={nodeCanvasObject}
+        nodePointerAreaPaint={nodePointerAreaPaint}
         linkLabel={(link: any) => link.type}
         linkColor={(link: any) => link.color}
         linkDirectionalArrowLength={6}
