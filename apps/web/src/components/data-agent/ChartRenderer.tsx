@@ -25,6 +25,15 @@ export function ChartRenderer({ chartSpec }: ChartRendererProps) {
 
   switch (chartSpec.type) {
     case 'bar': {
+      const isHorizontal = chartSpec.layout === 'horizontal';
+      const bandAxisConfig = {
+        data: chartSpec.categories || [],
+        scaleType: 'band' as const,
+        label: isHorizontal ? chartSpec.yAxisLabel : chartSpec.xAxisLabel,
+      };
+      const valueAxisConfig = {
+        label: isHorizontal ? chartSpec.xAxisLabel : chartSpec.yAxisLabel,
+      };
       return (
         <Paper sx={containerSx} elevation={0} variant="outlined">
           <Typography variant="subtitle2" sx={titleSx}>
@@ -36,14 +45,8 @@ export function ChartRenderer({ chartSpec }: ChartRendererProps) {
               data: s.data,
               label: s.label,
             }))}
-            xAxis={[
-              {
-                data: chartSpec.categories || [],
-                scaleType: 'band' as const,
-                label: chartSpec.xAxisLabel,
-              },
-            ]}
-            yAxis={[{ label: chartSpec.yAxisLabel }]}
+            xAxis={[isHorizontal ? valueAxisConfig : bandAxisConfig]}
+            yAxis={[isHorizontal ? bandAxisConfig : valueAxisConfig]}
             layout={chartSpec.layout}
             slotProps={{
               legend: {
