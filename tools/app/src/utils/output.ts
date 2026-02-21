@@ -83,3 +83,57 @@ export function printServiceUrls(includeOtel: boolean = false): void {
   }
   blank();
 }
+
+/**
+ * Mask a password string: show first 2 chars + asterisks
+ */
+export function maskPassword(password: string | undefined): string {
+  if (!password) return '(empty)';
+  if (password.length <= 2) return '*'.repeat(password.length);
+  return password.slice(0, 2) + '*'.repeat(Math.min(password.length - 2, 8));
+}
+
+/**
+ * Print a numbered step indicator for verbose logging
+ */
+export function step(number: number, message: string): void {
+  console.log(chalk.dim(`[${number}]`) + ' ' + chalk.cyan(message));
+}
+
+/**
+ * Print a bordered connection info box
+ */
+export function connectionBox(params: {
+  host: string;
+  port: string;
+  database: string;
+  user: string;
+  password: string;
+  ssl: boolean;
+  databaseUrl: string;
+  source: string;
+}): void {
+  const width = 60;
+  const border = chalk.cyan('+' + '-'.repeat(width) + '+');
+  const line = (label: string, value: string) => {
+    const content = `  ${label.padEnd(11)} ${value}`;
+    const padded = content.length > width ? content.slice(0, width) : content.padEnd(width);
+    return chalk.cyan('|') + padded + chalk.cyan('|');
+  };
+
+  blank();
+  console.log(border);
+  console.log(chalk.cyan('|') + chalk.bold.cyan('  Database Connection'.padEnd(width)) + chalk.cyan('|'));
+  console.log(border);
+  console.log(line('Source:', params.source));
+  console.log(line('Host:', params.host));
+  console.log(line('Port:', params.port));
+  console.log(line('Database:', params.database));
+  console.log(line('User:', params.user));
+  console.log(line('Password:', maskPassword(params.password)));
+  console.log(line('SSL:', params.ssl ? 'enabled' : 'disabled'));
+  console.log(border);
+  console.log(line('URL:', params.databaseUrl));
+  console.log(border);
+  blank();
+}

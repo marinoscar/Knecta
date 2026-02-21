@@ -7,6 +7,7 @@ import {
   prismaSeed,
   prismaReset,
   isContainerRunning,
+  getConnectionSummary,
 } from '../commands/prisma.js';
 import * as output from '../utils/output.js';
 import { getIcon } from '../utils/config.js';
@@ -15,14 +16,19 @@ import { getIcon } from '../utils/config.js';
  * Show the Prisma menu
  */
 export async function showPrismaMenu(): Promise<void> {
+  // Show connection target summary
+  output.blank();
+  output.dim(`  Target: ${getConnectionSummary()}`);
+
   // Check if container is running
   const running = await isContainerRunning();
-  if (!running) {
+  if (running) {
+    output.success('  API container is running');
+  } else {
     output.blank();
     output.warn('API container is not running.');
     output.info('Most Prisma commands require the API container to be running.');
     output.info('Start services with: app start');
-    output.blank();
   }
 
   while (true) {

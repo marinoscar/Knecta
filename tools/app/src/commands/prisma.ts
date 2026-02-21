@@ -7,18 +7,42 @@ import { config } from '../utils/config.js';
 import * as output from '../utils/output.js';
 
 /**
+ * Structured database connection information
+ */
+interface DatabaseConnectionInfo {
+  host: string;
+  port: string;
+  user: string;
+  password: string;
+  database: string;
+  ssl: boolean;
+  url: string;
+  maskedUrl: string;
+  envPath: string;
+}
+
+/**
  * Load database connection parameters from infra/compose/.env
  */
-function loadDatabaseEnv(): Record<string, string> {
+function loadDatabaseEnv(verbose: boolean = true): Record<string, string> {
   const envPath = join(paths.composeDir, '.env');
-  const vars: Record<string, string> = {};
+
+  if (verbose) {
+    output.step(1, `Loading environment from ${envPath}`);
+  }
 
   if (!existsSync(envPath)) {
-    output.warn(`Environment file not found: ${envPath}`);
-    return vars;
+    if (verbose) {
+      output.warn(`  Environment file not found: ${envPath}`);
+      output.warn('  Using default values for all database parameters');
+    }
+    return {};
   }
 
   const content = readFileSync(envPath, 'utf-8');
+  const vars: Record<string, string> = {};
+  let dbVarCount = 0;
+
   for (const line of content.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) continue;
@@ -27,27 +51,75 @@ function loadDatabaseEnv(): Record<string, string> {
     const key = trimmed.slice(0, eqIndex).trim();
     const value = trimmed.slice(eqIndex + 1).trim();
     vars[key] = value;
+    if (key.startsWith('POSTGRES_')) dbVarCount++;
+  }
+
+  if (verbose) {
+    output.success(`  Loaded ${Object.keys(vars).length} variables (${dbVarCount} database params)`);
   }
 
   return vars;
 }
 
 /**
- * Construct PostgreSQL DATABASE_URL from env vars
+ * Get structured database connection info from env vars
  */
-function getDatabaseUrl(): string {
-  const env = loadDatabaseEnv();
+function getDatabaseConnection(verbose: boolean = true): DatabaseConnectionInfo {
+  const env = loadDatabaseEnv(verbose);
+
   const host = env.POSTGRES_HOST || 'localhost';
   const port = env.POSTGRES_PORT || '5432';
   const user = env.POSTGRES_USER || 'postgres';
   const password = env.POSTGRES_PASSWORD || 'postgres';
-  const dbName = env.POSTGRES_DB || 'appdb';
+  const database = env.POSTGRES_DB || 'appdb';
   const ssl = env.POSTGRES_SSL === 'true';
+
+  if (verbose) {
+    output.step(2, 'Constructing DATABASE_URL from parameters');
+  }
 
   const encodedPassword = encodeURIComponent(password);
   const sslParam = ssl ? '?sslmode=require' : '';
+  const url = `postgresql://${user}:${encodedPassword}@${host}:${port}/${database}${sslParam}`;
 
-  return `postgresql://${user}:${encodedPassword}@${host}:${port}/${dbName}${sslParam}`;
+  const maskedPwd = output.maskPassword(password);
+  const maskedUrl = `postgresql://${user}:${maskedPwd}@${host}:${port}/${database}${sslParam}`;
+
+  return {
+    host,
+    port,
+    user,
+    password,
+    database,
+    ssl,
+    url,
+    maskedUrl,
+    envPath: join(paths.composeDir, '.env'),
+  };
+}
+
+/**
+ * Display the connection info box
+ */
+function displayConnectionInfo(conn: DatabaseConnectionInfo): void {
+  output.connectionBox({
+    host: conn.host,
+    port: conn.port,
+    database: conn.database,
+    user: conn.user,
+    password: conn.password,
+    ssl: conn.ssl,
+    databaseUrl: conn.maskedUrl,
+    source: conn.envPath,
+  });
+}
+
+/**
+ * Get a short connection summary string (host:port/db) without logging
+ */
+export function getConnectionSummary(): string {
+  const conn = getDatabaseConnection(false);
+  return `${conn.host}:${conn.port}/${conn.database}`;
 }
 
 /**
@@ -69,33 +141,50 @@ async function isContainerRunning(): Promise<boolean> {
  * Run a Prisma command inside the Docker container
  */
 async function runPrismaInDocker(prismaArgs: string): Promise<number> {
+  output.step(3, 'Checking if API container is running...');
   const running = await isContainerRunning();
 
   if (!running) {
-    output.error('ERROR: API container is not running.');
-    output.info('Start the services first with: app start');
+    output.error(`  Container "${config.containerName}" is not running.`);
+    output.info('  Start the services first with: app start');
     return 1;
   }
+  output.success(`  Container "${config.containerName}" is running`);
 
-  const dbUrl = getDatabaseUrl();
-  output.info(`Running in Docker container: npx prisma ${prismaArgs}`);
+  const conn = getDatabaseConnection();
+  displayConnectionInfo(conn);
 
-  return exec('docker', [
+  output.step(4, `Executing in Docker: npx prisma ${prismaArgs}`);
+  output.dim(`  docker exec -e DATABASE_URL=*** ${config.containerName} sh -c "npx prisma ${prismaArgs}"`);
+  output.blank();
+
+  const code = await exec('docker', [
     'exec',
     '-e',
-    `DATABASE_URL=${dbUrl}`,
+    `DATABASE_URL=${conn.url}`,
     config.containerName,
     'sh',
     '-c',
     `npx prisma ${prismaArgs}`,
   ]);
+
+  output.blank();
+  if (code === 0) {
+    output.step(5, 'Command completed successfully');
+  } else {
+    output.step(5, `Command exited with code ${code}`);
+  }
+
+  return code;
 }
 
 /**
  * Generate Prisma client
  */
 async function prismaGenerate(): Promise<void> {
-  output.info('Generating Prisma client...');
+  output.header('Prisma Generate');
+  output.info('Generating Prisma client from schema...');
+  output.blank();
 
   const code = await runPrismaInDocker('generate');
 
@@ -111,6 +200,8 @@ async function prismaGenerate(): Promise<void> {
  * Run Prisma migrations
  */
 async function prismaMigrate(mode?: string): Promise<void> {
+  output.header('Prisma Migrate');
+
   switch (mode?.toLowerCase()) {
     case 'deploy':
       output.info('Applying migrations (production mode)...');
@@ -121,6 +212,7 @@ async function prismaMigrate(mode?: string): Promise<void> {
     default:
       output.info('Applying pending migrations...');
   }
+  output.blank();
 
   const command = mode === 'status' ? 'migrate status' : 'migrate deploy';
 
@@ -142,7 +234,9 @@ async function prismaMigrate(mode?: string): Promise<void> {
  * Push schema changes directly
  */
 async function prismaPush(): Promise<void> {
+  output.header('Prisma Push');
   output.info('Pushing schema changes to database...');
+  output.blank();
 
   const code = await runPrismaInDocker('db push');
 
@@ -158,15 +252,21 @@ async function prismaPush(): Promise<void> {
  * Open Prisma Studio
  */
 async function prismaStudio(): Promise<void> {
-  output.info('Opening Prisma Studio...');
-  output.info('Studio will be available at: http://localhost:5555');
-  output.warn('Note: Studio runs locally (not in Docker) to allow browser access');
+  output.header('Prisma Studio');
+  output.info('Opening Prisma Studio (local process)...');
+  output.blank();
 
-  const dbUrl = getDatabaseUrl();
+  const conn = getDatabaseConnection();
+  displayConnectionInfo(conn);
+
+  output.step(3, 'Starting Prisma Studio locally (not in Docker)');
+  output.info('  Studio will be available at: http://localhost:5555');
+  output.warn('  Note: Studio runs locally to allow browser access');
+  output.blank();
 
   const code = await exec('npx', ['prisma', 'studio'], {
     cwd: paths.apiDir,
-    env: { ...process.env, DATABASE_URL: dbUrl },
+    env: { ...process.env, DATABASE_URL: conn.url },
   });
 
   if (code !== 0) {
@@ -179,7 +279,9 @@ async function prismaStudio(): Promise<void> {
  * Seed the database
  */
 async function prismaSeed(): Promise<void> {
+  output.header('Prisma Seed');
   output.info('Seeding database...');
+  output.blank();
 
   const code = await runPrismaInDocker('db seed');
 
@@ -195,12 +297,14 @@ async function prismaSeed(): Promise<void> {
  * Reset the database
  */
 async function prismaReset(): Promise<void> {
+  output.header('Prisma Reset');
   output.warn('WARNING: This will reset the database and DELETE all data!');
 
   const confirmed = await confirm('Are you sure?');
 
   if (confirmed) {
     output.info('Resetting database...');
+    output.blank();
 
     const code = await runPrismaInDocker('migrate reset --force');
 
