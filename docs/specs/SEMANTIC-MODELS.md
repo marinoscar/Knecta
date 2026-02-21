@@ -1104,16 +1104,27 @@ To ensure 100% accuracy of database field metadata, the agent uses a hybrid appr
 
 ##### Sample Data Injection
 
-`sample_data` is injected for short text columns only. The `isEligibleForSampleData()` function determines eligibility:
+`sample_data` is injected for text/string and enum columns. The `isEligibleForSampleData()` function determines eligibility:
 
 **Eligible column types:**
-- `text`, `varchar`, `char` types where the column schema `maxLength` is defined AND `maxLength < 50`
+- Text/string types: `varchar`, `character varying`, `text`, `char`, `character`, `nvarchar`, `nchar`, `ntext`, `string`
+- PostgreSQL enum types (reported as `USER-DEFINED` in `data_type`)
+- `maxLength` may be `null` (allowed for PG `text` and `varchar` without explicit length)
+- `maxLength` must be ≤ 500 when defined (excludes Snowflake default `VARCHAR(16777216)`)
 
 **Ineligible column types (never injected):**
-- Numbers, boolean, bit, JSON, UUID/GUID, blob, dates, and unlimited text (`text` with no `maxLength`)
+- Primary key columns (regardless of data type)
+- Numbers (`integer`, `bigint`, `numeric`, `decimal`, `float`, etc.)
+- Boolean / bit
+- Date / time / timestamp types
+- JSON / JSONB / XML / VARIANT / OBJECT / ARRAY
+- UUID / UNIQUEIDENTIFIER
+- Binary (bytea, blob, binary, varbinary, image)
+- Network, geometric, spatial, and full-text search types
+- Text columns with `maxLength > 500`
 
 **Collection rules:**
-- Requires at least 5 distinct non-null values; injects empty `[]` if fewer are available
+- Up to 5 distinct non-null values per column; injects empty `[]` if none are available
 - Each value is truncated to 25 characters
 - Cap: max 30 eligible columns per table to limit database queries
 
