@@ -3,20 +3,36 @@ import { ColumnInfo } from '../../../connections/drivers/driver.interface';
 
 /**
  * Determine if a column is eligible for sample_data injection.
- * Only short text/string columns qualify.
+ * Only text/string types and enum types qualify.
+ * Primary keys are excluded (IDs are not useful for sample data).
+ * Values are always truncated to 25 chars downstream.
  */
 export function isEligibleForSampleData(col: ColumnInfo): boolean {
+  // Primary keys (auto-increment IDs, surrogate keys) are not useful
+  if (col.isPrimaryKey) return false;
+
   const dt = col.dataType.toLowerCase();
 
-  // Only text/string types with a defined short maxLength
+  // Allowlist: text/string types + enum types across all providers
   const TEXT_TYPES = new Set([
-    'character varying', 'varchar', 'nvarchar',
-    'char', 'nchar', 'character', 'string',
+    // PostgreSQL
+    'character varying', 'varchar', 'text', 'character', 'char',
+    // SQL Server
+    'nvarchar', 'nchar', 'ntext',
+    // Snowflake (all text types are aliases for VARCHAR)
+    'string',
+    // PostgreSQL enum types (reported as USER-DEFINED in data_type)
+    'user-defined',
   ]);
 
   if (!TEXT_TYPES.has(dt)) return false;
-  if (col.maxLength == null) return false;
-  return col.maxLength < 50;
+
+  // Cap at 500 to exclude truly large text columns
+  // (e.g., Snowflake default VARCHAR(16777216), SQL Server ntext 1GB)
+  // maxLength == null is allowed (PG text, PG varchar without length)
+  if (col.maxLength != null && col.maxLength > 500) return false;
+
+  return true;
 }
 
 /**
