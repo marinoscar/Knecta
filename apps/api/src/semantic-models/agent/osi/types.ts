@@ -74,6 +74,7 @@ export interface OSIField {
 export interface OSIDataset {
   name: string;
   source: string; // e.g., "database.schema.table"
+  label?: string;
   primary_key?: string[];
   unique_keys?: string[][];
   description?: string;

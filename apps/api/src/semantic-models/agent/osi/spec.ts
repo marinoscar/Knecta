@@ -26,6 +26,7 @@ Each dataset represents a table or view in the database.
 datasets:
   - name: string         # REQUIRED - Unique dataset name
     source: string       # REQUIRED - Fully qualified reference (e.g., "database.schema.table")
+    label: string        # Optional - Human-friendly display label
     primary_key: string[] # Optional - Column names forming the primary key
     unique_keys: string[][] # Optional - Arrays of column names forming unique constraints
     description: string  # Optional - Human-readable description
