@@ -43,6 +43,7 @@ export class SpreadsheetAgentAgentService {
       parseErrors: [],
       tables: [],
       uploadedTables: [],
+      tempDir: '',
       s3OutputPrefix: '',
       tokensUsed: { prompt: 0, completion: 0, total: 0 },
       error: null,

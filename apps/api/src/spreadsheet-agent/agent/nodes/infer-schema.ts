@@ -178,7 +178,7 @@ export function createInferSchemaNode(
           tableName: sanitizeTableName(parsed.tableName),
           columns,
           rowCount: sheet.rowCount,
-          rawData: sheet.rawData,
+          tempFilePath: sheet.tempFilePath,
         });
 
         logger.log(`Inferred schema for "${parsed.tableName}": ${columns.length} columns, ${sheet.rowCount} rows`);
@@ -229,7 +229,7 @@ function createFallbackTable(sheet: SheetInfo): InferredTable {
     tableName: sanitizeTableName(`${sheet.sheetName}`),
     columns,
     rowCount: sheet.rowCount,
-    rawData: sheet.rawData,
+    tempFilePath: sheet.tempFilePath,
   };
 }
 

@@ -1,3 +1,4 @@
+import * as fs from 'fs/promises';
 import { SpreadsheetAgentStateType } from '../state';
 import { SpreadsheetAgentService } from '../../spreadsheet-agent.service';
 import { Logger } from '@nestjs/common';
@@ -80,6 +81,14 @@ export function createPersistResultsNode(
       type: 'step_end',
       step: 'persist_results',
     });
+
+    // Clean up temp directory created by the parse step.
+    if (state.tempDir) {
+      await fs.rm(state.tempDir, { recursive: true, force: true }).catch((err) => {
+        logger.warn(`Failed to clean up temp directory ${state.tempDir}: ${err.message}`);
+      });
+      logger.log(`Cleaned up temp directory: ${state.tempDir}`);
+    }
 
     logger.log(`Persisted ${readyTables.length} tables, ${uploadedTables.length - readyTables.length} failed`);
 

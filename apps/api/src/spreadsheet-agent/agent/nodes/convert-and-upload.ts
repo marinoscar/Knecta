@@ -3,6 +3,7 @@ import { Readable } from 'stream';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import { Database } from 'duckdb-async';
 
 import { SpreadsheetAgentStateType, InferredTable, UploadedTable } from '../state';
 import { SpreadsheetAgentService } from '../../spreadsheet-agent.service';
@@ -15,176 +16,218 @@ const logger = new Logger('ConvertAndUpload');
 // ---------------------------------------------------------------------------
 
 /**
- * Map our logical data types to the parquetjs-lite field type strings.
+ * Map our logical data types to DuckDB SQL type names used in CAST expressions.
  */
-function mapToParquetType(dataType: string): string {
+function mapToDuckDbType(dataType: string): string {
   switch (dataType) {
     case 'int64':
-      return 'INT64';
+      return 'BIGINT';
     case 'float64':
       return 'DOUBLE';
     case 'boolean':
       return 'BOOLEAN';
     case 'date':
+      return 'DATE';
     case 'timestamp':
-      // Stored as ISO-8601 strings so downstream SQL engines can cast them.
-      return 'UTF8';
+      return 'TIMESTAMP';
     case 'string':
     default:
-      return 'UTF8';
+      return 'VARCHAR';
   }
 }
 
 // ---------------------------------------------------------------------------
-// Value coercion
+// SQL safety helpers
 // ---------------------------------------------------------------------------
 
 /**
- * Coerce a raw cell value to the target logical data type.
- *
- * Returns `null` when the value is empty or cannot be converted, which lets
- * the Parquet writer omit the field for optional columns.
+ * Escape single quotes in a string for use inside a SQL string literal by
+ * doubling them.  This is required because DuckDB's st_read() does not
+ * support parameter binding for file paths.
  */
-function coerceValue(value: unknown, dataType: string): unknown {
-  if (value === null || value === undefined || value === '') {
-    return null;
-  }
-
-  switch (dataType) {
-    case 'int64': {
-      const num = Number(value);
-      return isNaN(num) ? null : Math.round(num);
-    }
-    case 'float64': {
-      const num = Number(value);
-      return isNaN(num) ? null : num;
-    }
-    case 'boolean': {
-      if (typeof value === 'boolean') return value;
-      const str = String(value).toLowerCase().trim();
-      if (['true', 'yes', '1', 'y'].includes(str)) return true;
-      if (['false', 'no', '0', 'n'].includes(str)) return false;
-      return null;
-    }
-    case 'date':
-    case 'timestamp': {
-      if (value instanceof Date) return value.toISOString();
-      const str = String(value);
-      const d = new Date(str);
-      return isNaN(d.getTime()) ? str : d.toISOString();
-    }
-    case 'string':
-    default:
-      return String(value);
-  }
+function escapeSqlString(s: string): string {
+  return s.replace(/'/g, "''");
 }
 
-// ---------------------------------------------------------------------------
-// CSV conversion (reliable fallback)
-// ---------------------------------------------------------------------------
-
 /**
- * Serialise an {@link InferredTable} to a UTF-8 CSV buffer.
+ * Escape double quotes inside a SQL identifier by doubling them, then wrap
+ * the whole identifier in double quotes.
  *
- * Used as a fallback when Parquet conversion fails so that data is never
- * silently lost.
+ * Example: `my "col"` → `"my ""col"""`
  */
-function convertToCsv(table: InferredTable): Buffer {
-  const lines: string[] = [];
-
-  // Header row — quote every field to handle embedded commas or quotes.
-  lines.push(
-    table.columns
-      .map((c) => `"${c.name.replace(/"/g, '""')}"`)
-      .join(','),
-  );
-
-  // Data rows
-  for (const row of table.rawData) {
-    const cells = table.columns.map((col, i) => {
-      const value = coerceValue(row[i], col.dataType);
-      if (value === null) return '';
-      if (typeof value === 'string') return `"${value.replace(/"/g, '""')}"`;
-      return String(value);
-    });
-    lines.push(cells.join(','));
-  }
-
-  return Buffer.from(lines.join('\n'), 'utf-8');
+function escapeSqlIdentifier(s: string): string {
+  return `"${s.replace(/"/g, '""')}"`;
 }
 
 // ---------------------------------------------------------------------------
-// Parquet conversion
+// SQL builder
 // ---------------------------------------------------------------------------
 
 /**
- * Attempt to convert an {@link InferredTable} to a Parquet buffer.
+ * Build the DuckDB COPY statement that reads an Excel sheet via the spatial
+ * extension and writes a Parquet file to disk.
  *
- * Writes to a temp file on the local filesystem (parquetjs-lite requires a
- * file path) and then reads it back into memory before cleaning up.
+ * Each column is selected with TRY_CAST so that type-conversion failures
+ * produce NULLs rather than aborting the whole export.
+ */
+function buildCopySql(
+  table: InferredTable,
+  tempFilePath: string,
+  outputPath: string,
+): string {
+  const safeInputPath = escapeSqlString(tempFilePath);
+  const safeOutputPath = escapeSqlString(outputPath);
+  const safeLayer = escapeSqlString(table.sourceSheet);
+
+  const selectCols = table.columns
+    .map((col) => {
+      const originalIdent = escapeSqlIdentifier(col.originalName);
+      const cleanIdent = escapeSqlIdentifier(col.name);
+      const duckType = mapToDuckDbType(col.dataType);
+      return `    TRY_CAST(${originalIdent} AS ${duckType}) AS ${cleanIdent}`;
+    })
+    .join(',\n');
+
+  return [
+    'COPY (',
+    '  SELECT',
+    selectCols,
+    `  FROM st_read('${safeInputPath}', layer='${safeLayer}')`,
+    `) TO '${safeOutputPath}' (FORMAT PARQUET);`,
+  ].join('\n');
+}
+
+/**
+ * Build the DuckDB COPY statement that writes a CSV file instead of Parquet.
+ * Used as a secondary fallback when Parquet export fails.
+ */
+function buildCsvCopySql(
+  table: InferredTable,
+  tempFilePath: string,
+  outputPath: string,
+): string {
+  const safeInputPath = escapeSqlString(tempFilePath);
+  const safeOutputPath = escapeSqlString(outputPath);
+  const safeLayer = escapeSqlString(table.sourceSheet);
+
+  const selectCols = table.columns
+    .map((col) => {
+      const originalIdent = escapeSqlIdentifier(col.originalName);
+      const cleanIdent = escapeSqlIdentifier(col.name);
+      // Cast everything to VARCHAR for CSV so values are readable.
+      return `    TRY_CAST(${originalIdent} AS VARCHAR) AS ${cleanIdent}`;
+    })
+    .join(',\n');
+
+  return [
+    'COPY (',
+    '  SELECT',
+    selectCols,
+    `  FROM st_read('${safeInputPath}', layer='${safeLayer}')`,
+    `) TO '${safeOutputPath}' (FORMAT CSV, HEADER);`,
+  ].join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// DuckDB conversion helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Attempt to convert a single {@link InferredTable} to a Parquet buffer using
+ * DuckDB's spatial extension.
  *
- * Returns `null` on any failure so callers can fall back to CSV.
+ * DuckDB reads the source Excel file directly with st_read() and writes a
+ * Parquet file to a temp path.  The temp file is then read back into a Buffer
+ * and deleted.
+ *
+ * Returns `null` on any failure so the caller can attempt CSV export instead.
  */
 async function convertToParquet(table: InferredTable): Promise<Buffer | null> {
-  let tmpPath: string | null = null;
+  const outputPath = path.join(
+    os.tmpdir(),
+    `parquet_${Date.now()}_${Math.random().toString(36).slice(2)}.parquet`,
+  );
+
+  let db: Database | null = null;
 
   try {
-    // Dynamic import so that a missing or broken native module does not crash
-    // the process at startup — it degrades gracefully to CSV instead.
-    const parquet = await import('parquetjs-lite');
+    db = await Database.create(':memory:');
 
-    // Build the schema.  All columns are declared optional so that sparse rows
-    // (which are common in real-world spreadsheets) do not cause write errors.
-    const schemaFields: Record<string, { type: string; optional: boolean }> = {};
-    for (const col of table.columns) {
-      schemaFields[col.name] = {
-        type: mapToParquetType(col.dataType),
-        optional: true,
-      };
-    }
+    await db.run("INSTALL spatial;");
+    await db.run("LOAD spatial;");
 
-    const schema = new parquet.ParquetSchema(schemaFields);
+    const sql = buildCopySql(table, table.tempFilePath, outputPath);
 
-    tmpPath = path.join(
-      os.tmpdir(),
-      `parquet_${Date.now()}_${Math.random().toString(36).slice(2)}.parquet`,
-    );
+    logger.debug(`Executing Parquet COPY for table "${table.tableName}":\n${sql}`);
 
-    const writer = await parquet.ParquetWriter.openFile(schema, tmpPath);
+    await db.run(sql);
 
-    for (const row of table.rawData) {
-      const record: Record<string, unknown> = {};
-
-      for (let i = 0; i < table.columns.length; i++) {
-        const col = table.columns[i];
-        const value = coerceValue(row[i], col.dataType);
-        // Omit null values entirely — parquetjs-lite handles optional fields
-        // correctly when the key is absent from the record object.
-        if (value !== null) {
-          record[col.name] = value;
-        }
-      }
-
-      // Skip entirely empty rows to avoid writing zero-field records.
-      if (Object.keys(record).length > 0) {
-        await writer.appendRow(record);
-      }
-    }
-
-    await writer.close();
-
-    const buffer = await fs.readFile(tmpPath);
+    const buffer = await fs.readFile(outputPath);
     return buffer;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    logger.warn(`Parquet conversion failed, will use CSV fallback: ${message}`);
+    logger.warn(
+      `Parquet conversion failed for table "${table.tableName}", will try CSV fallback: ${message}`,
+    );
     return null;
   } finally {
-    if (tmpPath) {
-      await fs.unlink(tmpPath).catch(() => {
-        // Best-effort cleanup — ignore errors if the file was never created.
+    if (db) {
+      await db.close().catch(() => {
+        // Best-effort cleanup.
       });
     }
+    await fs.unlink(outputPath).catch(() => {
+      // File may not exist if the COPY statement never ran.
+    });
+  }
+}
+
+/**
+ * Attempt to convert a single {@link InferredTable} to a CSV buffer using
+ * DuckDB's spatial extension.
+ *
+ * This is the secondary fallback when Parquet export fails.  DuckDB still
+ * reads the Excel file directly, so no JS-level data loading occurs.
+ *
+ * Returns `null` on any failure so the caller can mark the table as failed.
+ */
+async function convertToCsv(table: InferredTable): Promise<Buffer | null> {
+  const outputPath = path.join(
+    os.tmpdir(),
+    `csv_${Date.now()}_${Math.random().toString(36).slice(2)}.csv`,
+  );
+
+  let db: Database | null = null;
+
+  try {
+    db = await Database.create(':memory:');
+
+    await db.run("INSTALL spatial;");
+    await db.run("LOAD spatial;");
+
+    const sql = buildCsvCopySql(table, table.tempFilePath, outputPath);
+
+    logger.debug(`Executing CSV COPY for table "${table.tableName}":\n${sql}`);
+
+    await db.run(sql);
+
+    const buffer = await fs.readFile(outputPath);
+    return buffer;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(
+      `CSV conversion also failed for table "${table.tableName}": ${message}`,
+    );
+    return null;
+  } finally {
+    if (db) {
+      await db.close().catch(() => {
+        // Best-effort cleanup.
+      });
+    }
+    await fs.unlink(outputPath).catch(() => {
+      // File may not exist if the COPY statement never ran.
+    });
   }
 }
 
@@ -196,10 +239,12 @@ async function convertToParquet(table: InferredTable): Promise<Buffer | null> {
  * Create the `convert_and_upload` LangGraph node.
  *
  * For each {@link InferredTable} in the agent state the node:
- *   1. Attempts to serialise the data to Parquet using `parquetjs-lite`.
- *   2. Falls back to CSV if Parquet conversion fails.
- *   3. Uploads the resulting buffer to S3 under a run-scoped prefix.
- *   4. Records per-table outcomes (ready | failed) in the returned state slice.
+ *   1. Attempts to serialise the data to Parquet using DuckDB's spatial
+ *      extension (reads Excel → writes Parquet without loading data into JS).
+ *   2. Falls back to a DuckDB-based CSV export if Parquet conversion fails.
+ *   3. Marks the table as failed if both formats fail.
+ *   4. Uploads the resulting buffer to S3 under a run-scoped prefix.
+ *   5. Records per-table outcomes (ready | failed) in the returned state slice.
  *
  * Each run gets its own S3 folder (`spreadsheets/<runId>/`) so files from
  * concurrent or repeated runs never collide.
@@ -247,8 +292,8 @@ export function createConvertAndUploadNode(
       });
 
       try {
-        // Attempt Parquet first; fall back to CSV on any failure.
-        let fileBuffer = await convertToParquet(table);
+        // --- Attempt 1: DuckDB → Parquet ---
+        let fileBuffer: Buffer | null = await convertToParquet(table);
         let fileExtension: string;
         let mimeType: string;
         let format: string;
@@ -258,8 +303,19 @@ export function createConvertAndUploadNode(
           mimeType = 'application/octet-stream';
           format = 'parquet';
         } else {
-          logger.log(`Using CSV format for table "${table.tableName}"`);
-          fileBuffer = convertToCsv(table);
+          // --- Attempt 2: DuckDB → CSV ---
+          logger.log(
+            `Parquet failed for table "${table.tableName}", attempting CSV export via DuckDB`,
+          );
+          fileBuffer = await convertToCsv(table);
+
+          if (!fileBuffer) {
+            // Both formats failed — mark the table as failed and continue.
+            throw new Error(
+              'Both Parquet and CSV exports failed via DuckDB; see earlier warnings for details.',
+            );
+          }
+
           fileExtension = '.csv';
           mimeType = 'text/csv';
           format = 'csv';
@@ -309,7 +365,9 @@ export function createConvertAndUploadNode(
         });
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
-        logger.error(`Failed to convert/upload table "${table.tableName}": ${message}`);
+        logger.error(
+          `Failed to convert/upload table "${table.tableName}": ${message}`,
+        );
 
         uploadedTables.push({
           sourceFile: table.sourceFile,

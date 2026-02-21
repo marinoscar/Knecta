@@ -1,5 +1,7 @@
 import { Logger } from '@nestjs/common';
-import ExcelJS from 'exceljs';
+import { Database } from 'duckdb-async';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import { Readable } from 'stream';
 
 import { ObjectsService } from '../../../storage/objects/objects.service';
@@ -34,164 +36,125 @@ async function streamToBuffer(stream: Readable): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-/**
- * Coerce an ExcelJS cell value to a plain JavaScript primitive.
- *
- * ExcelJS may return rich-text objects, formula result wrappers, or Date
- * instances, none of which survive JSON serialisation cleanly.  This function
- * normalises every variant to a string | number | boolean | null that the
- * rest of the pipeline can handle without further coercion.
- */
-function extractCellValue(cellValue: ExcelJS.CellValue): string | number | boolean | null {
-  if (cellValue === null || cellValue === undefined) {
-    return null;
-  }
-
-  if (cellValue instanceof Date) {
-    return cellValue.toISOString();
-  }
-
-  if (typeof cellValue === 'object') {
-    // Formula result wrapper: { formula, result, ... }
-    if ('result' in cellValue) {
-      const result = (cellValue as ExcelJS.CellFormulaValue).result;
-      return extractCellValue(result as ExcelJS.CellValue);
-    }
-
-    // Shared-formula value: { sharedFormula, result, ... }
-    if ('sharedFormula' in cellValue) {
-      const result = (cellValue as ExcelJS.CellSharedFormulaValue).result;
-      return extractCellValue(result as ExcelJS.CellValue);
-    }
-
-    // Rich-text object: { richText: [{ text, font, ... }, ...] }
-    if ('richText' in cellValue) {
-      return (cellValue as ExcelJS.CellRichTextValue).richText
-        .map((rt) => rt.text)
-        .join('');
-    }
-
-    // Hyperlink object: { text, hyperlink }
-    if ('text' in cellValue) {
-      return String((cellValue as ExcelJS.CellHyperlinkValue).text);
-    }
-
-    // Error value: { error: '#REF!' }
-    if ('error' in cellValue) {
-      return null;
-    }
-
-    return String(cellValue);
-  }
-
-  // Primitives: string | number | boolean
-  return cellValue as string | number | boolean;
-}
-
 // ---------------------------------------------------------------------------
-// Per-file parser
+// Per-file parser using DuckDB spatial extension
 // ---------------------------------------------------------------------------
 
 /**
- * Load an Excel workbook from a buffer and extract all non-empty sheets.
+ * Parse an Excel file on disk using DuckDB's spatial extension and extract
+ * all non-empty sheets.
  *
- * Each sheet yields a {@link SheetInfo} containing the full row data plus a
- * small leading sample that is forwarded to the LLM schema-inference step.
+ * DuckDB reads the file directly from the filesystem path, avoiding the need
+ * to buffer the entire workbook in memory as a parsed object model.  Only
+ * metadata, a row count, and a small sample are fetched per sheet.
+ *
+ * @param filePath  - Absolute path to the Excel file on disk.
+ * @param fileName  - Human-readable file name used in logging and SheetInfo.
+ * @returns Parsed sheets and any non-fatal error messages encountered.
  */
 async function parseExcelFile(
-  buffer: Buffer,
+  filePath: string,
   fileName: string,
 ): Promise<{ sheets: SheetInfo[]; errors: string[] }> {
   const sheets: SheetInfo[] = [];
   const errors: string[] = [];
 
-  let workbook: ExcelJS.Workbook;
+  const db = await Database.create(':memory:');
+
   try {
-    workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
-  } catch (fileError: unknown) {
-    const message = fileError instanceof Error ? fileError.message : String(fileError);
-    errors.push(`Error parsing file ${fileName}: ${message}`);
-    logger.error(`Failed to parse Excel file ${fileName}: ${message}`);
-    return { sheets, errors };
-  }
+    // Install and load the spatial extension which provides st_read / st_layers
+    await db.run('INSTALL spatial;');
+    await db.run('LOAD spatial;');
 
-  for (const worksheet of workbook.worksheets) {
-    const sheetName = worksheet.name;
-
+    // --- Enumerate sheets (layers) in the workbook ---
+    let layerRows: Array<Record<string, unknown>>;
     try {
-      if (worksheet.rowCount <= 1) {
-        logger.warn(`Skipping empty sheet "${sheetName}" in ${fileName}`);
-        continue;
-      }
+      layerRows = await db.all('SELECT * FROM st_layers(?)', filePath);
+    } catch (layerError: unknown) {
+      const message = layerError instanceof Error ? layerError.message : String(layerError);
+      errors.push(`Error listing sheets in ${fileName}: ${message}`);
+      logger.error(`Failed to list sheets in ${fileName}: ${message}`);
+      return { sheets, errors };
+    }
 
-      // --- Extract headers from row 1 ---
-      const headerRow = worksheet.getRow(1);
-      const headers: string[] = [];
+    for (const layerRow of layerRows) {
+      const sheetName = String(layerRow['name']);
 
-      headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-        const raw = extractCellValue(cell.value);
-        headers.push(raw !== null ? String(raw).trim() : `Column_${colNumber}`);
-      });
+      try {
+        // --- Determine headers ---
+        // Fetch up to SAMPLE_ROW_COUNT rows first; if the sheet is non-empty
+        // the keys of the first result object give us the column names.
+        const sampleQueryRows = await db.all(
+          `SELECT * FROM st_read(?, layer=?) LIMIT ${SAMPLE_ROW_COUNT}`,
+          filePath,
+          sheetName,
+        );
 
-      if (headers.length === 0) {
-        logger.warn(`Skipping sheet "${sheetName}" in ${fileName} - no headers found`);
-        continue;
-      }
+        let headers: string[];
 
-      // --- Extract data rows ---
-      const rawData: (string | number | boolean | null)[][] = [];
-      const sampleRows: (string | number | boolean | null)[][] = [];
-      const dataRowLimit = Math.min(worksheet.rowCount - 1, MAX_ROWS_PER_SHEET);
-
-      for (let rowIdx = 2; rowIdx <= dataRowLimit + 1; rowIdx++) {
-        const row = worksheet.getRow(rowIdx);
-        const rowData: (string | number | boolean | null)[] = [];
-        let hasValue = false;
-
-        for (let colIdx = 1; colIdx <= headers.length; colIdx++) {
-          const value = extractCellValue(row.getCell(colIdx).value);
-          rowData.push(value);
-          if (value !== null) {
-            hasValue = true;
-          }
+        if (sampleQueryRows.length > 0) {
+          headers = Object.keys(sampleQueryRows[0]);
+        } else {
+          // Sheet exists but has no data rows – try DESCRIBE to get column names
+          const describeRows = await db.all(
+            'DESCRIBE SELECT * FROM st_read(?, layer=?)',
+            filePath,
+            sheetName,
+          );
+          headers = describeRows.map((r) => String(r['column_name']));
         }
 
-        // Skip rows where every cell is empty
-        if (!hasValue) {
+        if (headers.length === 0) {
+          logger.warn(`Skipping sheet "${sheetName}" in ${fileName} - no columns found`);
           continue;
         }
 
-        rawData.push(rowData);
+        // --- Get exact row count ---
+        const countResult = await db.all(
+          'SELECT COUNT(*) as cnt FROM st_read(?, layer=?)',
+          filePath,
+          sheetName,
+        );
+        const rowCount = Number(countResult[0]?.['cnt'] ?? 0);
 
-        if (sampleRows.length < SAMPLE_ROW_COUNT) {
-          sampleRows.push(rowData);
+        if (rowCount === 0) {
+          logger.warn(`Skipping empty sheet "${sheetName}" in ${fileName}`);
+          continue;
         }
+
+        if (rowCount > MAX_ROWS_PER_SHEET) {
+          logger.warn(
+            `Sheet "${sheetName}" in ${fileName} has ${rowCount} rows which exceeds ` +
+              `MAX_ROWS_PER_SHEET (${MAX_ROWS_PER_SHEET}). Only metadata will be recorded.`,
+          );
+        }
+
+        // --- Convert sample object rows to ordered arrays ---
+        const sampleRows: unknown[][] = sampleQueryRows.map((row) =>
+          headers.map((h) => row[h] ?? null),
+        );
+
+        sheets.push({
+          fileName,
+          sheetName,
+          headers,
+          sampleRows,
+          rowCount: Math.min(rowCount, MAX_ROWS_PER_SHEET),
+          tempFilePath: filePath,
+        });
+
+        logger.log(
+          `Parsed sheet "${sheetName}" from ${fileName}: ` +
+            `${headers.length} columns, ${rowCount} rows`,
+        );
+      } catch (sheetError: unknown) {
+        const message = sheetError instanceof Error ? sheetError.message : String(sheetError);
+        errors.push(`Error parsing sheet "${sheetName}" in ${fileName}: ${message}`);
+        logger.warn(`Failed to parse sheet "${sheetName}" in ${fileName}: ${message}`);
       }
-
-      if (rawData.length === 0) {
-        logger.warn(`Skipping sheet "${sheetName}" in ${fileName} - no data rows after header`);
-        continue;
-      }
-
-      sheets.push({
-        fileName,
-        sheetName,
-        headers,
-        sampleRows,
-        rowCount: rawData.length,
-        rawData,
-      });
-
-      logger.log(
-        `Parsed sheet "${sheetName}" from ${fileName}: ` +
-          `${headers.length} columns, ${rawData.length} rows`,
-      );
-    } catch (sheetError: unknown) {
-      const message = sheetError instanceof Error ? sheetError.message : String(sheetError);
-      errors.push(`Error parsing sheet "${sheetName}" in ${fileName}: ${message}`);
-      logger.warn(`Failed to parse sheet "${sheetName}" in ${fileName}: ${message}`);
     }
+  } finally {
+    await db.close();
   }
 
   return { sheets, errors };
@@ -205,22 +168,26 @@ async function parseExcelFile(
  * Create the `parse_sheets` LangGraph node.
  *
  * The node iterates over every storage object ID in the agent state,
- * downloads the corresponding Excel file from S3 via {@link ObjectsService},
- * parses each worksheet, and accumulates the results into the state's
- * `sheets` and `parseErrors` fields.
+ * downloads the corresponding Excel file from S3 to a shared temp directory,
+ * parses each worksheet via DuckDB, and accumulates the results into the
+ * state's `sheets`, `parseErrors`, and `tempDir` fields.
+ *
+ * Files are kept on disk after parsing because the convert-and-upload node
+ * reads them again via DuckDB.  The caller is responsible for removing
+ * `tempDir` once the entire graph run completes.
  *
  * If all files fail to parse the node returns an `error` field so the graph
  * can surface the failure rather than silently continuing with empty data.
  *
  * @param objectsService - NestJS service that owns storage-object DB records
  *   and wraps the underlying {@link StorageProvider} download capability.
- * @param _runId - Agent run identifier, reserved for future trace correlation.
- * @param emitProgress - Callback that pushes SSE-style progress events to the
+ * @param runId          - Agent run identifier used to name the temp directory.
+ * @param emitProgress   - Callback that pushes SSE-style progress events to the
  *   caller while the node executes.
  */
 export function createParseSheetsNode(
   objectsService: ObjectsService,
-  _runId: string,
+  runId: string,
   emitProgress: (event: object) => void,
 ) {
   return async (
@@ -234,6 +201,13 @@ export function createParseSheetsNode(
       step: 'parse_sheets',
       label: 'Parsing Spreadsheets',
     });
+
+    // Create a dedicated temp directory for this run so that all downloaded
+    // files are isolated and easy to clean up in a single rmdir call later.
+    const tempDir = `/tmp/spreadsheet-agent-${runId}`;
+    await fs.mkdir(tempDir, { recursive: true });
+
+    logger.log(`Created temp directory: ${tempDir}`);
 
     for (let i = 0; i < state.storageObjectIds.length; i++) {
       const objectId = state.storageObjectIds[i];
@@ -251,17 +225,22 @@ export function createParseSheetsNode(
         const storageObject = await objectsService.getByIdInternal(objectId);
         const fileName: string = storageObject.name;
 
+        // Write the file to disk so DuckDB can read it directly from the path.
+        const tempFilePath = path.join(tempDir, `${objectId}_${fileName}`);
+
         logger.log(
           `Downloading file ${i + 1}/${state.storageObjectIds.length}: ${fileName}`,
         );
 
-        // Stream the file from S3 and buffer it in memory for ExcelJS.
         const stream = await objectsService.downloadStream(objectId);
         const buffer = await streamToBuffer(stream);
+        await fs.writeFile(tempFilePath, buffer);
 
-        logger.log(`Downloaded ${fileName} (${buffer.length} bytes), parsing...`);
+        logger.log(
+          `Saved ${fileName} to ${tempFilePath} (${buffer.length} bytes), parsing...`,
+        );
 
-        const { sheets, errors } = await parseExcelFile(buffer, fileName);
+        const { sheets, errors } = await parseExcelFile(tempFilePath, fileName);
 
         allSheets.push(...sheets);
         allErrors.push(...errors);
@@ -288,6 +267,7 @@ export function createParseSheetsNode(
       return {
         sheets: [],
         parseErrors: allErrors,
+        tempDir,
         error: `No valid sheets found. Errors: ${allErrors.join('; ')}`,
       };
     }
@@ -295,6 +275,7 @@ export function createParseSheetsNode(
     return {
       sheets: allSheets,
       parseErrors: allErrors,
+      tempDir,
     };
   };
 }

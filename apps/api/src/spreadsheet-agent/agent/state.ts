@@ -9,7 +9,7 @@ export interface SheetInfo {
   headers: string[];
   sampleRows: any[][];       // First 5 rows of data
   rowCount: number;
-  rawData: any[][];           // All row data (arrays of cell values)
+  tempFilePath: string;       // Path to downloaded Excel file on disk
 }
 
 /**
@@ -32,7 +32,7 @@ export interface InferredTable {
   tableName: string;          // Clean, SQL-friendly table name
   columns: ColumnDefinition[];
   rowCount: number;
-  rawData: any[][];           // Data rows (header excluded)
+  tempFilePath: string;       // Path to source Excel file
 }
 
 /**
@@ -80,6 +80,12 @@ export const SpreadsheetAgentState = Annotation.Root({
   uploadedTables: Annotation<UploadedTable[]>({
     reducer: (_, next) => next,
     default: () => [],
+  }),
+
+  // Temp directory for cleanup tracking
+  tempDir: Annotation<string>({
+    reducer: (_, next) => next,
+    default: () => '',
   }),
 
   // S3 output prefix
