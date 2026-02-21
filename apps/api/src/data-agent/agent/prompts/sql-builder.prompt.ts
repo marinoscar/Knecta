@@ -60,6 +60,7 @@ ${revisionSection}
 5. Dialect notes:
    - PostgreSQL: Use double-quoted identifiers, \`::type\` for casts, \`ILIKE\` for case-insensitive matching.
    - Snowflake: Identifiers are case-insensitive (stored uppercase). Use double-quoted identifiers to preserve case. Supports \`LIMIT\`, \`DATE_TRUNC\`, \`ILIKE\`, \`::type\` casts (similar to PostgreSQL). Use \`FLATTEN()\` for semi-structured data.
+   - DuckDB (s3, azure_blob): PostgreSQL-compatible syntax. Use double-quoted identifiers, \`::type\` for casts, \`ILIKE\` for case-insensitive matching. Tables are pre-registered as views — use simple table names without schema qualification. Supports \`LIMIT\`, \`DATE_TRUNC\`, window functions, CTEs, \`TRY_CAST()\`. No stored procedures.
 6. Handle NULLs explicitly (COALESCE, IS NOT NULL, etc.).
 7. Use DATE_TRUNC for time-based groupings when applicable.
 8. Include column aliases that match the expected output description.

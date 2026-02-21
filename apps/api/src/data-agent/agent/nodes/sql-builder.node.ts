@@ -51,10 +51,12 @@ export function createSqlBuilderNode(
         };
       }
 
+      const dialectType = (databaseType === 's3' || databaseType === 'azure_blob') ? 'DuckDB' : databaseType;
+
       const systemPrompt = buildSqlBuilderPrompt(
         plan,
         enrichedJoinPlan,
-        databaseType,
+        dialectType,
         state.revisionDiagnosis,
       );
 
