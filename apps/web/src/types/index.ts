@@ -119,7 +119,7 @@ export interface DeviceAuthorizationResponse {
 // Database Connections
 // =============================================================================
 
-export type DatabaseType = 'postgresql' | 'mysql' | 'sqlserver' | 'databricks' | 'snowflake';
+export type DatabaseType = 'postgresql' | 'mysql' | 'sqlserver' | 'databricks' | 'snowflake' | 's3' | 'azure_blob';
 
 export interface DataConnection {
   id: string;

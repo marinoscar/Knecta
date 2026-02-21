@@ -44,9 +44,11 @@ const DB_TYPE_CONFIG: Record<
   sqlserver: { label: 'SQL Server', color: 'error' },
   databricks: { label: 'Databricks', color: 'secondary' },
   snowflake: { label: 'Snowflake', color: 'info' },
+  s3: { label: 'Amazon S3', color: 'warning' },
+  azure_blob: { label: 'Azure Blob', color: 'info' },
 };
 
-const DB_TYPE_OPTIONS: DatabaseType[] = ['postgresql', 'mysql', 'sqlserver', 'databricks', 'snowflake'];
+const DB_TYPE_OPTIONS: DatabaseType[] = ['postgresql', 'mysql', 'sqlserver', 'databricks', 'snowflake', 's3', 'azure_blob'];
 
 export default function ConnectionsPage() {
   const {
