@@ -49,10 +49,13 @@ export function ChatInput({
   return (
     <Box
       sx={{
-        p: 2,
-        borderTop: 1,
-        borderColor: 'divider',
-        bgcolor: 'background.paper',
+        px: 2,
+        pt: 1.5,
+        pb: 2,
+        bgcolor: (theme) =>
+          theme.palette.mode === 'dark'
+            ? 'background.default'
+            : 'grey.50',
       }}
     >
       <Box
@@ -94,8 +97,21 @@ export function ChatInput({
             </InputAdornment>
           }
           sx={{
+            bgcolor: 'background.paper',
+            borderRadius: 3,
+            boxShadow: theme.palette.mode === 'dark'
+              ? '0 2px 12px rgba(0, 0, 0, 0.4)'
+              : '0 2px 12px rgba(0, 0, 0, 0.08)',
             '& .MuiOutlinedInput-notchedOutline': {
               borderRadius: 3,
+              borderColor: theme.palette.mode === 'dark'
+                ? 'rgba(255, 255, 255, 0.08)'
+                : 'rgba(0, 0, 0, 0.08)',
+            },
+            '&:hover .MuiOutlinedInput-notchedOutline': {
+              borderColor: theme.palette.mode === 'dark'
+                ? 'rgba(255, 255, 255, 0.15)'
+                : 'rgba(0, 0, 0, 0.15)',
             },
           }}
         />

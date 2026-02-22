@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -11,6 +11,7 @@ import {
   DialogActions,
   Button,
   Tooltip,
+  Fade,
   useTheme,
 } from '@mui/material';
 import {
@@ -20,6 +21,7 @@ import {
   Tune as TuneIcon,
   Menu as MenuIcon,
   ChevronLeft as ChevronLeftIcon,
+  KeyboardArrowDown as ArrowDownIcon,
 } from '@mui/icons-material';
 import { ChatMessage } from './ChatMessage';
 import { PhaseIndicator } from './PhaseIndicator';
@@ -83,6 +85,11 @@ export function ChatView({
       setUserScrolled(!isAtBottom);
     }
   };
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    setUserScrolled(false);
+  }, []);
 
   const handleEditName = () => {
     if (chat) {
@@ -187,85 +194,138 @@ export function ChatView({
       </Box>
 
       {/* Messages */}
-      <Box
-        ref={containerRef}
-        onScroll={handleScroll}
-        sx={{
-          flex: 1,
-          overflowY: 'auto',
-          p: 3,
-          bgcolor: theme.palette.mode === 'dark' ? 'background.default' : 'grey.50',
-        }}
-      >
-        {messages.length === 0 ? (
-          <Box
+      <Box sx={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        <Box
+          ref={containerRef}
+          onScroll={handleScroll}
+          sx={{
+            height: '100%',
+            overflowY: 'auto',
+            p: 3,
+            bgcolor: theme.palette.mode === 'dark' ? 'background.default' : 'grey.50',
+          }}
+        >
+          {messages.length === 0 ? (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100%',
+              }}
+            >
+              <Typography variant="body1" color="text.secondary">
+                Ask a question about your data to get started
+              </Typography>
+            </Box>
+          ) : (
+            <Box sx={{ maxWidth: 900, mx: 'auto' }}>
+              {messages.map((message, index) => {
+                const isSelectable = message.role === 'assistant' && message.status === 'complete' && onMessageSelect;
+                const isSelected = message.id === selectedMessageId;
+
+                return (
+                  <Box
+                    key={message.id}
+                    onClick={isSelectable ? () => onMessageSelect?.(message.id) : undefined}
+                    sx={{
+                      cursor: isSelectable ? 'pointer' : 'default',
+                      borderLeft: isSelected ? 3 : 0,
+                      borderColor: isSelected ? 'primary.main' : 'transparent',
+                      bgcolor: isSelected ? 'action.hover' : 'transparent',
+                      borderRadius: 1,
+                      pl: isSelected ? 1 : 0,
+                      transition: 'all 0.15s ease',
+                      '&:hover': isSelectable ? {
+                        bgcolor: 'action.hover',
+                      } : {},
+                    }}
+                  >
+                    <ChatMessage
+                      message={message}
+                      isStreaming={isStreaming}
+                      onClarificationAnswer={(response) => {
+                        const prevUserMsg = index > 0 ? messages[index - 1] : null;
+                        const originalQuestion =
+                          prevUserMsg?.role === 'user' ? prevUserMsg.content : '';
+                        onClarificationAnswer?.(originalQuestion, response);
+                      }}
+                      onProceedWithAssumptions={() => {
+                        const prevUserMsg = index > 0 ? messages[index - 1] : null;
+                        const originalQuestion =
+                          prevUserMsg?.role === 'user' ? prevUserMsg.content : '';
+                        const assumptions = (
+                          message.metadata?.clarificationQuestions || []
+                        )
+                          .map((q) => q.assumption)
+                          .join('; ');
+                        onProceedWithAssumptions?.(originalQuestion, assumptions);
+                      }}
+                    />
+                    {message.role === 'assistant' &&
+                      message.status === 'generating' &&
+                      index === messages.length - 1 &&
+                      streamEvents.length > 0 && (
+                        <PhaseIndicator events={streamEvents} isStreaming={isStreaming} />
+                      )}
+                  </Box>
+                );
+              })}
+              <div ref={messagesEndRef} />
+            </Box>
+          )}
+        </Box>
+
+        {/* Gradient fade overlay */}
+        <Box
+          sx={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 40,
+            background: `linear-gradient(to bottom, transparent, ${
+              theme.palette.mode === 'dark'
+                ? theme.palette.background.default
+                : theme.palette.grey[50]
+            })`,
+            pointerEvents: 'none',
+            zIndex: 1,
+          }}
+        />
+
+        {/* Scroll to bottom button */}
+        <Fade in={userScrolled}>
+          <IconButton
+            onClick={scrollToBottom}
+            aria-label="Scroll to bottom"
+            size="small"
             sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
+              position: 'absolute',
+              bottom: 16,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 2,
+              bgcolor: 'background.paper',
+              boxShadow: theme.palette.mode === 'dark'
+                ? '0 2px 8px rgba(0, 0, 0, 0.5)'
+                : '0 2px 8px rgba(0, 0, 0, 0.15)',
+              border: 1,
+              borderColor: theme.palette.mode === 'dark'
+                ? 'rgba(255, 255, 255, 0.1)'
+                : 'rgba(0, 0, 0, 0.08)',
+              width: 36,
+              height: 36,
+              '&:hover': {
+                bgcolor: theme.palette.mode === 'dark'
+                  ? 'rgba(255, 255, 255, 0.08)'
+                  : 'rgba(0, 0, 0, 0.04)',
+              },
             }}
           >
-            <Typography variant="body1" color="text.secondary">
-              Ask a question about your data to get started
-            </Typography>
-          </Box>
-        ) : (
-          <Box sx={{ maxWidth: 900, mx: 'auto' }}>
-            {messages.map((message, index) => {
-              const isSelectable = message.role === 'assistant' && message.status === 'complete' && onMessageSelect;
-              const isSelected = message.id === selectedMessageId;
-
-              return (
-                <Box
-                  key={message.id}
-                  onClick={isSelectable ? () => onMessageSelect?.(message.id) : undefined}
-                  sx={{
-                    cursor: isSelectable ? 'pointer' : 'default',
-                    borderLeft: isSelected ? 3 : 0,
-                    borderColor: isSelected ? 'primary.main' : 'transparent',
-                    bgcolor: isSelected ? 'action.hover' : 'transparent',
-                    borderRadius: 1,
-                    pl: isSelected ? 1 : 0,
-                    transition: 'all 0.15s ease',
-                    '&:hover': isSelectable ? {
-                      bgcolor: 'action.hover',
-                    } : {},
-                  }}
-                >
-                  <ChatMessage
-                    message={message}
-                    isStreaming={isStreaming}
-                    onClarificationAnswer={(response) => {
-                      const prevUserMsg = index > 0 ? messages[index - 1] : null;
-                      const originalQuestion =
-                        prevUserMsg?.role === 'user' ? prevUserMsg.content : '';
-                      onClarificationAnswer?.(originalQuestion, response);
-                    }}
-                    onProceedWithAssumptions={() => {
-                      const prevUserMsg = index > 0 ? messages[index - 1] : null;
-                      const originalQuestion =
-                        prevUserMsg?.role === 'user' ? prevUserMsg.content : '';
-                      const assumptions = (
-                        message.metadata?.clarificationQuestions || []
-                      )
-                        .map((q) => q.assumption)
-                        .join('; ');
-                      onProceedWithAssumptions?.(originalQuestion, assumptions);
-                    }}
-                  />
-                  {message.role === 'assistant' &&
-                    message.status === 'generating' &&
-                    index === messages.length - 1 &&
-                    streamEvents.length > 0 && (
-                      <PhaseIndicator events={streamEvents} isStreaming={isStreaming} />
-                    )}
-                </Box>
-              );
-            })}
-            <div ref={messagesEndRef} />
-          </Box>
-        )}
+            <ArrowDownIcon fontSize="small" />
+          </IconButton>
+        </Fade>
       </Box>
 
       {/* Edit Name Dialog */}
