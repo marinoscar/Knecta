@@ -10,7 +10,7 @@ import { UpdateChatDto } from './dto/update-chat.dto';
 import { ChatQueryDto } from './dto/chat-query.dto';
 import { CreatePreferenceDto } from './dto/create-preference.dto';
 import { UpdatePreferenceDto } from './dto/update-preference.dto';
-import { DataChat, DataChatMessage } from '@prisma/client';
+import { DataChat, DataChatMessage, Prisma } from '@prisma/client';
 import { CollectedTrace } from './agent/types';
 
 @Injectable()
@@ -345,7 +345,7 @@ export class DataAgentService {
         structuredOutput: trace.structuredOutput,
         promptMessages: trace.promptMessages,
         responseContent: trace.responseContent,
-        toolCalls: Array.isArray(trace.toolCalls) ? trace.toolCalls : undefined,
+        toolCalls: Array.isArray(trace.toolCalls) ? (trace.toolCalls as unknown as Prisma.InputJsonValue) : undefined,
         promptTokens: trace.promptTokens,
         completionTokens: trace.completionTokens,
         totalTokens: trace.totalTokens,
