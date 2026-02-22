@@ -118,4 +118,152 @@ export class SpreadsheetAgentController {
   ) {
     await this.service.deleteProject(id, userId);
   }
+
+  // ============================================================================
+  // FILES
+  // ============================================================================
+
+  @Post('projects/:id/files')
+  @Auth({ permissions: [PERMISSIONS.SPREADSHEET_AGENT_WRITE] })
+  @ApiOperation({ summary: 'Upload files to a project (stub — not yet implemented)' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiResponse({ status: 501, description: 'Not yet implemented' })
+  async uploadFiles(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    // TODO: Implement multipart file upload with StorageObjectsService in Phase 4
+    throw new NotImplementedException('File upload not yet implemented');
+  }
+
+  @Get('projects/:id/files')
+  @Auth({ permissions: [PERMISSIONS.SPREADSHEET_AGENT_READ] })
+  @ApiOperation({ summary: 'List files in a project' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'List of files' })
+  @ApiResponse({ status: 404, description: 'Project not found' })
+  async listFiles(@Param('id', ParseUUIDPipe) id: string) {
+    const result = await this.service.listFiles(id);
+    return { data: result };
+  }
+
+  @Get('projects/:id/files/:fileId')
+  @Auth({ permissions: [PERMISSIONS.SPREADSHEET_AGENT_READ] })
+  @ApiOperation({ summary: 'Get a file by ID within a project' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiParam({ name: 'fileId', type: String, format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'File found' })
+  @ApiResponse({ status: 404, description: 'File not found' })
+  async getFile(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('fileId', ParseUUIDPipe) fileId: string,
+  ) {
+    const file = await this.service.getFile(id, fileId);
+    return { data: file };
+  }
+
+  @Delete('projects/:id/files/:fileId')
+  @Auth({ permissions: [PERMISSIONS.SPREADSHEET_AGENT_DELETE] })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a file from a project' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiParam({ name: 'fileId', type: String, format: 'uuid' })
+  @ApiResponse({ status: 204, description: 'File deleted' })
+  @ApiResponse({ status: 404, description: 'File not found' })
+  @ApiResponse({ status: 409, description: 'Active run in progress' })
+  async deleteFile(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('fileId', ParseUUIDPipe) fileId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    await this.service.deleteFile(id, fileId, userId);
+  }
+
+  // ============================================================================
+  // TABLES
+  // ============================================================================
+
+  @Get('projects/:id/tables')
+  @Auth({ permissions: [PERMISSIONS.SPREADSHEET_AGENT_READ] })
+  @ApiOperation({ summary: 'List tables in a project' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
+  @ApiQuery({ name: 'fileId', required: false, type: String })
+  @ApiQuery({ name: 'status', required: false, enum: ['pending', 'extracting', 'ready', 'failed'] })
+  @ApiResponse({ status: 200, description: 'Paginated list of tables' })
+  @ApiResponse({ status: 404, description: 'Project not found' })
+  async listTables(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: QueryTableDto,
+  ) {
+    const result = await this.service.listTables(id, query);
+    return { data: result };
+  }
+
+  @Get('projects/:id/tables/:tableId')
+  @Auth({ permissions: [PERMISSIONS.SPREADSHEET_AGENT_READ] })
+  @ApiOperation({ summary: 'Get a table by ID within a project' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiParam({ name: 'tableId', type: String, format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Table found' })
+  @ApiResponse({ status: 404, description: 'Table not found' })
+  async getTable(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('tableId', ParseUUIDPipe) tableId: string,
+  ) {
+    const table = await this.service.getTable(id, tableId);
+    return { data: table };
+  }
+
+  @Get('projects/:id/tables/:tableId/preview')
+  @Auth({ permissions: [PERMISSIONS.SPREADSHEET_AGENT_READ] })
+  @ApiOperation({ summary: 'Preview rows from a ready table' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiParam({ name: 'tableId', type: String, format: 'uuid' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Max rows to return (1-500, default 50)' })
+  @ApiResponse({ status: 200, description: 'Table preview data' })
+  @ApiResponse({ status: 404, description: 'Table not found' })
+  @ApiResponse({ status: 409, description: 'Table not ready' })
+  async previewTable(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('tableId', ParseUUIDPipe) tableId: string,
+    @Query('limit') limit?: string,
+  ) {
+    const parsedLimit = Math.min(Math.max(parseInt(limit ?? '50', 10) || 50, 1), 500);
+    const result = await this.service.getTablePreview(id, tableId, parsedLimit);
+    return { data: result };
+  }
+
+  @Get('projects/:id/tables/:tableId/download')
+  @Auth({ permissions: [PERMISSIONS.SPREADSHEET_AGENT_READ] })
+  @ApiOperation({ summary: 'Get a signed download URL for a table Parquet file' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiParam({ name: 'tableId', type: String, format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Signed download URL' })
+  @ApiResponse({ status: 404, description: 'Table not found' })
+  @ApiResponse({ status: 409, description: 'Table not ready' })
+  async downloadTable(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('tableId', ParseUUIDPipe) tableId: string,
+  ) {
+    const result = await this.service.getTableDownloadUrl(id, tableId);
+    return { data: result };
+  }
+
+  @Delete('projects/:id/tables/:tableId')
+  @Auth({ permissions: [PERMISSIONS.SPREADSHEET_AGENT_DELETE] })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a table from a project' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiParam({ name: 'tableId', type: String, format: 'uuid' })
+  @ApiResponse({ status: 204, description: 'Table deleted' })
+  @ApiResponse({ status: 404, description: 'Table not found' })
+  async deleteTable(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('tableId', ParseUUIDPipe) tableId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    await this.service.deleteTable(id, tableId, userId);
+  }
 }
