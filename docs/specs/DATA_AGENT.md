@@ -11,25 +11,26 @@
 7. [Conditional Routing](#conditional-routing)
 8. [Clarifying Questions](#clarifying-questions)
 9. [User Preferences / Memory](#user-preferences--memory)
-10. [State Schema](#state-schema)
-11. [Tool Definitions](#tool-definitions)
-12. [SSE Streaming](#sse-streaming)
-13. [Message Metadata](#message-metadata)
-14. [Database Schema](#database-schema)
-15. [API Endpoints](#api-endpoints)
-16. [Security](#security)
-17. [RBAC Permissions](#rbac-permissions)
-18. [Embedding Service](#embedding-service)
-19. [Neo4j Vector Search](#neo4j-vector-search)
-20. [Docker Python Sandbox](#docker-python-sandbox)
-21. [Frontend Components](#frontend-components)
-22. [Model Selection](#model-selection)
-23. [Configuration](#configuration)
-24. [Token Usage Tracking](#token-usage-tracking)
-25. [LLM Interaction Tracing](#llm-interaction-tracing)
-26. [File Inventory](#file-inventory)
-27. [Testing](#testing)
-28. [Packages](#packages)
+10. [Chat Sharing](#chat-sharing)
+11. [State Schema](#state-schema)
+12. [Tool Definitions](#tool-definitions)
+13. [SSE Streaming](#sse-streaming)
+14. [Message Metadata](#message-metadata)
+15. [Database Schema](#database-schema)
+16. [API Endpoints](#api-endpoints)
+17. [Security](#security)
+18. [RBAC Permissions](#rbac-permissions)
+19. [Embedding Service](#embedding-service)
+20. [Neo4j Vector Search](#neo4j-vector-search)
+21. [Docker Python Sandbox](#docker-python-sandbox)
+22. [Frontend Components](#frontend-components)
+23. [Model Selection](#model-selection)
+24. [Configuration](#configuration)
+25. [Token Usage Tracking](#token-usage-tracking)
+26. [LLM Interaction Tracing](#llm-interaction-tracing)
+27. [File Inventory](#file-inventory)
+28. [Testing](#testing)
+29. [Packages](#packages)
 
 ---
 
@@ -1719,6 +1720,44 @@ When `preference_auto_saved` is received in `auto` mode, the `useDataChat` hook 
 
 ---
 
+## Chat Sharing
+
+Public sharing of Data Agent conversations with zero-trust security model. Chat owners can generate cryptographically secure share links that provide read-only access to chat messages and insights without requiring authentication.
+
+### Architecture
+
+- **Opaque tokens**: 256-bit crypto-random via `crypto.randomBytes(32).toString('base64url')` — 43-char URL-safe string
+- **Per-request validation**: Token checked against DB on every access (`isActive` + `expiresAt`)
+- **Instant revocation**: Setting `isActive=false` takes effect on next request
+- **Response sanitization**: Public endpoint strips all internal IDs, tool calls, token usage, and discovery internals
+- **Cascade cleanup**: Chat deletion auto-deletes shares (Prisma `onDelete: Cascade`)
+- **Owner-only management**: Only chat owner can create/view/revoke shares
+- **No session leakage**: Public page uses `skipAuth`, never touches JWT or cookies
+
+### Share URL Format
+
+```
+{APP_URL}/share/{shareToken}
+Example: http://localhost:8319/share/k7Dq2mR9xP4bF1nL8wY3vT6hJ0cA5sE2gK9uN4pX7z
+```
+
+### Sanitization Rules
+
+The public `getSharedChat` response includes ONLY:
+- `chatName`, `ontologyName`, `sharedAt`
+- Messages: `role`, `content`, `status`, `createdAt`
+- Message metadata subset: `plan`, `stepResults`, `verificationReport`, `dataLineage`, `joinPlan` (without YAML), `cannotAnswer`, `durationMs`, `revisionsUsed`
+
+Explicitly STRIPPED: all UUIDs (message/chat/owner/ontology IDs), `toolCalls`, `tokensUsed`, `discovery` internals, `claimed` flag, `llmProvider`.
+
+### Frontend
+
+- **ShareDialog**: MUI Dialog with generate/copy/revoke states. Expiry options: 7 days, 30 days, Never.
+- **SharedChatPage**: Standalone public page at `/share/:shareToken` — no auth, no Layout, no sidebar. Reuses `ChatMessage` component with synthetic IDs.
+- **Share button**: In ChatView header bar, between Insights toggle and Delete button.
+
+---
+
 ## State Schema
 
 The agent uses LangGraph `Annotation.Root` state following the pattern from `apps/api/src/semantic-models/agent/state.ts`:
@@ -2244,6 +2283,7 @@ model DataChat {
   ontology Ontology          @relation("DataChatOntology", fields: [ontologyId], references: [id], onDelete: Cascade)
   owner    User              @relation("UserDataChats", fields: [ownerId], references: [id], onDelete: Cascade)
   messages DataChatMessage[] @relation("ChatMessages")
+  shares   DataChatShare[]   @relation("ChatShares")
 
   @@index([ownerId])
   @@index([ontologyId])
@@ -2286,6 +2326,27 @@ model DataAgentPreference {
   @@index([userId])
   @@index([ontologyId])
   @@map("data_agent_preferences")
+}
+
+model DataChatShare {
+  id          String    @id @default(uuid()) @db.Uuid
+  chatId      String    @map("chat_id") @db.Uuid
+  shareToken  String    @unique @map("share_token") @db.VarChar(64)
+  createdById String    @map("created_by_id") @db.Uuid
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz
+  isActive    Boolean   @default(true) @map("is_active")
+  viewCount   Int       @default(0) @map("view_count")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  chat      DataChat @relation("ChatShares", fields: [chatId], references: [id], onDelete: Cascade)
+  createdBy User     @relation("UserDataChatShares", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+  @@index([shareToken])
+  @@index([createdById])
+  @@map("data_chat_shares")
 }
 ```
 
@@ -2627,6 +2688,138 @@ DELETE /api/data-agent/preferences
 
 ---
 
+### 13. Create Chat Share
+
+```http
+POST /api/data-agent/chats/:id/share
+```
+
+**Permission:** `data_agent:write` (owner only)
+
+Creates a public share link. Idempotent — returns existing active share if one exists.
+
+**Request Body:**
+```json
+{
+  "expiresInDays": 30
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `expiresInDays` | number | No | Days until link expires (1-365). Omit for no expiration. |
+
+**Response (201):**
+```json
+{
+  "id": "uuid",
+  "shareToken": "k7Dq2mR9xP4bF1nL8wY3vT6hJ0cA5sE2gK9uN4pX7z",
+  "shareUrl": "http://localhost:8319/share/k7Dq2mR9xP4bF1nL8wY3vT6hJ0cA5sE2gK9uN4pX7z",
+  "expiresAt": "2026-03-24T00:00:00.000Z",
+  "isActive": true,
+  "viewCount": 0,
+  "createdAt": "2026-02-22T12:00:00.000Z"
+}
+```
+
+**Error Cases:**
+- 404 Not Found - Chat not found or not owned by user
+
+---
+
+### 14. Get Chat Share Status
+
+```http
+GET /api/data-agent/chats/:id/share
+```
+
+**Permission:** `data_agent:read` (owner only)
+
+Returns the active share info for a chat, or 404 if no active share exists.
+
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "shareToken": "k7Dq2mR9xP4bF1nL8wY3vT6hJ0cA5sE2gK9uN4pX7z",
+  "shareUrl": "http://localhost:8319/share/k7Dq2mR9xP4bF1nL8wY3vT6hJ0cA5sE2gK9uN4pX7z",
+  "expiresAt": "2026-03-24T00:00:00.000Z",
+  "isActive": true,
+  "viewCount": 42,
+  "createdAt": "2026-02-22T12:00:00.000Z"
+}
+```
+
+**Error Cases:**
+- 404 Not Found - Chat not found, not owned by user, or no active share
+
+---
+
+### 15. Revoke Chat Share
+
+```http
+DELETE /api/data-agent/chats/:id/share
+```
+
+**Permission:** `data_agent:write` (owner only)
+
+Soft-revokes the share by setting `isActive=false`. Takes effect immediately on next access.
+
+**Response:** 204 No Content
+
+**Error Cases:**
+- 404 Not Found - Chat not found, not owned by user, or no active share
+
+---
+
+### 16. View Shared Chat (Public)
+
+```http
+GET /api/data-agent/share/:shareToken
+```
+
+**Public endpoint** — No authentication required. Decorated with `@Public()`.
+
+Returns sanitized chat data. Increments `viewCount` on each access (fire-and-forget).
+
+**Route ordering note:** This route is placed BEFORE `chats/:id` routes in the controller to prevent Fastify from treating "share" as a UUID parameter.
+
+**Response (200):**
+```json
+{
+  "chatName": "Sales Analysis Q4 2025",
+  "ontologyName": "E-Commerce Ontology",
+  "sharedAt": "2026-02-22T12:00:00.000Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What were total sales last quarter?",
+      "status": "complete",
+      "createdAt": "2026-02-22T12:00:00.000Z",
+      "metadata": null
+    },
+    {
+      "role": "assistant",
+      "content": "Based on the analysis...",
+      "status": "complete",
+      "createdAt": "2026-02-22T12:00:05.000Z",
+      "metadata": {
+        "plan": { "..." },
+        "stepResults": ["..."],
+        "verificationReport": { "..." },
+        "dataLineage": { "..." }
+      }
+    }
+  ]
+}
+```
+
+**Error Cases:**
+- 404 Not Found - Share token does not exist
+- 410 Gone - Share link has been revoked or has expired
+
+---
+
 ## Security
 
 ### Authentication & Authorization
@@ -2635,6 +2828,8 @@ DELETE /api/data-agent/preferences
 - Chat ownership enforced (users can only access their own chats)
 - RBAC permissions: `data_agent:read`, `data_agent:write`, `data_agent:delete`
 - Ontology access validated (user must have `ontologies:read` permission for ontologyId)
+- **Public share endpoint**: `GET /api/data-agent/share/:shareToken` uses `@Public()` decorator (no JWT required)
+- **Share response sanitization**: All internal IDs, tool calls, token usage, and discovery internals stripped from public responses
 
 ### SQL Injection Prevention
 

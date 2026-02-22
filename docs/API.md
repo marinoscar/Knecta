@@ -1673,6 +1673,122 @@ The database connections API allows users to store and manage connection configu
 
 ---
 
+### Data Agent
+
+#### POST /data-agent/chats/:id/share
+Create a public share link for a chat conversation. Idempotent — returns existing active share if one exists.
+
+**Permission:** `data_agent:write` (owner only)
+
+**Request Body:**
+```json
+{
+  "expiresInDays": 30
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `expiresInDays` | number | No | Days until link expires (1-365). Omit for no expiration. |
+
+**Response (201):**
+```json
+{
+  "id": "uuid",
+  "shareToken": "k7Dq2mR9xP4bF1nL8wY3vT6hJ0cA5sE2gK9uN4pX7z",
+  "shareUrl": "http://localhost:8319/share/k7Dq2mR9xP4bF1nL8wY3vT6hJ0cA5sE2gK9uN4pX7z",
+  "expiresAt": "2026-03-24T00:00:00.000Z",
+  "isActive": true,
+  "viewCount": 0,
+  "createdAt": "2026-02-22T12:00:00.000Z"
+}
+```
+
+**Error Cases:**
+- 404 Not Found - Chat not found or not owned by user
+
+---
+
+#### GET /data-agent/chats/:id/share
+Get the current share status for a chat.
+
+**Permission:** `data_agent:read` (owner only)
+
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "shareToken": "k7Dq2mR9xP4bF1nL8wY3vT6hJ0cA5sE2gK9uN4pX7z",
+  "shareUrl": "http://localhost:8319/share/k7Dq2mR9xP4bF1nL8wY3vT6hJ0cA5sE2gK9uN4pX7z",
+  "expiresAt": "2026-03-24T00:00:00.000Z",
+  "isActive": true,
+  "viewCount": 42,
+  "createdAt": "2026-02-22T12:00:00.000Z"
+}
+```
+
+**Error Cases:**
+- 404 Not Found - Chat not found, not owned by user, or no active share
+
+---
+
+#### DELETE /data-agent/chats/:id/share
+Revoke a share link. Sets `isActive` to false (soft revoke). Takes effect immediately on next access.
+
+**Permission:** `data_agent:write` (owner only)
+
+**Response:** 204 No Content
+
+**Error Cases:**
+- 404 Not Found - Chat not found, not owned by user, or no active share
+
+---
+
+#### GET /data-agent/share/:shareToken
+**Public endpoint** - View a publicly shared chat. No authentication required.
+
+Returns sanitized chat data with messages. Internal IDs, tool calls, token usage, and discovery internals are stripped from the response.
+
+**Response (200):**
+```json
+{
+  "chatName": "Sales Analysis Q4 2025",
+  "ontologyName": "E-Commerce Ontology",
+  "sharedAt": "2026-02-22T12:00:00.000Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What were total sales last quarter?",
+      "status": "complete",
+      "createdAt": "2026-02-22T12:00:00.000Z",
+      "metadata": null
+    },
+    {
+      "role": "assistant",
+      "content": "Based on the analysis...",
+      "status": "complete",
+      "createdAt": "2026-02-22T12:00:05.000Z",
+      "metadata": {
+        "plan": { },
+        "stepResults": [ ],
+        "verificationReport": { },
+        "dataLineage": { }
+      }
+    }
+  ]
+}
+```
+
+**Sanitized metadata fields (included):** `plan`, `stepResults`, `verificationReport`, `dataLineage`, `joinPlan` (without YAML), `cannotAnswer`, `durationMs`, `revisionsUsed`
+
+**Stripped fields:** All UUIDs, `toolCalls`, `tokensUsed`, `discovery` internals, `claimed`, `llmProvider`
+
+**Error Cases:**
+- 404 Not Found - Share token does not exist
+- 410 Gone - Share link has been revoked or has expired
+
+---
+
 ### Health
 
 **Public endpoints** - Used for Kubernetes liveness/readiness probes.
@@ -1740,6 +1856,7 @@ Readiness check - includes database connectivity test.
 | 403 | Forbidden - Insufficient permissions or user disabled |
 | 404 | Not Found - Resource not found |
 | 409 | Conflict - Resource already exists or version mismatch (optimistic concurrency) |
+| 410 | Gone - Resource no longer available (e.g., revoked or expired share link) |
 | 500 | Internal Server Error - Server error occurred |
 | 503 | Service Unavailable - Service temporarily unavailable |
 
