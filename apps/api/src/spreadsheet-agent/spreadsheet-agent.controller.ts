@@ -266,4 +266,64 @@ export class SpreadsheetAgentController {
   ) {
     await this.service.deleteTable(id, tableId, userId);
   }
+
+  // ============================================================================
+  // RUNS — static routes MUST come before parameterized routes
+  // ============================================================================
+
+  @Post('runs')
+  @Auth({ permissions: [PERMISSIONS.SPREADSHEET_AGENT_WRITE] })
+  @ApiOperation({ summary: 'Create a new agent run for a project' })
+  @ApiResponse({ status: 201, description: 'Run created' })
+  @ApiResponse({ status: 400, description: 'Invalid request data' })
+  @ApiResponse({ status: 409, description: 'Active run already in progress or no files uploaded' })
+  async createRun(
+    @Body() dto: CreateRunDto,
+    @CurrentUser('id') userId: string,
+  ) {
+    const run = await this.service.createRun(dto, userId);
+    return { data: run };
+  }
+
+  @Get('runs/:runId')
+  @Auth({ permissions: [PERMISSIONS.SPREADSHEET_AGENT_READ] })
+  @ApiOperation({ summary: 'Get run status by ID' })
+  @ApiParam({ name: 'runId', type: String, format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Run found' })
+  @ApiResponse({ status: 404, description: 'Run not found' })
+  async getRun(@Param('runId', ParseUUIDPipe) runId: string) {
+    const run = await this.service.getRun(runId);
+    return { data: run };
+  }
+
+  @Post('runs/:runId/cancel')
+  @Auth({ permissions: [PERMISSIONS.SPREADSHEET_AGENT_WRITE] })
+  @ApiOperation({ summary: 'Cancel an active or pending run' })
+  @ApiParam({ name: 'runId', type: String, format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Run cancelled' })
+  @ApiResponse({ status: 404, description: 'Run not found' })
+  @ApiResponse({ status: 400, description: 'Run cannot be cancelled' })
+  async cancelRun(
+    @Param('runId', ParseUUIDPipe) runId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    const run = await this.service.cancelRun(runId, userId);
+    return { data: run };
+  }
+
+  @Post('runs/:runId/approve')
+  @Auth({ permissions: [PERMISSIONS.SPREADSHEET_AGENT_WRITE] })
+  @ApiOperation({ summary: 'Approve (or modify) an extraction plan and resume the run' })
+  @ApiParam({ name: 'runId', type: String, format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Plan approved, run reset to pending' })
+  @ApiResponse({ status: 404, description: 'Run not found' })
+  @ApiResponse({ status: 400, description: 'Run is not in review_pending state' })
+  async approvePlan(
+    @Param('runId', ParseUUIDPipe) runId: string,
+    @Body() dto: ApprovePlanDto,
+    @CurrentUser('id') userId: string,
+  ) {
+    const run = await this.service.approvePlan(runId, dto, userId);
+    return { data: run };
+  }
 }
