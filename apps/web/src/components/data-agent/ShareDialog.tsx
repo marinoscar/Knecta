@@ -95,7 +95,7 @@ export function ShareDialog({ open, chatId, chatName, onClose }: ShareDialogProp
                 fullWidth
                 size="small"
                 value={share.shareUrl}
-                slotProps={{ input: { readOnly: true } }}
+                InputProps={{ readOnly: true }}
               />
               <Tooltip title={copied ? 'Copied!' : 'Copy link'}>
                 <IconButton onClick={handleCopy} color={copied ? 'success' : 'default'}>
