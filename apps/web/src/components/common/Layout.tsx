@@ -33,7 +33,7 @@ export function Layout() {
           sx={{
             flex: 1,
             minHeight: 0,
-            overflow: 'hidden',
+            overflow: 'auto',
           }}
         >
           <Outlet />
