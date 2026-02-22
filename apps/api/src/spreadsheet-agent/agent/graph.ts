@@ -4,6 +4,8 @@ import { SpreadsheetAgentState, SpreadsheetAgentStateType } from './state';
 import { SpreadsheetAgentEvent } from './types';
 import { createIngestNode } from './nodes/ingest';
 import { createAnalyzeNode } from './nodes/analyze';
+import { createDesignNode } from './nodes/design';
+import { createExtractNode } from './nodes/extract';
 
 export type EmitFn = (event: SpreadsheetAgentEvent) => void;
 
@@ -35,31 +37,7 @@ function routeAfterValidation(
 }
 
 // ─── Stub Node Factories ───
-// These will be replaced with real implementations in subsequent phases.
-
-function createDesignNode(emit: EmitFn) {
-  return async (_state: SpreadsheetAgentStateType) => {
-    emit({ type: 'phase_start', phase: 'design', label: 'Designing extraction schema' });
-    // TODO: Implement in Phase 4C
-    emit({ type: 'phase_complete', phase: 'design' });
-    return { currentPhase: 'design', extractionPlan: null };
-  };
-}
-
-function createExtractNode(emit: EmitFn) {
-  return async (state: SpreadsheetAgentStateType) => {
-    emit({ type: 'phase_start', phase: 'extract', label: 'Extracting tables' });
-    // TODO: Implement in Phase 4D
-    emit({ type: 'phase_complete', phase: 'extract' });
-    return {
-      currentPhase: 'extract',
-      extractionResults: [],
-      revisionCount:
-        state.revisionCount +
-        (state.validationReport && !state.validationReport.passed ? 1 : 0),
-    };
-  };
-}
+// validate and persist will be replaced with real implementations in subsequent phases.
 
 function createValidateNode(emit: EmitFn) {
   return async (_state: SpreadsheetAgentStateType) => {
@@ -93,7 +71,7 @@ export function buildSpreadsheetAgentGraph(deps: GraphDeps, emit: EmitFn) {
   const workflow = new StateGraph(SpreadsheetAgentState)
     .addNode('ingest', createIngestNode(emit))
     .addNode('analyze', createAnalyzeNode({ llm: deps.llm, emit }))
-    .addNode('design', createDesignNode(emit))
+    .addNode('design', createDesignNode({ llm: deps.llm, emit }))
     .addNode('extract', createExtractNode(emit))
     .addNode('validate', createValidateNode(emit))
     .addNode('persist', createPersistNode(emit))
