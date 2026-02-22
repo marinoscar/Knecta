@@ -79,7 +79,7 @@
     "reflect-metadata": "^0.2.x",
     "rxjs": "^7.x",
     "snowflake-sdk": "^2.3.3",
-    "zod": "^3.25.76"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.16",
