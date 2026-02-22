@@ -94,7 +94,7 @@ export class SpreadsheetAgentAgentService {
     try {
       // 6. Build and compile graph
       const llm = this.llmService.getChatModel();
-      const graph = buildSpreadsheetAgentGraph({ llm }, emit);
+      const graph = buildSpreadsheetAgentGraph({ llm, prisma: this.prisma }, emit);
 
       // 7. Set initial state
       const initialState: Partial<SpreadsheetAgentStateType> = {
