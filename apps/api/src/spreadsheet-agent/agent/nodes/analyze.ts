@@ -80,16 +80,11 @@ export function createAnalyzeNode(deps: AnalyzeNodeDeps) {
     const totalSheets = sheetTasks.length;
     const concurrency = config.concurrency || 5;
 
-    // Use structured output so the LLM always returns valid JSON
-    const structuredLlm = llm.withStructuredOutput(sheetAnalysisOutputSchema, {
-      name: 'analyze_sheet',
-    });
-
     // Process sheets with a concurrency limiter
     const sheetAnalyses = await processSheetTasksWithConcurrency(
       sheetTasks,
       concurrency,
-      structuredLlm,
+      llm,
       emit,
     );
 
@@ -119,12 +114,10 @@ export function createAnalyzeNode(deps: AnalyzeNodeDeps) {
 
 // ─── Concurrency helpers ───
 
-type StructuredLlm = ReturnType<BaseChatModel['withStructuredOutput']>;
-
 async function processSheetTasksWithConcurrency(
   tasks: Array<{ fileId: string; fileName: string; sheet: FileInventory['sheets'][0] }>,
   concurrency: number,
-  structuredLlm: StructuredLlm,
+  llm: BaseChatModel,
   emit: EmitFn,
 ): Promise<SheetAnalysis[]> {
   let activeCount = 0;
@@ -145,7 +138,7 @@ async function processSheetTasksWithConcurrency(
         new Promise<SheetAnalysis>((resolve, reject) => {
           const taskFn = async () => {
             try {
-              const analysis = await analyzeSheet(task, structuredLlm, emit);
+              const analysis = await analyzeSheet(task, llm, emit);
               resolve(analysis);
             } catch (err) {
               reject(err);
@@ -172,17 +165,21 @@ async function processSheetTasksWithConcurrency(
 
 async function analyzeSheet(
   task: { fileId: string; fileName: string; sheet: FileInventory['sheets'][0] },
-  structuredLlm: StructuredLlm,
+  llm: BaseChatModel,
   emit: EmitFn,
 ): Promise<SheetAnalysis> {
   const { fileId, fileName, sheet } = task;
 
   try {
     const prompt = buildAnalyzerPrompt(fileName, sheet);
-    const result = await structuredLlm.invoke(prompt);
 
-    // The structured output schema guarantees the shape; cast for type safety
-    const parsed = result as z.infer<typeof sheetAnalysisOutputSchema>;
+    // withStructuredOutput has multiple overloads; use unknown cast to stay
+    // type-safe without fighting the overload resolution.
+    const structuredLlm = llm.withStructuredOutput(sheetAnalysisOutputSchema, {
+      name: 'analyze_sheet',
+    });
+    const rawResult = await structuredLlm.invoke(prompt);
+    const parsed = rawResult as unknown as z.infer<typeof sheetAnalysisOutputSchema>;
 
     emit({
       type: 'sheet_analysis',
