@@ -1,6 +1,7 @@
 ---
 description: Validate the codebase — run migrations, generate Prisma client, typecheck, tests, restart services, and report status
 allowed-tools: Bash, Read, Grep, Glob, Edit, Write, Task
+model: sonnet
 ---
 
 # Validate Codebase
