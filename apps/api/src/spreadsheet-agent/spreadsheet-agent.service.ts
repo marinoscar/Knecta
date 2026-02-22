@@ -6,6 +6,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SpreadsheetRunStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateProjectDto,
@@ -20,7 +21,7 @@ import {
 export class SpreadsheetAgentService {
   private readonly logger = new Logger(SpreadsheetAgentService.name);
 
-  private readonly ACTIVE_RUN_STATUSES = [
+  private readonly ACTIVE_RUN_STATUSES: SpreadsheetRunStatus[] = [
     'pending',
     'ingesting',
     'analyzing',
@@ -579,8 +580,8 @@ export class SpreadsheetAgentService {
     const updated = await this.prisma.spreadsheetRun.update({
       where: { id: runId },
       data: {
-        extractionPlanModified: dto.modifications ?? null,
-        status: 'pending',
+        extractionPlanModified: (dto.modifications ?? null) as any,
+        status: 'pending' as SpreadsheetRunStatus,
       },
     });
 
@@ -639,7 +640,7 @@ export class SpreadsheetAgentService {
     await this.prisma.spreadsheetRun.update({
       where: { id: runId },
       data: {
-        status,
+        status: status as SpreadsheetRunStatus,
         ...(data?.currentPhase !== undefined && { currentPhase: data.currentPhase }),
         ...(data?.errorMessage !== undefined && { errorMessage: data.errorMessage }),
         ...(data?.stats !== undefined && { stats: data.stats }),
