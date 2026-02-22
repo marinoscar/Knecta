@@ -221,6 +221,14 @@ import type {
   DataChatsResponse,
   DataChat,
   LlmTraceRecord,
+  SpreadsheetProjectsResponse,
+  SpreadsheetProject,
+  SpreadsheetFile,
+  SpreadsheetTable,
+  SpreadsheetTablesResponse,
+  SpreadsheetRun,
+  SpreadsheetPlanModification,
+  TablePreviewData,
 } from '../types';
 
 // Allowlist API
@@ -617,4 +625,122 @@ export async function deleteAgentPreference(id: string): Promise<void> {
 export async function clearAgentPreferences(ontologyId?: string): Promise<void> {
   const params = ontologyId ? `?ontologyId=${ontologyId}` : '';
   return api.delete<void>(`/data-agent/preferences${params}`);
+}
+
+// ============================================================================
+// Spreadsheet Agent API
+// ============================================================================
+
+export async function getSpreadsheetProjects(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}): Promise<SpreadsheetProjectsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set('page', String(params.page));
+  if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
+  if (params?.search) searchParams.set('search', params.search);
+  if (params?.status) searchParams.set('status', params.status);
+  if (params?.sortBy) searchParams.set('sortBy', params.sortBy);
+  if (params?.sortOrder) searchParams.set('sortOrder', params.sortOrder);
+  const query = searchParams.toString();
+  return api.get<SpreadsheetProjectsResponse>(`/spreadsheet-agent/projects${query ? `?${query}` : ''}`);
+}
+
+export async function getSpreadsheetProject(id: string): Promise<SpreadsheetProject> {
+  return api.get<SpreadsheetProject>(`/spreadsheet-agent/projects/${id}`);
+}
+
+export async function createSpreadsheetProject(data: {
+  name: string;
+  description?: string;
+  storageProvider?: string;
+  reviewMode?: 'auto' | 'review';
+}): Promise<SpreadsheetProject> {
+  return api.post<SpreadsheetProject>('/spreadsheet-agent/projects', data);
+}
+
+export async function updateSpreadsheetProject(
+  id: string,
+  data: { name?: string; description?: string; reviewMode?: 'auto' | 'review' },
+): Promise<SpreadsheetProject> {
+  return api.patch<SpreadsheetProject>(`/spreadsheet-agent/projects/${id}`, data);
+}
+
+export async function deleteSpreadsheetProject(id: string): Promise<void> {
+  await api.delete<void>(`/spreadsheet-agent/projects/${id}`);
+}
+
+export async function getSpreadsheetFiles(projectId: string): Promise<SpreadsheetFile[]> {
+  return api.get<SpreadsheetFile[]>(`/spreadsheet-agent/projects/${projectId}/files`);
+}
+
+export async function getSpreadsheetFile(projectId: string, fileId: string): Promise<SpreadsheetFile> {
+  return api.get<SpreadsheetFile>(`/spreadsheet-agent/projects/${projectId}/files/${fileId}`);
+}
+
+export async function deleteSpreadsheetFile(projectId: string, fileId: string): Promise<void> {
+  await api.delete<void>(`/spreadsheet-agent/projects/${projectId}/files/${fileId}`);
+}
+
+export async function getSpreadsheetTables(
+  projectId: string,
+  params?: { page?: number; pageSize?: number; fileId?: string; status?: string },
+): Promise<SpreadsheetTablesResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set('page', String(params.page));
+  if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
+  if (params?.fileId) searchParams.set('fileId', params.fileId);
+  if (params?.status) searchParams.set('status', params.status);
+  const query = searchParams.toString();
+  return api.get<SpreadsheetTablesResponse>(`/spreadsheet-agent/projects/${projectId}/tables${query ? `?${query}` : ''}`);
+}
+
+export async function getSpreadsheetTable(projectId: string, tableId: string): Promise<SpreadsheetTable> {
+  return api.get<SpreadsheetTable>(`/spreadsheet-agent/projects/${projectId}/tables/${tableId}`);
+}
+
+export async function getSpreadsheetTablePreview(
+  projectId: string,
+  tableId: string,
+  limit?: number,
+): Promise<TablePreviewData> {
+  const params = limit ? `?limit=${limit}` : '';
+  return api.get<TablePreviewData>(`/spreadsheet-agent/projects/${projectId}/tables/${tableId}/preview${params}`);
+}
+
+export async function getSpreadsheetTableDownloadUrl(
+  projectId: string,
+  tableId: string,
+): Promise<{ url: string; expiresIn: number }> {
+  return api.get<{ url: string; expiresIn: number }>(`/spreadsheet-agent/projects/${projectId}/tables/${tableId}/download`);
+}
+
+export async function deleteSpreadsheetTable(projectId: string, tableId: string): Promise<void> {
+  await api.delete<void>(`/spreadsheet-agent/projects/${projectId}/tables/${tableId}`);
+}
+
+export async function createSpreadsheetRun(data: {
+  projectId: string;
+  config?: { reviewMode?: 'auto' | 'review'; concurrency?: number };
+}): Promise<SpreadsheetRun> {
+  return api.post<SpreadsheetRun>('/spreadsheet-agent/runs', data);
+}
+
+export async function getSpreadsheetRun(runId: string): Promise<SpreadsheetRun> {
+  return api.get<SpreadsheetRun>(`/spreadsheet-agent/runs/${runId}`);
+}
+
+export async function cancelSpreadsheetRun(runId: string): Promise<SpreadsheetRun> {
+  return api.post<SpreadsheetRun>(`/spreadsheet-agent/runs/${runId}/cancel`);
+}
+
+export async function approveSpreadsheetPlan(
+  runId: string,
+  modifications?: SpreadsheetPlanModification[],
+): Promise<SpreadsheetRun> {
+  return api.post<SpreadsheetRun>(`/spreadsheet-agent/runs/${runId}/approve`, { modifications });
 }
