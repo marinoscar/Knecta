@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DataAgentService } from './data-agent.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -58,6 +59,7 @@ describe('DataAgentService', () => {
       providers: [
         DataAgentService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue(undefined) } },
       ],
     }).compile();
 
