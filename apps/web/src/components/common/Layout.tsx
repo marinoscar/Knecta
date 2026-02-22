@@ -21,7 +21,7 @@ export function Layout() {
       sx={{
         display: 'flex',
         flexDirection: 'column',
-        minHeight: '100vh',
+        height: '100vh',
         backgroundColor: theme.palette.background.default,
       }}
     >
