@@ -447,6 +447,208 @@ export class SpreadsheetAgentService {
   }
 
   // ---------------------------------------------------------------------------
+  // Runs
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Create a new agent run for a project.
+   * Requires at least one uploaded file and no active run already in progress.
+   */
+  async createRun(dto: CreateRunDto, userId: string) {
+    // Verify project exists
+    await this.requireProject(dto.projectId);
+
+    // Verify at least one file is present
+    const fileCount = await this.prisma.spreadsheetFile.count({
+      where: { projectId: dto.projectId },
+    });
+
+    if (fileCount === 0) {
+      throw new ConflictException(
+        'Cannot start a run: the project has no uploaded files',
+      );
+    }
+
+    // Verify no active run is already running
+    const activeRun = await this.prisma.spreadsheetRun.findFirst({
+      where: {
+        projectId: dto.projectId,
+        status: { in: this.ACTIVE_RUN_STATUSES },
+      },
+      select: { id: true },
+    });
+
+    if (activeRun) {
+      throw new ConflictException(
+        `An active run (${activeRun.id}) is already in progress for this project`,
+      );
+    }
+
+    const run = await this.prisma.spreadsheetRun.create({
+      data: {
+        projectId: dto.projectId,
+        config: dto.config ?? {},
+        createdByUserId: userId,
+      },
+    });
+
+    await this.createAuditEvent(
+      userId,
+      'spreadsheet_runs:create',
+      'spreadsheet_run',
+      run.id,
+      { projectId: dto.projectId },
+    );
+
+    this.logger.log(`Spreadsheet run ${run.id} created by user ${userId}`);
+
+    return this.mapRun(run);
+  }
+
+  /**
+   * Get a run by ID.
+   */
+  async getRun(runId: string) {
+    const run = await this.prisma.spreadsheetRun.findUnique({
+      where: { id: runId },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`Spreadsheet run with ID ${runId} not found`);
+    }
+
+    return this.mapRun(run);
+  }
+
+  /**
+   * Cancel an active or pending run.
+   */
+  async cancelRun(runId: string, userId: string) {
+    const run = await this.prisma.spreadsheetRun.findUnique({
+      where: { id: runId },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`Spreadsheet run with ID ${runId} not found`);
+    }
+
+    const nonCancellableStatuses = ['completed', 'failed', 'cancelled'];
+    if (nonCancellableStatuses.includes(run.status)) {
+      throw new BadRequestException(
+        `Cannot cancel run with status '${run.status}'. Only active or pending runs can be cancelled.`,
+      );
+    }
+
+    const updated = await this.prisma.spreadsheetRun.update({
+      where: { id: runId },
+      data: { status: 'cancelled' },
+    });
+
+    await this.createAuditEvent(
+      userId,
+      'spreadsheet_runs:cancel',
+      'spreadsheet_run',
+      runId,
+      { previousStatus: run.status },
+    );
+
+    this.logger.log(`Spreadsheet run ${runId} cancelled by user ${userId}`);
+
+    return this.mapRun(updated);
+  }
+
+  /**
+   * Approve (or modify) an extraction plan and reset the run to pending
+   * so the agent can proceed with extraction.
+   */
+  async approvePlan(runId: string, dto: ApprovePlanDto, userId: string) {
+    const run = await this.prisma.spreadsheetRun.findUnique({
+      where: { id: runId },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`Spreadsheet run with ID ${runId} not found`);
+    }
+
+    if (run.status !== 'review_pending') {
+      throw new BadRequestException(
+        `Cannot approve plan for run with status '${run.status}'. Run must be in 'review_pending' state.`,
+      );
+    }
+
+    const updated = await this.prisma.spreadsheetRun.update({
+      where: { id: runId },
+      data: {
+        extractionPlanModified: dto.modifications ?? null,
+        status: 'pending',
+      },
+    });
+
+    await this.createAuditEvent(
+      userId,
+      'spreadsheet_runs:approve_plan',
+      'spreadsheet_run',
+      runId,
+      { hasModifications: (dto.modifications?.length ?? 0) > 0 },
+    );
+
+    this.logger.log(`Spreadsheet run ${runId} plan approved by user ${userId}`);
+
+    return this.mapRun(updated);
+  }
+
+  /**
+   * Atomically claim a pending run for execution (pending → ingesting).
+   * Returns true if this caller claimed it; false if already claimed by another process.
+   */
+  async claimRun(runId: string): Promise<boolean> {
+    const result = await this.prisma.spreadsheetRun.updateMany({
+      where: { id: runId, status: 'pending' },
+      data: {
+        status: 'ingesting',
+        startedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    return result.count > 0;
+  }
+
+  /**
+   * Persist run progress JSON (phase progress, table statuses, etc.).
+   */
+  async updateRunProgress(runId: string, progress: any) {
+    await this.prisma.spreadsheetRun.update({
+      where: { id: runId },
+      data: { progress: progress as any },
+    });
+  }
+
+  /**
+   * Update run status and optional metadata fields.
+   */
+  async updateRunStatus(
+    runId: string,
+    status: string,
+    data?: {
+      currentPhase?: string;
+      errorMessage?: string;
+      stats?: any;
+      completedAt?: Date;
+    },
+  ) {
+    await this.prisma.spreadsheetRun.update({
+      where: { id: runId },
+      data: {
+        status,
+        ...(data?.currentPhase !== undefined && { currentPhase: data.currentPhase }),
+        ...(data?.errorMessage !== undefined && { errorMessage: data.errorMessage }),
+        ...(data?.stats !== undefined && { stats: data.stats }),
+        ...(data?.completedAt !== undefined && { completedAt: data.completedAt }),
+      },
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
 
