@@ -44,6 +44,8 @@ model User {
   dataChats                 DataChat[]       @relation("UserDataChats")
   dataAgentPreferences      DataAgentPreference[] @relation("UserDataAgentPreferences")
   oauthCodes                OAuthAuthorizationCode[] @relation("UserOAuthCodes")
+  spreadsheetProjects       SpreadsheetProject[]     @relation("UserSpreadsheetProjects")
+  spreadsheetRuns           SpreadsheetRun[]         @relation("UserSpreadsheetRuns")
 
   @@map("users")
 }
@@ -571,4 +573,154 @@ model DataAgentPreference {
   @@index([userId])
   @@index([ontologyId])
   @@map("data_agent_preferences")
+}
+
+// =============================================================================
+// Spreadsheet Agent
+// =============================================================================
+
+enum SpreadsheetProjectStatus {
+  draft
+  processing
+  review_pending
+  ready
+  failed
+  partial
+}
+
+enum SpreadsheetFileStatus {
+  pending
+  analyzing
+  analyzed
+  extracting
+  ready
+  failed
+}
+
+enum SpreadsheetTableStatus {
+  pending
+  extracting
+  ready
+  failed
+}
+
+enum SpreadsheetRunStatus {
+  pending
+  ingesting
+  analyzing
+  designing
+  review_pending
+  extracting
+  validating
+  persisting
+  completed
+  failed
+  cancelled
+}
+
+model SpreadsheetProject {
+  id              String                   @id @default(uuid()) @db.Uuid
+  name            String                   @db.VarChar(255)
+  description     String?                  @db.Text
+  status          SpreadsheetProjectStatus @default(draft)
+  storageProvider String                   @map("storage_provider") @db.VarChar(20)
+  outputBucket    String                   @map("output_bucket") @db.VarChar(255)
+  outputPrefix    String                   @map("output_prefix") @db.VarChar(500)
+  reviewMode      String                   @default("review") @map("review_mode") @db.VarChar(20)
+  fileCount       Int                      @default(0) @map("file_count")
+  tableCount      Int                      @default(0) @map("table_count")
+  totalRows       BigInt                   @default(0) @map("total_rows")
+  totalSizeBytes  BigInt                   @default(0) @map("total_size_bytes")
+  createdByUserId String?                  @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime                 @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  createdByUser User?              @relation("UserSpreadsheetProjects", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  files         SpreadsheetFile[]  @relation("ProjectFiles")
+  tables        SpreadsheetTable[] @relation("ProjectTables")
+  runs          SpreadsheetRun[]   @relation("ProjectRuns")
+
+  @@index([createdByUserId])
+  @@index([status])
+  @@map("spreadsheet_projects")
+}
+
+model SpreadsheetFile {
+  id              String                @id @default(uuid()) @db.Uuid
+  projectId       String                @map("project_id") @db.Uuid
+  storageObjectId String?               @map("storage_object_id") @db.Uuid
+  fileName        String                @map("file_name") @db.VarChar(255)
+  fileType        String                @map("file_type") @db.VarChar(20)
+  fileSizeBytes   BigInt                @map("file_size_bytes")
+  fileHash        String                @map("file_hash") @db.VarChar(64)
+  storagePath     String                @map("storage_path") @db.VarChar(1000)
+  sheetCount      Int                   @default(0) @map("sheet_count")
+  status          SpreadsheetFileStatus @default(pending)
+  analysis        Json?
+  errorMessage    String?               @map("error_message") @db.Text
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  project SpreadsheetProject @relation("ProjectFiles", fields: [projectId], references: [id], onDelete: Cascade)
+  tables  SpreadsheetTable[]  @relation("FileTables")
+
+  @@index([projectId])
+  @@index([status])
+  @@map("spreadsheet_files")
+}
+
+model SpreadsheetTable {
+  id              String                 @id @default(uuid()) @db.Uuid
+  projectId       String                 @map("project_id") @db.Uuid
+  fileId          String                 @map("file_id") @db.Uuid
+  sheetName       String                 @map("sheet_name") @db.VarChar(255)
+  tableName       String                 @map("table_name") @db.VarChar(255)
+  description     String?                @db.Text
+  columns         Json
+  rowCount        BigInt                 @default(0) @map("row_count")
+  outputPath      String?                @map("output_path") @db.VarChar(1000)
+  outputSizeBytes BigInt                 @default(0) @map("output_size_bytes")
+  status          SpreadsheetTableStatus @default(pending)
+  errorMessage    String?                @map("error_message") @db.Text
+  extractionNotes String?                @map("extraction_notes") @db.Text
+  createdAt       DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime               @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  project SpreadsheetProject @relation("ProjectTables", fields: [projectId], references: [id], onDelete: Cascade)
+  file    SpreadsheetFile    @relation("FileTables", fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([fileId])
+  @@index([status])
+  @@map("spreadsheet_tables")
+}
+
+model SpreadsheetRun {
+  id                     String               @id @default(uuid()) @db.Uuid
+  projectId              String               @map("project_id") @db.Uuid
+  status                 SpreadsheetRunStatus @default(pending)
+  currentPhase           String?              @map("current_phase") @db.VarChar(50)
+  progress               Json?
+  extractionPlan         Json?                @map("extraction_plan")
+  extractionPlanModified Json?                @map("extraction_plan_modified")
+  config                 Json?
+  stats                  Json?
+  errorMessage           String?              @map("error_message") @db.Text
+  startedAt              DateTime?            @map("started_at") @db.Timestamptz
+  completedAt            DateTime?            @map("completed_at") @db.Timestamptz
+  createdByUserId        String?              @map("created_by_user_id") @db.Uuid
+  createdAt              DateTime             @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt              DateTime             @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  project       SpreadsheetProject @relation("ProjectRuns", fields: [projectId], references: [id], onDelete: Cascade)
+  createdByUser User?              @relation("UserSpreadsheetRuns", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([status])
+  @@index([createdByUserId])
+  @@map("spreadsheet_runs")
 }
