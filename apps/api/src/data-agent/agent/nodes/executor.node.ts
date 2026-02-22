@@ -116,7 +116,8 @@ export function createExecutorNode(
               emit({ type: 'tool_error', phase: 'executor', stepId: step.id, name: 'query_database', error: errMsg });
 
               try {
-                const repairPrompt = buildExecutorRepairPrompt(step.description, querySpec.pilotSql, errMsg, state.databaseType, datasetSchemas);
+                const dialectType = (state.databaseType === 's3' || state.databaseType === 'azure_blob') ? 'DuckDB' : state.databaseType;
+                const repairPrompt = buildExecutorRepairPrompt(step.description, querySpec.pilotSql, errMsg, dialectType, datasetSchemas);
                 const repairMessages = [
                   new SystemMessage('You are a SQL repair expert. Fix the broken SQL query and return ONLY the corrected SQL.'),
                   new HumanMessage(repairPrompt),

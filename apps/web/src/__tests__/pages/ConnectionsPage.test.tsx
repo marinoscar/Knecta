@@ -284,6 +284,96 @@ describe('ConnectionsPage', () => {
     });
   });
 
+  describe('Cloud Storage Type Chips', () => {
+    it('shows Amazon S3 chip with warning color for an S3 connection', async () => {
+      server.use(
+        http.get('*/api/connections', () => {
+          return HttpResponse.json({
+            data: {
+              items: [
+                {
+                  id: 'conn-s3-1',
+                  name: 'Test S3 Bucket',
+                  description: 'S3 data lake',
+                  dbType: 's3',
+                  host: 'us-east-1',
+                  port: 443,
+                  databaseName: null,
+                  username: 'AKIAIOSFODNN7EXAMPLE',
+                  hasCredential: true,
+                  useSsl: true,
+                  options: { region: 'us-east-1', bucket: 'my-bucket', pathPrefix: '', endpointUrl: '' },
+                  lastTestedAt: null,
+                  lastTestResult: null,
+                  lastTestMessage: null,
+                  createdAt: '2024-01-01T00:00:00.000Z',
+                  updatedAt: '2024-01-01T00:00:00.000Z',
+                },
+              ],
+              total: 1,
+              page: 1,
+              pageSize: 20,
+              totalPages: 1,
+            },
+          });
+        }),
+      );
+
+      render(<ConnectionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Amazon S3')).toBeInTheDocument();
+      });
+
+      const chip = screen.getByText('Amazon S3').closest('.MuiChip-root');
+      expect(chip).toHaveClass('MuiChip-colorWarning');
+    });
+
+    it('shows Azure Blob chip with info color for an Azure Blob connection', async () => {
+      server.use(
+        http.get('*/api/connections', () => {
+          return HttpResponse.json({
+            data: {
+              items: [
+                {
+                  id: 'conn-az-1',
+                  name: 'Test Azure Blob',
+                  description: 'Azure storage account',
+                  dbType: 'azure_blob',
+                  host: 'myaccount.blob.core.windows.net',
+                  port: 443,
+                  databaseName: null,
+                  username: 'myaccount',
+                  hasCredential: true,
+                  useSsl: true,
+                  options: { containerName: 'mycontainer', pathPrefix: '', authMethod: 'key' },
+                  lastTestedAt: null,
+                  lastTestResult: null,
+                  lastTestMessage: null,
+                  createdAt: '2024-01-01T00:00:00.000Z',
+                  updatedAt: '2024-01-01T00:00:00.000Z',
+                },
+              ],
+              total: 1,
+              page: 1,
+              pageSize: 20,
+              totalPages: 1,
+            },
+          });
+        }),
+      );
+
+      render(<ConnectionsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Azure Blob')).toBeInTheDocument();
+      });
+
+      const chip = screen.getByText('Azure Blob').closest('.MuiChip-root');
+      expect(chip).toHaveClass('MuiChip-colorInfo');
+    });
+  });
+
   describe('Snowflake Connection', () => {
     it('shows Snowflake chip with info color for a Snowflake connection', async () => {
       server.use(

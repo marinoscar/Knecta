@@ -39,7 +39,17 @@ import { createSemanticModelRun } from '../services/api';
 import type { DataConnection, TableInfo } from '../types';
 import { AgentLog } from '../components/semantic-models/AgentLog';
 
-const steps = ['Select Connection', 'Select Database', 'Select Tables', 'Generate Model'];
+function getDatabaseLabel(dbType: string | undefined): string {
+  if (dbType === 's3') return 'Bucket';
+  if (dbType === 'azure_blob') return 'Container';
+  return 'Database';
+}
+
+function getSchemaLabel(dbType: string | undefined): string {
+  if (dbType === 's3' || dbType === 'azure_blob') return 'Folder';
+  return 'Schema';
+}
+
 
 export default function NewSemanticModelPage() {
   const navigate = useNavigate();
@@ -116,6 +126,14 @@ export default function NewSemanticModelPage() {
     }
   }, [location.state, connections]);
 
+  // Derive contextual step labels based on selected connection type
+  const dbLabel = getDatabaseLabel(selectedConnection?.dbType);
+  const schemaLabel = getSchemaLabel(selectedConnection?.dbType);
+  const wizardSteps = useMemo(
+    () => ['Select Connection', `Select ${dbLabel}`, 'Select Tables', 'Generate Model'],
+    [dbLabel]
+  );
+
   // Filter only successfully tested connections
   const testedConnections = useMemo(
     () => connections.filter((conn) => conn.lastTestResult === true),
@@ -160,7 +178,7 @@ export default function NewSemanticModelPage() {
 
   const handleNext = () => {
     setError(null);
-    if (activeStep < steps.length - 1) {
+    if (activeStep < wizardSteps.length - 1) {
       setActiveStep((prev) => prev + 1);
     }
   };
@@ -246,7 +264,7 @@ export default function NewSemanticModelPage() {
 
         <Paper sx={{ p: 3, mb: 3 }}>
               <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
-                {steps.map((label) => (
+                {wizardSteps.map((label) => (
                   <Step key={label}>
                     <StepLabel>{label}</StepLabel>
                   </Step>
@@ -309,14 +327,14 @@ export default function NewSemanticModelPage() {
                 </Box>
               )}
 
-              {/* Step 2: Select Database */}
+              {/* Step 2: Select Database / Bucket / Container */}
               {activeStep === 1 && (
                 <Box>
                   <Typography variant="h6" gutterBottom>
-                    Select Database
+                    Select {dbLabel}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Choose which database to analyze
+                    Choose which {dbLabel.toLowerCase()} to analyze
                   </Typography>
 
                   {discoveryLoading ? (
@@ -324,14 +342,14 @@ export default function NewSemanticModelPage() {
                       <CircularProgress />
                     </Box>
                   ) : databases.length === 0 ? (
-                    <Alert severity="info">No databases found for this connection.</Alert>
+                    <Alert severity="info">No {dbLabel.toLowerCase()}s found for this connection.</Alert>
                   ) : (
                     <FormControl fullWidth>
-                      <InputLabel>Database</InputLabel>
+                      <InputLabel>{dbLabel}</InputLabel>
                       <Select
                         value={selectedDatabase}
                         onChange={(e) => setSelectedDatabase(e.target.value)}
-                        label="Database"
+                        label={dbLabel}
                       >
                         {databases.map((db) => (
                           <MenuItem key={db.name} value={db.name}>
@@ -348,7 +366,7 @@ export default function NewSemanticModelPage() {
               {activeStep === 2 && (
                 <Box>
                   <Typography variant="h6" gutterBottom>
-                    Select Schemas and Tables
+                    Select {schemaLabel}s and Tables
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     Choose which tables to include in the semantic model
@@ -359,13 +377,13 @@ export default function NewSemanticModelPage() {
                       <CircularProgress />
                     </Box>
                   ) : tablesBySchema.size === 0 ? (
-                    <Alert severity="info">No tables found in the selected database.</Alert>
+                    <Alert severity="info">No tables found in the selected {dbLabel.toLowerCase()}.</Alert>
                   ) : (
                     <Box>
                       <Box sx={{ mb: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
                         <Typography variant="body2" fontWeight="medium">
                           Selected: {selectedTables.length} table(s) across{' '}
-                          {new Set(selectedTables.map((t) => t.split('.')[0])).size} schema(s)
+                          {new Set(selectedTables.map((t) => t.split('.')[0])).size} {schemaLabel.toLowerCase()}(s)
                         </Typography>
                       </Box>
 
@@ -383,7 +401,7 @@ export default function NewSemanticModelPage() {
                                   }}
                                 >
                                   <Typography variant="subtitle1" fontWeight="medium">
-                                    Schema: {schemaName}
+                                    {schemaLabel}: {schemaName}
                                   </Typography>
                                   <Button
                                     size="small"
@@ -477,7 +495,7 @@ export default function NewSemanticModelPage() {
                           </Box>
 
                           <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                            Database
+                            {dbLabel}
                           </Typography>
                           <Typography variant="body1" sx={{ mb: 2 }}>
                             {selectedDatabase}
@@ -488,7 +506,7 @@ export default function NewSemanticModelPage() {
                           </Typography>
                           <Box>
                             <Typography variant="body2">
-                              • {new Set(selectedTables.map((t) => t.split('.')[0])).size} schema(s)
+                              • {new Set(selectedTables.map((t) => t.split('.')[0])).size} {schemaLabel.toLowerCase()}(s)
                             </Typography>
                             <Typography variant="body2">• {selectedTables.length} table(s)</Typography>
                           </Box>
@@ -544,7 +562,7 @@ export default function NewSemanticModelPage() {
                 >
                   Back
                 </Button>
-                {activeStep < steps.length - 1 && (
+                {activeStep < wizardSteps.length - 1 && (
                   <Button
                     endIcon={<ArrowForwardIcon />}
                     variant="contained"

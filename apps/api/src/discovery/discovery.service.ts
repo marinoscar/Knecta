@@ -205,15 +205,20 @@ export class DiscoveryService {
           return `\`${s}\``;
         case 'mssql':
           return `[${s}]`;
+        case 's3':
+        case 'azure_blob':
+          return `"${s}"`; // DuckDB uses double-quoted identifiers like PostgreSQL
         default:
           // postgresql, snowflake
           return `"${s}"`;
       }
     };
 
-    // Build a fully-qualified table reference (2-part or 3-part)
+    // Build a fully-qualified table reference (2-part, 3-part, or simple name)
     const tableRef = (dbType === 'snowflake' || dbType === 'databricks')
       ? `${quote(database)}.${quote(schema)}.${quote(table)}`
+      : (dbType === 's3' || dbType === 'azure_blob')
+      ? `${quote(table)}` // DuckDB views are registered with simple names
       : `${quote(schema)}.${quote(table)}`;
 
     // Per-dialect column cast to text
@@ -230,6 +235,9 @@ export class DiscoveryService {
           return `CAST(${q} AS NVARCHAR(250))`;
         case 'databricks':
           return `CAST(${q} AS STRING)`;
+        case 's3':
+        case 'azure_blob':
+          return `${q}::text`; // DuckDB supports PostgreSQL-style casts
         default:
           return `${q}::text`;
       }

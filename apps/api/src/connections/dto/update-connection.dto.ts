@@ -4,7 +4,7 @@ import { z } from 'zod';
 export const updateConnectionSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name must be 100 characters or less').optional(),
   description: z.string().max(500, 'Description must be 500 characters or less').optional(),
-  dbType: z.enum(['postgresql', 'mysql', 'sqlserver', 'databricks', 'snowflake'], {
+  dbType: z.enum(['postgresql', 'mysql', 'sqlserver', 'databricks', 'snowflake', 's3', 'azure_blob'], {
     errorMap: () => ({ message: 'Invalid database type' }),
   }).optional(),
   host: z.string().min(1, 'Host is required').max(255, 'Host must be 255 characters or less').optional(),
