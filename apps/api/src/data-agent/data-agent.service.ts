@@ -3,21 +3,27 @@ import {
   Logger,
   NotFoundException,
   ConflictException,
+  GoneException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateChatDto } from './dto/create-chat.dto';
 import { UpdateChatDto } from './dto/update-chat.dto';
 import { ChatQueryDto } from './dto/chat-query.dto';
 import { CreatePreferenceDto } from './dto/create-preference.dto';
 import { UpdatePreferenceDto } from './dto/update-preference.dto';
-import { DataChat, DataChatMessage, Prisma } from '@prisma/client';
+import { DataChat, DataChatMessage, DataChatShare, Prisma } from '@prisma/client';
 import { CollectedTrace } from './agent/types';
 
 @Injectable()
 export class DataAgentService {
   private readonly logger = new Logger(DataAgentService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+  ) {}
 
   /**
    * Create a new chat (validates ontology exists and is ready)
@@ -513,5 +519,216 @@ export class DataAgentService {
       where.ontologyId = ontologyId;
     }
     await this.prisma.dataAgentPreference.deleteMany({ where });
+  }
+
+  // ─── Chat Share CRUD ───
+
+  /**
+   * Build the public share URL from a token.
+   */
+  private buildShareUrl(shareToken: string): string {
+    const appUrl = this.configService.get<string>('APP_URL') || 'http://localhost:8319';
+    return `${appUrl}/share/${shareToken}`;
+  }
+
+  /**
+   * Format a DataChatShare record into a consistent share-response shape.
+   */
+  private formatShareResponse(share: DataChatShare) {
+    return {
+      id: share.id,
+      shareToken: share.shareToken,
+      shareUrl: this.buildShareUrl(share.shareToken),
+      expiresAt: share.expiresAt,
+      isActive: share.isActive,
+      viewCount: share.viewCount,
+      createdAt: share.createdAt,
+    };
+  }
+
+  /**
+   * Create a share link for a chat (idempotent — returns existing active share if one exists).
+   */
+  async createShare(chatId: string, userId: string, expiresInDays?: number) {
+    // Verify ownership
+    const chat = await this.prisma.dataChat.findFirst({
+      where: { id: chatId, ownerId: userId },
+    });
+    if (!chat) {
+      throw new NotFoundException('Chat not found');
+    }
+
+    // Return existing active share (idempotent)
+    const existing = await this.prisma.dataChatShare.findFirst({
+      where: { chatId, isActive: true },
+    });
+    if (existing) {
+      this.logger.log(`Returning existing share for chat ${chatId}`);
+      return this.formatShareResponse(existing);
+    }
+
+    // Generate a cryptographically-random token
+    const shareToken = randomBytes(32).toString('base64url');
+
+    // Calculate optional expiry
+    const expiresAt = expiresInDays
+      ? new Date(Date.now() + expiresInDays * 86_400_000)
+      : null;
+
+    const share = await this.prisma.dataChatShare.create({
+      data: {
+        chatId,
+        shareToken,
+        createdById: userId,
+        expiresAt,
+        isActive: true,
+      },
+    });
+
+    this.logger.log(`Share created for chat ${chatId} by user ${userId}`);
+    return this.formatShareResponse(share);
+  }
+
+  /**
+   * Return the active share for a chat, or null if none exists.
+   */
+  async getShareStatus(chatId: string, userId: string) {
+    // Verify ownership
+    const chat = await this.prisma.dataChat.findFirst({
+      where: { id: chatId, ownerId: userId },
+    });
+    if (!chat) {
+      throw new NotFoundException('Chat not found');
+    }
+
+    const share = await this.prisma.dataChatShare.findFirst({
+      where: { chatId, isActive: true },
+    });
+    if (!share) {
+      return null;
+    }
+
+    return this.formatShareResponse(share);
+  }
+
+  /**
+   * Revoke the active share for a chat.
+   */
+  async revokeShare(chatId: string, userId: string): Promise<void> {
+    // Verify ownership
+    const chat = await this.prisma.dataChat.findFirst({
+      where: { id: chatId, ownerId: userId },
+    });
+    if (!chat) {
+      throw new NotFoundException('Chat not found');
+    }
+
+    const share = await this.prisma.dataChatShare.findFirst({
+      where: { chatId, isActive: true },
+    });
+    if (!share) {
+      throw new NotFoundException('No active share found');
+    }
+
+    await this.prisma.dataChatShare.update({
+      where: { id: share.id },
+      data: { isActive: false },
+    });
+
+    this.logger.log(`Share revoked for chat ${chatId} by user ${userId}`);
+  }
+
+  /**
+   * Return sanitized chat data for a public share token (no auth required).
+   */
+  async getSharedChat(shareToken: string) {
+    const share = await this.prisma.dataChatShare.findFirst({
+      where: { shareToken },
+    });
+
+    if (!share) {
+      throw new NotFoundException('Share not found');
+    }
+
+    if (!share.isActive) {
+      throw new GoneException('This share has been revoked');
+    }
+
+    if (share.expiresAt && share.expiresAt < new Date()) {
+      throw new GoneException('This share has expired');
+    }
+
+    // Increment view count asynchronously (fire-and-forget, non-blocking)
+    this.prisma.dataChatShare
+      .update({ where: { id: share.id }, data: { viewCount: { increment: 1 } } })
+      .catch((err) => this.logger.warn(`Failed to increment view count for share ${share.id}`, err));
+
+    const chat = await this.prisma.dataChat.findUnique({
+      where: { id: share.chatId },
+      include: {
+        messages: { orderBy: { createdAt: 'asc' } },
+        ontology: { select: { name: true } },
+      },
+    });
+
+    if (!chat) {
+      throw new NotFoundException('Chat not found');
+    }
+
+    return {
+      id: chat.id,
+      name: chat.name,
+      ontologyName: chat.ontology?.name ?? null,
+      createdAt: chat.createdAt,
+      share: {
+        expiresAt: share.expiresAt,
+        viewCount: share.viewCount + 1,
+      },
+      messages: chat.messages.map((m) => this.sanitizeMessageForShare(m)),
+    };
+  }
+
+  /**
+   * Strip sensitive fields from a message before returning it in a public share response.
+   * Keeps: role, content, status, createdAt, and a safe subset of metadata.
+   */
+  private sanitizeMessageForShare(message: DataChatMessage) {
+    const raw = (message.metadata ?? {}) as Record<string, any>;
+
+    // Strip yaml from relevantDatasets items in joinPlan (keep only name + description)
+    let joinPlan: any = undefined;
+    if (raw.joinPlan) {
+      joinPlan = { ...raw.joinPlan };
+      if (Array.isArray(joinPlan.relevantDatasets)) {
+        joinPlan = {
+          ...joinPlan,
+          relevantDatasets: joinPlan.relevantDatasets.map(
+            ({ name, description }: { name?: string; description?: string; yaml?: string; [key: string]: any }) => ({
+              name,
+              description,
+            }),
+          ),
+        };
+      }
+    }
+
+    const safeMetadata: Record<string, any> = {};
+
+    if (raw.plan !== undefined) safeMetadata.plan = raw.plan;
+    if (joinPlan !== undefined) safeMetadata.joinPlan = joinPlan;
+    if (raw.stepResults !== undefined) safeMetadata.stepResults = raw.stepResults;
+    if (raw.verificationReport !== undefined) safeMetadata.verificationReport = raw.verificationReport;
+    if (raw.dataLineage !== undefined) safeMetadata.dataLineage = raw.dataLineage;
+    if (raw.cannotAnswer !== undefined) safeMetadata.cannotAnswer = raw.cannotAnswer;
+    if (raw.durationMs !== undefined) safeMetadata.durationMs = raw.durationMs;
+    if (raw.revisionsUsed !== undefined) safeMetadata.revisionsUsed = raw.revisionsUsed;
+
+    return {
+      role: message.role,
+      content: message.content,
+      status: message.status,
+      createdAt: message.createdAt,
+      metadata: safeMetadata,
+    };
   }
 }
