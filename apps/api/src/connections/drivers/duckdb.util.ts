@@ -1,4 +1,8 @@
-import duckdb from 'duckdb';
+// duckdb is intentionally NOT imported at the top level.
+// The native module may not be present in all environments (e.g. the Docker
+// container when the feature is unused).  It is loaded lazily inside
+// DuckDBSession.create() so that the rest of the API starts normally even
+// when duckdb is not installed.
 
 // ==========================================
 // Credential interfaces
@@ -82,6 +86,23 @@ export function mapDuckDBType(duckdbType: string): string {
 // ==========================================
 
 /**
+ * Lazily loads the duckdb native module.
+ * Throws a descriptive error if the module is not installed.
+ */
+function loadDuckDB(): typeof import('duckdb') {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('duckdb') as typeof import('duckdb');
+  } catch (err) {
+    throw new Error(
+      'The duckdb native module is not available in this environment. ' +
+        'Install the optional "duckdb" package to use DuckDB storage connections.',
+      { cause: err },
+    );
+  }
+}
+
+/**
  * Manages a single ephemeral DuckDB in-memory session.
  *
  * Design: one session per query operation.  DuckDB starts in milliseconds so
@@ -89,10 +110,15 @@ export function mapDuckDBType(duckdbType: string): string {
  * factory, used, then closed in a `finally` block.
  */
 export class DuckDBSession {
-  private readonly db: duckdb.Database;
-  private readonly conn: duckdb.Connection;
+  // Typed as `any` because duckdb is not imported at the top level.
+  // These are private implementation details; callers never see these types.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private readonly db: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private readonly conn: any;
 
-  private constructor(db: duckdb.Database, conn: duckdb.Connection) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private constructor(db: any, conn: any) {
     this.db = db;
     this.conn = conn;
   }
@@ -106,6 +132,7 @@ export class DuckDBSession {
    * extension, and configures credentials.
    */
   static async create(options: DuckDBSessionOptions): Promise<DuckDBSession> {
+    const duckdb = loadDuckDB();
     const db = new duckdb.Database(':memory:');
     const conn = db.connect();
     const session = new DuckDBSession(db, conn);
@@ -222,7 +249,7 @@ export class DuckDBSession {
    */
   async exec(sql: string): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      this.conn.exec(sql, (err) => {
+      this.conn.exec(sql, (err: Error | null) => {
         if (err) reject(err);
         else resolve();
       });
@@ -232,9 +259,11 @@ export class DuckDBSession {
   /**
    * Wraps duckdb.Connection.all() in a Promise.
    */
-  private runAll(sql: string): Promise<duckdb.TableData> {
-    return new Promise<duckdb.TableData>((resolve, reject) => {
-      this.conn.all(sql, (err, result) => {
+  // duckdb.TableData is Record<string, unknown>[] — use that shape directly
+  // so we avoid a top-level import of the native module.
+  private runAll(sql: string): Promise<Record<string, unknown>[]> {
+    return new Promise<Record<string, unknown>[]>((resolve, reject) => {
+      this.conn.all(sql, (err: Error | null, result: Record<string, unknown>[]) => {
         if (err) reject(err);
         else resolve(result);
       });
