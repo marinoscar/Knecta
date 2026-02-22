@@ -202,7 +202,9 @@ export function ChatView({
             flex: 1,
             minHeight: 0,
             overflowY: 'auto',
-            p: 3,
+            px: 3,
+            pt: 3,
+            pb: '100px',
             bgcolor: theme.palette.mode === 'dark' ? 'background.default' : 'grey.50',
           }}
         >
@@ -303,7 +305,7 @@ export function ChatView({
             size="small"
             sx={{
               position: 'absolute',
-              bottom: 16,
+              bottom: 100,
               left: '50%',
               transform: 'translateX(-50%)',
               zIndex: 2,

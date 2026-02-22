@@ -264,7 +264,7 @@ export default function DataAgentPage() {
       />
 
       {/* Main content area */}
-      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
         {/* Error alerts */}
         {chatsError && (
           <Alert severity="error" sx={{ m: 2 }}>
@@ -299,19 +299,29 @@ export default function DataAgentPage() {
               sidebarOpen={sidebarOpen}
               onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
             />
-            {/* Preference suggestion banner sits above the chat input */}
-            {preferenceSuggestions.length > 0 && (
-              <PreferenceSuggestionBanner
-                suggestions={preferenceSuggestions}
-                onAccept={handleAcceptSuggestion}
-                onDismiss={clearPreferenceSuggestions}
+            {/* Input area - pinned to bottom, always visible */}
+            <Box
+              sx={{
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                zIndex: 10,
+              }}
+            >
+              {preferenceSuggestions.length > 0 && (
+                <PreferenceSuggestionBanner
+                  suggestions={preferenceSuggestions}
+                  onAccept={handleAcceptSuggestion}
+                  onDismiss={clearPreferenceSuggestions}
+                />
+              )}
+              <ChatInput
+                onSend={sendMessage}
+                isStreaming={isStreaming}
+                disabled={chatLoading || !chat}
               />
-            )}
-            <ChatInput
-              onSend={sendMessage}
-              isStreaming={isStreaming}
-              disabled={chatLoading || !chat}
-            />
+            </Box>
           </>
         )}
       </Box>
