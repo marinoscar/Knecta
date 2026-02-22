@@ -26,6 +26,7 @@ const OntologyDetailPage = lazy(() => import('./pages/OntologyDetailPage'));
 const DataAgentPage = lazy(() => import('./pages/DataAgentPage'));
 const SystemSettingsPage = lazy(() => import('./pages/SystemSettingsPage'));
 const UserManagementPage = lazy(() => import('./pages/UserManagementPage'));
+const SharedChatPage = lazy(() => import('./pages/SharedChatPage'));
 
 // Test login page (development only)
 const TestLoginPage = import.meta.env.PROD
@@ -44,6 +45,7 @@ function AppRoutes() {
             {/* Public routes */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/auth/callback" element={<AuthCallbackPage />} />
+            <Route path="/share/:shareToken" element={<SharedChatPage />} />
 
             {/* Test login (development only) */}
             {!import.meta.env.PROD && TestLoginPage && (
