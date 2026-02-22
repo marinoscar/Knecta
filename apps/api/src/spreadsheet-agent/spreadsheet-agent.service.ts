@@ -196,6 +196,257 @@ export class SpreadsheetAgentService {
   }
 
   // ---------------------------------------------------------------------------
+  // Files
+  // ---------------------------------------------------------------------------
+
+  /**
+   * List all files for a project (no pagination — max 50 files per project).
+   */
+  async listFiles(projectId: string) {
+    await this.requireProject(projectId);
+
+    const items = await this.prisma.spreadsheetFile.findMany({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      items: items.map((f) => this.mapFile(f)),
+      total: items.length,
+    };
+  }
+
+  /**
+   * Get a single file, verifying it belongs to the given project.
+   */
+  async getFile(projectId: string, fileId: string) {
+    const file = await this.prisma.spreadsheetFile.findUnique({
+      where: { id: fileId },
+    });
+
+    if (!file || file.projectId !== projectId) {
+      throw new NotFoundException(
+        `File ${fileId} not found in project ${projectId}`,
+      );
+    }
+
+    return this.mapFile(file);
+  }
+
+  /**
+   * Delete a file from a project.
+   * Blocked when an active run is in progress for the project.
+   */
+  async deleteFile(projectId: string, fileId: string, userId: string) {
+    const file = await this.prisma.spreadsheetFile.findUnique({
+      where: { id: fileId },
+    });
+
+    if (!file || file.projectId !== projectId) {
+      throw new NotFoundException(
+        `File ${fileId} not found in project ${projectId}`,
+      );
+    }
+
+    const activeRun = await this.prisma.spreadsheetRun.findFirst({
+      where: {
+        projectId,
+        status: { in: this.ACTIVE_RUN_STATUSES },
+      },
+      select: { id: true },
+    });
+
+    if (activeRun) {
+      throw new ConflictException(
+        'Cannot delete a file while a run is active for this project',
+      );
+    }
+
+    // CASCADE removes associated tables
+    await this.prisma.spreadsheetFile.delete({ where: { id: fileId } });
+
+    // Decrement file count on the project
+    await this.prisma.spreadsheetProject.update({
+      where: { id: projectId },
+      data: { fileCount: { decrement: 1 } },
+    });
+
+    await this.createAuditEvent(
+      userId,
+      'spreadsheet_files:delete',
+      'spreadsheet_file',
+      fileId,
+      { projectId, fileName: file.fileName },
+    );
+
+    this.logger.log(
+      `File ${fileId} deleted from project ${projectId} by user ${userId}`,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tables
+  // ---------------------------------------------------------------------------
+
+  /**
+   * List tables for a project with pagination and optional filters.
+   */
+  async listTables(projectId: string, query: QueryTableDto) {
+    await this.requireProject(projectId);
+
+    const { page, pageSize, fileId, status } = query;
+    const skip = (page - 1) * pageSize;
+
+    const where: any = { projectId };
+    if (fileId) where.fileId = fileId;
+    if (status) where.status = status;
+
+    const [items, total] = await Promise.all([
+      this.prisma.spreadsheetTable.findMany({
+        where,
+        skip,
+        take: pageSize,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          file: {
+            select: { fileName: true },
+          },
+        },
+      }),
+      this.prisma.spreadsheetTable.count({ where }),
+    ]);
+
+    return {
+      items: items.map((t) => this.mapTable(t)),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  /**
+   * Get a single table, verifying it belongs to the given project.
+   */
+  async getTable(projectId: string, tableId: string) {
+    const table = await this.prisma.spreadsheetTable.findUnique({
+      where: { id: tableId },
+      include: {
+        file: {
+          select: { fileName: true },
+        },
+      },
+    });
+
+    if (!table || table.projectId !== projectId) {
+      throw new NotFoundException(
+        `Table ${tableId} not found in project ${projectId}`,
+      );
+    }
+
+    return this.mapTable(table);
+  }
+
+  /**
+   * Return a preview of rows from a ready table.
+   * TODO: Implement DuckDB-based Parquet preview in Phase 4.
+   */
+  async getTablePreview(projectId: string, tableId: string, limit: number) {
+    const table = await this.prisma.spreadsheetTable.findUnique({
+      where: { id: tableId },
+    });
+
+    if (!table || table.projectId !== projectId) {
+      throw new NotFoundException(
+        `Table ${tableId} not found in project ${projectId}`,
+      );
+    }
+
+    if (table.status !== 'ready') {
+      throw new ConflictException(
+        `Table ${tableId} is not ready for preview (status: ${table.status})`,
+      );
+    }
+
+    // TODO: Implement DuckDB-based Parquet preview in Phase 4
+    return {
+      columns: [] as string[],
+      rows: [] as Record<string, unknown>[],
+      rowCount: 0,
+      totalRows: Number(table.rowCount),
+    };
+  }
+
+  /**
+   * Return a signed download URL for a ready table's Parquet output.
+   * TODO: Implement signed URL generation via StorageProvider.
+   */
+  async getTableDownloadUrl(projectId: string, tableId: string) {
+    const table = await this.prisma.spreadsheetTable.findUnique({
+      where: { id: tableId },
+    });
+
+    if (!table || table.projectId !== projectId) {
+      throw new NotFoundException(
+        `Table ${tableId} not found in project ${projectId}`,
+      );
+    }
+
+    if (table.status !== 'ready') {
+      throw new ConflictException(
+        `Table ${tableId} is not ready for download (status: ${table.status})`,
+      );
+    }
+
+    // TODO: Implement signed URL generation via StorageProvider
+    return {
+      downloadUrl: '',
+      expiresAt: '',
+      fileName: `${table.tableName}.parquet`,
+      sizeBytes: Number(table.outputSizeBytes),
+    };
+  }
+
+  /**
+   * Delete a table record and update project aggregate stats.
+   */
+  async deleteTable(projectId: string, tableId: string, userId: string) {
+    const table = await this.prisma.spreadsheetTable.findUnique({
+      where: { id: tableId },
+    });
+
+    if (!table || table.projectId !== projectId) {
+      throw new NotFoundException(
+        `Table ${tableId} not found in project ${projectId}`,
+      );
+    }
+
+    await this.prisma.spreadsheetTable.delete({ where: { id: tableId } });
+
+    // Decrement aggregate stats on the project
+    await this.prisma.spreadsheetProject.update({
+      where: { id: projectId },
+      data: {
+        tableCount: { decrement: 1 },
+        totalRows: { decrement: table.rowCount },
+        totalSizeBytes: { decrement: table.outputSizeBytes },
+      },
+    });
+
+    await this.createAuditEvent(
+      userId,
+      'spreadsheet_tables:delete',
+      'spreadsheet_table',
+      tableId,
+      { projectId, tableName: table.tableName },
+    );
+
+    this.logger.log(
+      `Table ${tableId} deleted from project ${projectId} by user ${userId}`,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
 
