@@ -502,6 +502,81 @@ export interface DataChatsResponse {
   totalPages: number;
 }
 
+// ==========================================
+// Chat Sharing
+// ==========================================
+
+export interface ChatShareInfo {
+  id: string;
+  shareToken: string;
+  shareUrl: string;
+  expiresAt: string | null;
+  isActive: boolean;
+  viewCount: number;
+  createdAt: string;
+}
+
+export interface SharedChatData {
+  chatName: string;
+  ontologyName: string;
+  messages: SharedChatMessage[];
+  sharedAt: string;
+}
+
+export interface SharedChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  status: string;
+  createdAt: string;
+  metadata?: {
+    plan?: {
+      complexity?: string;
+      intent?: string;
+      steps?: Array<{ id: number; description: string; strategy: string }>;
+    };
+    stepResults?: Array<{
+      stepId: number;
+      description?: string;
+      strategy?: string;
+      sqlResult?: { rowCount: number; columns: string[]; data: string };
+      pythonResult?: { stdout: string; charts?: string[] };
+      chartSpec?: unknown;
+      error?: string;
+    }>;
+    verificationReport?: {
+      passed: boolean;
+      checks: Array<{ name: string; passed: boolean; message: string }>;
+    };
+    dataLineage?: {
+      datasets: string[];
+      joins: Array<{ from: string; to: string; on: string }>;
+      grain: string;
+      rowCount: number | null;
+    };
+    joinPlan?: {
+      relevantDatasets: Array<{ name: string; description: string }>;
+      joinPaths: Array<{
+        datasets: string[];
+        edges: Array<{
+          fromDataset: string;
+          toDataset: string;
+          fromColumns: string[];
+          toColumns: string[];
+          relationshipName: string;
+        }>;
+      }>;
+      notes: string;
+    };
+    cannotAnswer?: {
+      reason: string;
+      missingDatasets?: string[];
+      availableDatasets?: string[];
+    };
+    durationMs?: number;
+    revisionsUsed?: number;
+  };
+}
+
 export interface DataAgentStreamEvent {
   type:
     | 'message_start'
