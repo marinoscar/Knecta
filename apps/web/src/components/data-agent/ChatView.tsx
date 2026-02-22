@@ -194,12 +194,13 @@ export function ChatView({
       </Box>
 
       {/* Messages */}
-      <Box sx={{ position: 'relative', flex: 1, minHeight: 0 }}>
+      <Box sx={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Box
           ref={containerRef}
           onScroll={handleScroll}
           sx={{
-            height: '100%',
+            flex: 1,
+            minHeight: 0,
             overflowY: 'auto',
             p: 3,
             bgcolor: theme.palette.mode === 'dark' ? 'background.default' : 'grey.50',
