@@ -9,6 +9,7 @@ import { NewChatDialog } from '../components/data-agent/NewChatDialog';
 import { AgentInsightsPanel } from '../components/data-agent/AgentInsightsPanel';
 import { PreferencesDialog } from '../components/data-agent/PreferencesDialog';
 import { PreferenceSuggestionBanner } from '../components/data-agent/PreferenceSuggestionBanner';
+import { ShareDialog } from '../components/data-agent/ShareDialog';
 import { useDataAgent } from '../hooks/useDataAgent';
 import { useDataChat } from '../hooks/useDataChat';
 import { useAgentPreferences } from '../hooks/useAgentPreferences';
@@ -22,6 +23,7 @@ export default function DataAgentPage() {
   const [insightsPanelOpen, setInsightsPanelOpen] = useState(false);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [preferencesDialogOpen, setPreferencesDialogOpen] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [autoSavedSnackbarOpen, setAutoSavedSnackbarOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const theme = useTheme();
@@ -296,6 +298,7 @@ export default function DataAgentPage() {
               onClarificationAnswer={handleClarificationAnswer}
               onProceedWithAssumptions={handleProceedWithAssumptions}
               onOpenPreferences={() => setPreferencesDialogOpen(true)}
+              onShare={() => setShareDialogOpen(true)}
               sidebarOpen={sidebarOpen}
               onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
             />
@@ -389,6 +392,16 @@ export default function DataAgentPage() {
         onClearAll={clearPreferences}
         isLoading={prefsLoading}
       />
+
+      {/* Share Dialog */}
+      {chat && (
+        <ShareDialog
+          open={shareDialogOpen}
+          onClose={() => setShareDialogOpen(false)}
+          chatId={chat.id}
+          chatName={chat.name}
+        />
+      )}
 
       {/* Auto-saved preferences snackbar */}
       <Snackbar

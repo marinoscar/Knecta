@@ -18,6 +18,7 @@ import {
   Delete as DeleteIcon,
   Edit as EditIcon,
   Analytics as AnalyticsIcon,
+  Share as ShareIcon,
   Tune as TuneIcon,
   Menu as MenuIcon,
   ChevronLeft as ChevronLeftIcon,
@@ -39,6 +40,7 @@ interface ChatViewProps {
   onClarificationAnswer?: (originalQuestion: string, response: string) => void;
   onProceedWithAssumptions?: (originalQuestion: string, assumptions: string) => void;
   onOpenPreferences?: () => void;
+  onShare?: () => void;
   selectedMessageId?: string;
   onMessageSelect?: (messageId: string) => void;
   sidebarOpen: boolean;
@@ -57,6 +59,7 @@ export function ChatView({
   onClarificationAnswer,
   onProceedWithAssumptions,
   onOpenPreferences,
+  onShare,
   selectedMessageId,
   onMessageSelect,
   sidebarOpen,
@@ -187,6 +190,13 @@ export function ChatView({
           >
             <AnalyticsIcon />
           </IconButton>
+          {onShare && (
+            <Tooltip title="Share">
+              <IconButton onClick={onShare} size="small">
+                <ShareIcon />
+              </IconButton>
+            </Tooltip>
+          )}
           <IconButton onClick={() => setDeleteConfirmOpen(true)} color="error">
             <DeleteIcon />
           </IconButton>
