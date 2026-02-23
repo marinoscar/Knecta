@@ -772,3 +772,32 @@ export async function approveSpreadsheetPlan(
 ): Promise<SpreadsheetRun> {
   return api.post<SpreadsheetRun>(`/spreadsheet-agent/runs/${runId}/approve`, { modifications });
 }
+
+export async function listAllSpreadsheetRuns(opts?: {
+  page?: number;
+  pageSize?: number;
+  status?: string;
+}): Promise<{ runs: SpreadsheetRun[]; total: number; page: number; pageSize: number }> {
+  const params = new URLSearchParams();
+  if (opts?.page) params.set('page', String(opts.page));
+  if (opts?.pageSize) params.set('pageSize', String(opts.pageSize));
+  if (opts?.status) params.set('status', opts.status);
+  const query = params.toString();
+  return api.get(`/spreadsheet-agent/runs${query ? `?${query}` : ''}`);
+}
+
+export async function listProjectSpreadsheetRuns(
+  projectId: string,
+  opts?: { page?: number; pageSize?: number; status?: string },
+): Promise<{ runs: SpreadsheetRun[]; total: number; page: number; pageSize: number }> {
+  const params = new URLSearchParams();
+  if (opts?.page) params.set('page', String(opts.page));
+  if (opts?.pageSize) params.set('pageSize', String(opts.pageSize));
+  if (opts?.status) params.set('status', opts.status);
+  const query = params.toString();
+  return api.get(`/spreadsheet-agent/projects/${projectId}/runs${query ? `?${query}` : ''}`);
+}
+
+export async function deleteSpreadsheetRun(runId: string): Promise<void> {
+  await api.delete<void>(`/spreadsheet-agent/runs/${runId}`);
+}
