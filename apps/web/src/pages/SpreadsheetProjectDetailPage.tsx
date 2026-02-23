@@ -195,6 +195,28 @@ export default function SpreadsheetProjectDetailPage() {
     }
   }, [runHook.run]);
 
+  // Ensure runs are loaded when project is in review_pending to auto-surface the plan
+  useEffect(() => {
+    if (project?.status === 'review_pending') {
+      fetchRuns();
+    }
+  }, [project?.status, fetchRuns]);
+
+  // Auto-surface extraction plan review on page load for review_pending projects
+  useEffect(() => {
+    if (
+      project?.status === 'review_pending' &&
+      !reviewPlan &&
+      runs.length > 0
+    ) {
+      const reviewRun = runs.find((r: SpreadsheetRun) => r.status === 'review_pending');
+      if (reviewRun?.extractionPlan) {
+        setReviewPlan(reviewRun.extractionPlan as SpreadsheetExtractionPlan);
+        setReviewRunId(reviewRun.id);
+      }
+    }
+  }, [project?.status, runs, reviewPlan]);
+
   const handleStartRun = async () => {
     if (!id) return;
     try {
@@ -366,7 +388,7 @@ export default function SpreadsheetProjectDetailPage() {
             label={STATUS_CONFIG[project.status]?.label || project.status}
             color={STATUS_CONFIG[project.status]?.color || 'default'}
           />
-          {canWrite && project.status !== 'processing' && (
+          {canWrite && project.status !== 'processing' && project.status !== 'review_pending' && (
             <Button variant="contained" startIcon={<RunIcon />} onClick={handleStartRun} disabled={runHook.isStreaming}>
               Start Run
             </Button>
