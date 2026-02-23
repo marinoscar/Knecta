@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -29,15 +29,19 @@ import {
   DialogContent,
   DialogContentText,
   DialogActions,
+  Tab,
+  Tabs,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Visibility as ViewIcon,
   Delete as DeleteIcon,
+  Replay as RetryIcon,
 } from '@mui/icons-material';
 import { useSpreadsheetProjects } from '../hooks/useSpreadsheetProjects';
 import { usePermissions } from '../hooks/usePermissions';
-import type { SpreadsheetProject, SpreadsheetProjectStatus } from '../types';
+import { listAllSpreadsheetRuns, deleteSpreadsheetRun } from '../services/api';
+import type { SpreadsheetProject, SpreadsheetProjectStatus, SpreadsheetRun, SpreadsheetRunStatus } from '../types';
 
 const STATUS_CONFIG: Record<
   SpreadsheetProjectStatus,
@@ -54,6 +58,32 @@ const STATUS_CONFIG: Record<
 const STATUS_OPTIONS: SpreadsheetProjectStatus[] = [
   'draft', 'processing', 'review_pending', 'ready', 'failed', 'partial',
 ];
+
+const RUN_STATUS_CONFIG: Record<
+  SpreadsheetRunStatus,
+  { label: string; color: 'default' | 'info' | 'warning' | 'success' | 'error' }
+> = {
+  pending: { label: 'Pending', color: 'default' },
+  ingesting: { label: 'Ingesting', color: 'info' },
+  analyzing: { label: 'Analyzing', color: 'info' },
+  designing: { label: 'Designing', color: 'info' },
+  review_pending: { label: 'Review Pending', color: 'warning' },
+  extracting: { label: 'Extracting', color: 'info' },
+  validating: { label: 'Validating', color: 'info' },
+  persisting: { label: 'Persisting', color: 'info' },
+  completed: { label: 'Completed', color: 'success' },
+  failed: { label: 'Failed', color: 'error' },
+  cancelled: { label: 'Cancelled', color: 'default' },
+};
+
+function formatDuration(startedAt: string | null, completedAt: string | null): string {
+  if (!startedAt || !completedAt) return '-';
+  const ms = new Date(completedAt).getTime() - new Date(startedAt).getTime();
+  const seconds = Math.floor(ms / 1000);
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
 
 export default function SpreadsheetAgentPage() {
   const navigate = useNavigate();
@@ -82,6 +112,16 @@ export default function SpreadsheetAgentPage() {
     severity: 'success' | 'error';
   }>({ open: false, message: '', severity: 'success' });
 
+  const [activeTab, setActiveTab] = useState(0);
+  const [runs, setRuns] = useState<SpreadsheetRun[]>([]);
+  const [runsTotal, setRunsTotal] = useState(0);
+  const [runsPage, setRunsPage] = useState(1);
+  const [runsPageSize, setRunsPageSize] = useState(20);
+  const [runsLoading, setRunsLoading] = useState(false);
+  const [runsStatusFilter, setRunsStatusFilter] = useState<string>('');
+  const [runToDelete, setRunToDelete] = useState<SpreadsheetRun | null>(null);
+  const [deleteRunDialogOpen, setDeleteRunDialogOpen] = useState(false);
+
   useEffect(() => {
     fetchProjects({
       page,
@@ -90,6 +130,31 @@ export default function SpreadsheetAgentPage() {
       status: statusFilter || undefined,
     });
   }, [page, pageSize, search, statusFilter, fetchProjects]);
+
+  const fetchRunsData = useCallback(async () => {
+    setRunsLoading(true);
+    try {
+      const result = await listAllSpreadsheetRuns({
+        page: runsPage,
+        pageSize: runsPageSize,
+        status: runsStatusFilter || undefined,
+      });
+      setRuns(result.runs);
+      setRunsTotal(result.total);
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        message: err instanceof Error ? err.message : 'Failed to fetch runs',
+        severity: 'error',
+      });
+    } finally {
+      setRunsLoading(false);
+    }
+  }, [runsPage, runsPageSize, runsStatusFilter]);
+
+  useEffect(() => {
+    if (activeTab === 1) fetchRunsData();
+  }, [activeTab, fetchRunsData]);
 
   const handlePageChange = (_: unknown, newPage: number) => {
     fetchProjects({
@@ -132,6 +197,33 @@ export default function SpreadsheetAgentPage() {
     }
   };
 
+  const handleRetryRun = (run: SpreadsheetRun) => {
+    navigate(`/spreadsheets/${run.projectId}`);
+  };
+
+  const handleDeleteRunClick = (run: SpreadsheetRun) => {
+    setRunToDelete(run);
+    setDeleteRunDialogOpen(true);
+  };
+
+  const handleDeleteRunConfirm = async () => {
+    if (!runToDelete) return;
+    try {
+      await deleteSpreadsheetRun(runToDelete.id);
+      setSnackbar({ open: true, message: 'Run deleted successfully', severity: 'success' });
+      fetchRunsData();
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        message: err instanceof Error ? err.message : 'Failed to delete run',
+        severity: 'error',
+      });
+    } finally {
+      setDeleteRunDialogOpen(false);
+      setRunToDelete(null);
+    }
+  };
+
   const formatDate = (dateString: string) => new Date(dateString).toLocaleString();
 
   const formatRows = (rows: number) => rows.toLocaleString();
@@ -148,149 +240,291 @@ export default function SpreadsheetAgentPage() {
           </Typography>
         </Box>
 
-        <Paper>
-          <Box sx={{ p: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
-            <TextField
-              label="Search"
-              variant="outlined"
-              size="small"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name or description"
-              sx={{ minWidth: 250 }}
-            />
-            <FormControl size="small" sx={{ minWidth: 150 }}>
-              <InputLabel>Status</InputLabel>
-              <Select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                label="Status"
-              >
-                <MenuItem value="">All</MenuItem>
-                {STATUS_OPTIONS.map((status) => (
-                  <MenuItem key={status} value={status}>
-                    {STATUS_CONFIG[status].label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <Box sx={{ flexGrow: 1 }} />
-            {canWrite && (
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => navigate('/spreadsheets/new')}
-              >
-                New Project
-              </Button>
+        <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2 }}>
+          <Tab label="Projects" />
+          <Tab label="Runs" />
+        </Tabs>
+
+        {activeTab === 0 && (
+          <Paper>
+            <Box sx={{ p: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
+              <TextField
+                label="Search"
+                variant="outlined"
+                size="small"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name or description"
+                sx={{ minWidth: 250 }}
+              />
+              <FormControl size="small" sx={{ minWidth: 150 }}>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  label="Status"
+                >
+                  <MenuItem value="">All</MenuItem>
+                  {STATUS_OPTIONS.map((status) => (
+                    <MenuItem key={status} value={status}>
+                      {STATUS_CONFIG[status].label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <Box sx={{ flexGrow: 1 }} />
+              {canWrite && (
+                <Button
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                  onClick={() => navigate('/spreadsheets/new')}
+                >
+                  New Project
+                </Button>
+              )}
+            </Box>
+
+            {error && (
+              <Alert severity="error" sx={{ mx: 2, mb: 2 }}>
+                {error}
+              </Alert>
             )}
-          </Box>
 
-          {error && (
-            <Alert severity="error" sx={{ mx: 2, mb: 2 }}>
-              {error}
-            </Alert>
-          )}
-
-          {isLoading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-              <CircularProgress />
-            </Box>
-          ) : projects.length === 0 ? (
-            <Box sx={{ p: 4, textAlign: 'center' }}>
-              <Typography color="text.secondary">
-                {search || statusFilter
-                  ? 'No projects found matching your filters'
-                  : 'No spreadsheet projects yet. Create one to get started!'}
-              </Typography>
-            </Box>
-          ) : (
-            <>
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Name</TableCell>
-                      <TableCell>Status</TableCell>
-                      <TableCell align="right">Files</TableCell>
-                      <TableCell align="right">Tables</TableCell>
-                      <TableCell align="right">Rows</TableCell>
-                      <TableCell>Review Mode</TableCell>
-                      <TableCell>Updated</TableCell>
-                      <TableCell align="right">Actions</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {projects.map((project) => (
-                      <TableRow key={project.id} hover>
-                        <TableCell>
-                          <Box>
-                            <Typography variant="body2">{project.name}</Typography>
-                            {project.description && (
-                              <Typography variant="caption" color="text.secondary">
-                                {project.description}
-                              </Typography>
-                            )}
-                          </Box>
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={STATUS_CONFIG[project.status]?.label || project.status}
-                            color={STATUS_CONFIG[project.status]?.color || 'default'}
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell align="right">{project.fileCount}</TableCell>
-                        <TableCell align="right">{project.tableCount}</TableCell>
-                        <TableCell align="right">{formatRows(project.totalRows)}</TableCell>
-                        <TableCell>
-                          <Chip
-                            label={project.reviewMode === 'review' ? 'Manual Review' : 'Auto'}
-                            size="small"
-                            variant="outlined"
-                          />
-                        </TableCell>
-                        <TableCell>{formatDate(project.updatedAt)}</TableCell>
-                        <TableCell align="right">
-                          <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
-                            <Tooltip title="View project">
-                              <IconButton
-                                size="small"
-                                onClick={() => navigate(`/spreadsheets/${project.id}`)}
-                              >
-                                <ViewIcon />
-                              </IconButton>
-                            </Tooltip>
-                            {canDelete && (
-                              <Tooltip title="Delete project">
+            {isLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                <CircularProgress />
+              </Box>
+            ) : projects.length === 0 ? (
+              <Box sx={{ p: 4, textAlign: 'center' }}>
+                <Typography color="text.secondary">
+                  {search || statusFilter
+                    ? 'No projects found matching your filters'
+                    : 'No spreadsheet projects yet. Create one to get started!'}
+                </Typography>
+              </Box>
+            ) : (
+              <>
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Name</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell align="right">Files</TableCell>
+                        <TableCell align="right">Tables</TableCell>
+                        <TableCell align="right">Rows</TableCell>
+                        <TableCell>Review Mode</TableCell>
+                        <TableCell>Updated</TableCell>
+                        <TableCell align="right">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {projects.map((project) => (
+                        <TableRow key={project.id} hover>
+                          <TableCell>
+                            <Box>
+                              <Typography variant="body2">{project.name}</Typography>
+                              {project.description && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {project.description}
+                                </Typography>
+                              )}
+                            </Box>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={STATUS_CONFIG[project.status]?.label || project.status}
+                              color={STATUS_CONFIG[project.status]?.color || 'default'}
+                              size="small"
+                            />
+                          </TableCell>
+                          <TableCell align="right">{project.fileCount}</TableCell>
+                          <TableCell align="right">{project.tableCount}</TableCell>
+                          <TableCell align="right">{formatRows(project.totalRows)}</TableCell>
+                          <TableCell>
+                            <Chip
+                              label={project.reviewMode === 'review' ? 'Manual Review' : 'Auto'}
+                              size="small"
+                              variant="outlined"
+                            />
+                          </TableCell>
+                          <TableCell>{formatDate(project.updatedAt)}</TableCell>
+                          <TableCell align="right">
+                            <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
+                              <Tooltip title="View project">
                                 <IconButton
                                   size="small"
-                                  color="error"
-                                  onClick={() => handleDeleteClick(project)}
+                                  onClick={() => navigate(`/spreadsheets/${project.id}`)}
                                 >
-                                  <DeleteIcon />
+                                  <ViewIcon />
                                 </IconButton>
                               </Tooltip>
-                            )}
-                          </Box>
-                        </TableCell>
+                              {canDelete && (
+                                <Tooltip title="Delete project">
+                                  <IconButton
+                                    size="small"
+                                    color="error"
+                                    onClick={() => handleDeleteClick(project)}
+                                  >
+                                    <DeleteIcon />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                            </Box>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+                <TablePagination
+                  component="div"
+                  count={total}
+                  page={page - 1}
+                  onPageChange={handlePageChange}
+                  rowsPerPage={pageSize}
+                  onRowsPerPageChange={handleRowsPerPageChange}
+                  rowsPerPageOptions={[10, 20, 50]}
+                />
+              </>
+            )}
+          </Paper>
+        )}
+
+        {activeTab === 1 && (
+          <Paper>
+            <Box sx={{ p: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
+              <FormControl size="small" sx={{ minWidth: 150 }}>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={runsStatusFilter}
+                  onChange={(e) => setRunsStatusFilter(e.target.value)}
+                  label="Status"
+                >
+                  <MenuItem value="">All</MenuItem>
+                  {Object.entries(RUN_STATUS_CONFIG).map(([key, config]) => (
+                    <MenuItem key={key} value={key}>
+                      {config.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+
+            {runsLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                <CircularProgress />
+              </Box>
+            ) : runs.length === 0 ? (
+              <Box sx={{ p: 4, textAlign: 'center' }}>
+                <Typography color="text.secondary">
+                  {runsStatusFilter ? 'No runs found matching your filter' : 'No runs found'}
+                </Typography>
+              </Box>
+            ) : (
+              <>
+                <TableContainer>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Project</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell>Tokens</TableCell>
+                        <TableCell>Duration</TableCell>
+                        <TableCell>Error</TableCell>
+                        <TableCell>Created</TableCell>
+                        <TableCell align="right">Actions</TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-              <TablePagination
-                component="div"
-                count={total}
-                page={page - 1}
-                onPageChange={handlePageChange}
-                rowsPerPage={pageSize}
-                onRowsPerPageChange={handleRowsPerPageChange}
-                rowsPerPageOptions={[10, 20, 50]}
-              />
-            </>
-          )}
-        </Paper>
+                    </TableHead>
+                    <TableBody>
+                      {runs.map((run) => (
+                        <TableRow key={run.id} hover>
+                          <TableCell>
+                            {run.project ? run.project.name : run.projectId}
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={RUN_STATUS_CONFIG[run.status]?.label || run.status}
+                              color={RUN_STATUS_CONFIG[run.status]?.color || 'default'}
+                              size="small"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            {run.tokensUsed
+                              ? run.tokensUsed.total.toLocaleString()
+                              : '0'}
+                          </TableCell>
+                          <TableCell>
+                            {formatDuration(run.startedAt, run.completedAt)}
+                          </TableCell>
+                          <TableCell>
+                            {run.errorMessage ? (
+                              <Tooltip title={run.errorMessage}>
+                                <Typography
+                                  variant="caption"
+                                  color="error"
+                                  noWrap
+                                  sx={{ maxWidth: 200, display: 'block' }}
+                                >
+                                  {run.errorMessage}
+                                </Typography>
+                              </Tooltip>
+                            ) : (
+                              '-'
+                            )}
+                          </TableCell>
+                          <TableCell>{formatDate(run.createdAt)}</TableCell>
+                          <TableCell align="right">
+                            <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
+                              <Tooltip title="View project">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => navigate(`/spreadsheets/${run.projectId}`)}
+                                >
+                                  <ViewIcon />
+                                </IconButton>
+                              </Tooltip>
+                              {canWrite && ['failed', 'cancelled'].includes(run.status) && (
+                                <Tooltip title="Retry">
+                                  <IconButton size="small" onClick={() => handleRetryRun(run)}>
+                                    <RetryIcon />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                              {canDelete && ['failed', 'cancelled'].includes(run.status) && (
+                                <Tooltip title="Delete run">
+                                  <IconButton
+                                    size="small"
+                                    color="error"
+                                    onClick={() => handleDeleteRunClick(run)}
+                                  >
+                                    <DeleteIcon />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                            </Box>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+                <TablePagination
+                  component="div"
+                  count={runsTotal}
+                  page={runsPage - 1}
+                  onPageChange={(_, newPage) => setRunsPage(newPage + 1)}
+                  rowsPerPage={runsPageSize}
+                  onRowsPerPageChange={(e) => {
+                    setRunsPageSize(parseInt(e.target.value, 10));
+                    setRunsPage(1);
+                  }}
+                  rowsPerPageOptions={[10, 20, 50]}
+                />
+              </>
+            )}
+          </Paper>
+        )}
       </Box>
 
       <Snackbar
@@ -332,6 +566,34 @@ export default function SpreadsheetAgentPage() {
             Cancel
           </Button>
           <Button onClick={handleDeleteConfirm} color="error" variant="contained">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={deleteRunDialogOpen}
+        onClose={() => {
+          setDeleteRunDialogOpen(false);
+          setRunToDelete(null);
+        }}
+      >
+        <DialogTitle>Delete Run</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete this run? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setDeleteRunDialogOpen(false);
+              setRunToDelete(null);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button onClick={handleDeleteRunConfirm} color="error" variant="contained">
             Delete
           </Button>
         </DialogActions>
