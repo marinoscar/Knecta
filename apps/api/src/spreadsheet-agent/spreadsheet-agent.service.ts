@@ -840,7 +840,6 @@ export class SpreadsheetAgentService {
       where: { id: runId, status: 'pending' },
       data: {
         status: 'ingesting',
-        startedAt: new Date(),
         updatedAt: new Date(),
       },
     });
@@ -849,9 +848,17 @@ export class SpreadsheetAgentService {
       // Also update the project status to 'processing'
       const run = await this.prisma.spreadsheetRun.findUnique({
         where: { id: runId },
-        select: { projectId: true },
+        select: { projectId: true, startedAt: true },
       });
       if (run) {
+        // Only set startedAt for first execution (not resume after approval)
+        if (!run.startedAt) {
+          await this.prisma.spreadsheetRun.update({
+            where: { id: runId },
+            data: { startedAt: new Date() },
+          });
+        }
+
         await this.prisma.spreadsheetProject
           .update({
             where: { id: run.projectId },
