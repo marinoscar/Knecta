@@ -16,7 +16,7 @@ interface UseSpreadsheetRunResult {
   tokensUsed: { prompt: number; completion: number; total: number };
   streamStartTime: number | null;
   fetchRun: (runId: string) => Promise<void>;
-  startStream: (runId: string) => void;
+  startStream: (runId: string, options?: { startedAt?: string | null }) => void;
   stopStream: () => void;
   cancelRun: (runId: string) => Promise<void>;
   approvePlan: (runId: string, modifications?: SpreadsheetPlanModification[]) => Promise<void>;
@@ -59,7 +59,7 @@ export function useSpreadsheetRun(opts?: UseSpreadsheetRunOptions): UseSpreadshe
   }, []);
 
   const startStream = useCallback(
-    (runId: string) => {
+    (runId: string, options?: { startedAt?: string | null }) => {
       // Abort any existing stream
       stopStream();
 
@@ -69,7 +69,12 @@ export function useSpreadsheetRun(opts?: UseSpreadsheetRunOptions): UseSpreadshe
       setEvents([]);
       setError(null);
       setTokensUsed({ prompt: 0, completion: 0, total: 0 });
-      setStreamStartTime(Date.now());
+      // Use the run's original startedAt if provided (resume case), otherwise use now
+      if (options?.startedAt) {
+        setStreamStartTime(new Date(options.startedAt).getTime());
+      } else {
+        setStreamStartTime(Date.now());
+      }
 
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
       const token = api.getAccessToken();

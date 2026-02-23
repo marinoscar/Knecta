@@ -331,7 +331,7 @@ export default function SpreadsheetProjectDetailPage() {
         message: 'Plan approved, run resuming...',
         severity: 'success',
       });
-      runHook.startStream(reviewRunId);
+      runHook.startStream(reviewRunId, { startedAt: runHook.run?.startedAt });
     } catch (err) {
       setSnackbar({
         open: true,
