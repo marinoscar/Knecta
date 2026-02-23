@@ -119,10 +119,9 @@ export function createPersistNode(deps: PersistNodeDeps) {
       logger.error(`Persist node failed: ${errorMessage}`);
       emit({ type: 'phase_complete', phase: 'persist' });
 
-      return {
-        currentPhase: 'persist',
-        error: `Persist failed: ${errorMessage}`,
-      };
+      // Throw so the error propagates to the agent service — a persist failure
+      // means 0 tables were saved and must be surfaced as a run failure.
+      throw new Error(`Persist failed: ${errorMessage}`);
     }
   };
 }
