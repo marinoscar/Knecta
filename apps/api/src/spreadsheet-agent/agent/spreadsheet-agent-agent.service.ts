@@ -195,7 +195,37 @@ export class SpreadsheetAgentAgentService {
       const result = await graph.invoke(initialState, { signal });
       const finalState = result as SpreadsheetAgentStateType;
 
-      // 9. Determine final status
+      // 9. Check for errors in the final state (defense-in-depth)
+      if (finalState.error) {
+        this.logger.error(`Agent completed with error for run ${runId}: ${finalState.error}`);
+
+        await this.spreadsheetAgentService.updateRunStatus(runId, 'failed', {
+          errorMessage: finalState.error,
+          completedAt: new Date(),
+          stats: {
+            tablesExtracted: finalState.extractionResults?.length ?? 0,
+            totalRows: 0,
+            totalSizeBytes: 0,
+            tokensUsed: finalState.tokensUsed,
+            revisionCycles: finalState.revisionCount,
+          },
+        });
+
+        // Also update project status to 'failed'
+        await this.prisma.spreadsheetProject
+          .update({
+            where: { id: run.projectId },
+            data: { status: 'failed' },
+          })
+          .catch((err: Error) =>
+            this.logger.error(`Failed to update project status: ${err.message}`),
+          );
+
+        onEvent({ type: 'run_error', message: finalState.error });
+        return;
+      }
+
+      // 10. Determine final status
       const isReviewPause =
         config.reviewMode === 'review' &&
         finalState.extractionPlan != null &&
@@ -267,6 +297,16 @@ export class SpreadsheetAgentAgentService {
         errorMessage,
         completedAt: new Date(),
       });
+
+      // Also update the project status to 'failed'
+      await this.prisma.spreadsheetProject
+        .update({
+          where: { id: run.projectId },
+          data: { status: 'failed' },
+        })
+        .catch((err: Error) =>
+          this.logger.error(`Failed to update project status to failed: ${err.message}`),
+        );
 
       onEvent({ type: 'run_error', message: errorMessage });
     }
