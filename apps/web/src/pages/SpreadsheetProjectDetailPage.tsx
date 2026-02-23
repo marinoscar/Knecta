@@ -70,8 +70,6 @@ export default function SpreadsheetProjectDetailPage() {
   const canWrite = hasPermission('spreadsheet_agent:write');
   const canDelete = hasPermission('spreadsheet_agent:delete');
 
-  const runHook = useSpreadsheetRun();
-
   const [project, setProject] = useState<SpreadsheetProject | null>(null);
   const [files, setFiles] = useState<SpreadsheetFile[]>([]);
   const [tables, setTables] = useState<SpreadsheetTable[]>([]);
@@ -168,6 +166,16 @@ export default function SpreadsheetProjectDetailPage() {
     }
   }, [id]);
 
+  // useSpreadsheetRun is declared after the fetch callbacks so the onStreamEnd
+  // closure can reference stable useCallback-wrapped functions.
+  const runHook = useSpreadsheetRun({
+    onStreamEnd: () => {
+      fetchProject();
+      fetchFiles();
+      fetchTables(tablesPage, tablesPageSize);
+    },
+  });
+
   useEffect(() => {
     fetchProject();
   }, [fetchProject]);
@@ -177,6 +185,15 @@ export default function SpreadsheetProjectDetailPage() {
     if (activeTab === 1) fetchTables(tablesPage, tablesPageSize);
     if (activeTab === 2) fetchRuns();
   }, [activeTab, fetchFiles, fetchTables, fetchRuns, tablesPage, tablesPageSize]);
+
+  // When the run transitions to review_pending and carries an extraction plan,
+  // surface the plan review UI automatically.
+  useEffect(() => {
+    if (runHook.run?.status === 'review_pending' && runHook.run?.extractionPlan) {
+      setReviewPlan(runHook.run.extractionPlan as SpreadsheetExtractionPlan);
+      setReviewRunId(runHook.run.id);
+    }
+  }, [runHook.run]);
 
   const handleStartRun = async () => {
     if (!id) return;
@@ -396,8 +413,8 @@ export default function SpreadsheetProjectDetailPage() {
           </Grid>
         </Grid>
 
-        {/* SSE streaming progress (if a run is active) */}
-        {runHook.isStreaming && (
+        {/* SSE streaming progress (while streaming or after stream ends with events) */}
+        {(runHook.isStreaming || runHook.events.length > 0) && (
           <Paper sx={{ p: 3, mb: 3 }}>
             <AgentProgressView
               events={runHook.events}

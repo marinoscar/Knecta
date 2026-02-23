@@ -844,6 +844,27 @@ export class SpreadsheetAgentService {
         updatedAt: new Date(),
       },
     });
+
+    if (result.count > 0) {
+      // Also update the project status to 'processing'
+      const run = await this.prisma.spreadsheetRun.findUnique({
+        where: { id: runId },
+        select: { projectId: true },
+      });
+      if (run) {
+        await this.prisma.spreadsheetProject
+          .update({
+            where: { id: run.projectId },
+            data: { status: 'processing' },
+          })
+          .catch((err: Error) => {
+            this.logger.error(
+              `Failed to update project status to processing: ${err.message}`,
+            );
+          });
+      }
+    }
+
     return result.count > 0;
   }
 
