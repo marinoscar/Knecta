@@ -136,7 +136,7 @@ export function AgentProgressView({ events, progress, isStreaming, tokensUsed, s
       case 'table_error':
         return `Table error: ${event.tableName} - ${event.error || 'Unknown error'}`;
       case 'sheet_analysis':
-        return `Sheet analyzed: ${event.message || ''}`;
+        return event.message || `Sheet: ${event.sheetName || ''}`;
       case 'validation_result':
         return `Validation: ${event.message || 'completed'}`;
       case 'text':
@@ -217,9 +217,9 @@ export function AgentProgressView({ events, progress, isStreaming, tokensUsed, s
             {recentEvents.map((event, index) => (
               <ListItem key={index}>
                 <ListItemIcon sx={{ minWidth: 32 }}>
-                  {event.type.includes('error') ? (
+                  {event.type.includes('error') || event.status === 'error' ? (
                     <ErrorIcon color="error" fontSize="small" />
-                  ) : event.type.includes('complete') ? (
+                  ) : event.type.includes('complete') || event.status === 'analyzed' ? (
                     <CheckIcon color="success" fontSize="small" />
                   ) : (
                     <ProcessingIcon color="primary" fontSize="small" />

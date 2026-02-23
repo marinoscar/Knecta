@@ -234,6 +234,8 @@ export default function NewSpreadsheetProjectPage() {
                 events={runHook.events}
                 progress={runHook.progress}
                 isStreaming={runHook.isStreaming}
+                tokensUsed={runHook.tokensUsed}
+                startTime={runHook.streamStartTime}
               />
               {runHook.error && (
                 <Alert severity="error" sx={{ mt: 2 }}>

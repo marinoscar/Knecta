@@ -132,27 +132,28 @@ async function processSheetTasksWithConcurrency(
     }
   };
 
-  const settledResults = await Promise.allSettled(
-    tasks.map(
-      (task) =>
-        new Promise<SheetAnalysis>((resolve, reject) => {
-          const taskFn = async () => {
-            try {
-              const analysis = await analyzeSheet(task, llm, emit);
-              resolve(analysis);
-            } catch (err) {
-              reject(err);
-            } finally {
-              activeCount--;
-              runNext();
-            }
-          };
-          queue.push(taskFn);
-        }),
-    ),
+  const promises = tasks.map(
+    (task) =>
+      new Promise<SheetAnalysis>((resolve, reject) => {
+        const taskFn = async () => {
+          try {
+            const analysis = await analyzeSheet(task, llm, emit);
+            resolve(analysis);
+          } catch (err) {
+            reject(err);
+          } finally {
+            activeCount--;
+            runNext();
+          }
+        };
+        queue.push(taskFn);
+      }),
   );
 
+  // Kick off initial batch BEFORE awaiting — otherwise nothing drains the queue.
   runNext();
+
+  const settledResults = await Promise.allSettled(promises);
 
   for (const result of settledResults) {
     if (result.status === 'fulfilled') {
@@ -171,6 +172,15 @@ async function analyzeSheet(
   const { fileId, fileName, sheet } = task;
 
   try {
+    emit({
+      type: 'sheet_analysis',
+      fileId,
+      fileName,
+      sheetName: sheet.name,
+      status: 'analyzing',
+      message: `Analyzing sheet "${sheet.name}" in "${fileName}"`,
+    });
+
     const prompt = buildAnalyzerPrompt(fileName, sheet);
 
     // withStructuredOutput has multiple overloads; use unknown cast to stay
@@ -184,9 +194,11 @@ async function analyzeSheet(
     emit({
       type: 'sheet_analysis',
       fileId,
+      fileName,
       sheetName: sheet.name,
       tablesFound: parsed.logicalTables.length,
       status: 'analyzed',
+      message: `Finished analyzing sheet "${sheet.name}" in "${fileName}" — found ${parsed.logicalTables.length} table(s)`,
     });
 
     return {
