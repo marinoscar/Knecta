@@ -370,8 +370,11 @@ cd apps/api && npm run prisma:migrate
 - `GET /api/spreadsheet-agent/projects/:id/tables/:tableId/preview` - Preview table data
 - `GET /api/spreadsheet-agent/projects/:id/tables/:tableId/download` - Get download URL
 - `DELETE /api/spreadsheet-agent/projects/:id/tables/:tableId` - Delete table
+- `GET /api/spreadsheet-agent/projects/:id/runs` - List project runs (paginated)
+- `GET /api/spreadsheet-agent/runs` - List all runs (paginated)
 - `POST /api/spreadsheet-agent/runs` - Create agent run
 - `GET /api/spreadsheet-agent/runs/:runId` - Get run status
+- `DELETE /api/spreadsheet-agent/runs/:runId` - Delete run (failed/cancelled only)
 - `POST /api/spreadsheet-agent/runs/:runId/cancel` - Cancel run
 - `POST /api/spreadsheet-agent/runs/:runId/approve` - Approve extraction plan
 - `POST /api/spreadsheet-agent/runs/:runId/stream` - SSE stream (run execution)
