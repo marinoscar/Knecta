@@ -15,7 +15,7 @@ const extractionPlanColumnSchema = z.object({
   outputName: z.string(),
   outputType: z
     .string()
-    .describe('DuckDB type: INTEGER, VARCHAR, DATE, DOUBLE, BOOLEAN, TIMESTAMP, JSON'),
+    .describe('Column type: INTEGER, VARCHAR, DATE, DOUBLE, BOOLEAN, TIMESTAMP, JSON'),
   nullable: z.boolean(),
   transformation: z
     .string()
@@ -232,5 +232,7 @@ Design the target extraction schema:
 5. Generate Parquet output paths as: "spreadsheet-agent/${projectId}/<tableName>.parquet"
 6. Note any data quality concerns
 
-The extraction plan will be used to generate DuckDB SQL that reads source files and writes Parquet output.${revisionContext}`;
+The extraction plan drives the data extraction pipeline that reads from source spreadsheet files and produces clean, structured output tables.
+
+IMPORTANT: In the catalogMetadata fields (projectDescription, domainNotes, dataQualityNotes), write descriptions from the end user's perspective. Do NOT mention implementation details like DuckDB, Parquet, SQL, or internal file formats. Focus on what the data represents and any quality observations.${revisionContext}`;
 }
