@@ -78,7 +78,7 @@ describe('ConnectionDialog', () => {
 
   describe('Snowflake Account validation', () => {
     it('shows an error when submitting a Snowflake connection without an Account value', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
 
       render(
         <ConnectionDialog
@@ -111,7 +111,7 @@ describe('ConnectionDialog', () => {
     });
 
     it('does not show Account validation error when Account is provided', async () => {
-      const user = userEvent.setup();
+      const user = userEvent.setup({ delay: null });
 
       render(
         <ConnectionDialog
