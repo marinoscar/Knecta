@@ -1,444 +1,455 @@
-# Spreadsheet Agent — Outstanding Issues
+# Spreadsheet Agent — Comprehensive Analysis & Issues
 
-**Date**: 2026-02-23
-**Project**: 362508ab (FP&A)
-**Runs investigated**: 2a497450 (review_pending), c8c8af1f (completed but broken)
-
----
-
-## Issue 1: Progress Bar Not Shown During Streaming
-
-**Severity**: High (UX)
-**Screenshots**: #1 (no progress bar while streaming), #2 (bar appears only at end)
-
-### Root Cause
-
-The `useSpreadsheetRun` hook checks `event.progress` (a nested property) to set the progress state:
-
-```typescript
-// useSpreadsheetRun.ts:117
-if (event.type === 'progress' && event.progress) {
-  setProgress(event.progress);
-}
-```
-
-But the backend emits progress data **flat on the event object**, not nested under a `progress` key:
-
-```typescript
-// ingest.ts:27 (and similar in extract.ts, persist.ts)
-emit({
-  type: 'progress',
-  completedFiles: fileInventory.length,
-  totalFiles: files.length,
-  percentComplete: 20,
-  // NO "progress" nested key
-});
-```
-
-So `event.progress` is always `undefined` during streaming → `setProgress()` is never called → the `LinearProgress` bar (which renders only when `progress` is truthy) never appears.
-
-The progress bar appears at the very end only because `fetchRun()` is called after `run_complete`/`review_ready`, and the run's `progress` JSON field in the DB is set by `updateRunProgress()` which stores the flat event object. When `fetchRun` returns the run, `run.progress` exists and is a valid object.
-
-### Fix Required
-
-**Option A (Recommended)**: Fix the hook to read progress fields directly from the event:
-
-```typescript
-if (event.type === 'progress') {
-  setProgress({
-    percentComplete: event.percentComplete as number ?? 0,
-    message: event.message as string ?? 'Processing...',
-    // map other fields as needed
-  });
-}
-```
-
-**Option B**: Fix the backend to wrap progress data in a nested `progress` key:
-
-```typescript
-emit({ type: 'progress', progress: { percentComplete: 20, ... } });
-```
-
-Option A is safer (doesn't change the backend event format that's already persisted in the DB).
-
-### Files to Change
-
-- `apps/web/src/hooks/useSpreadsheetRun.ts:117-119`
+**Date**: 2026-02-23 (updated)
+**Project**: 6e8d73ae (FP&A)
+**Runs investigated**: 3ede0f67 (completed, 36 tables), e7c49f01 (completed, 24 tables)
 
 ---
 
-## Issue 2: Token Count 0 on Resume After Review
+## Part 1: Goal vs. Reality
 
-**Severity**: Medium (UX)
+### What the Spreadsheet Agent SHOULD Do (End-to-End Goal)
 
-### Root Cause
-
-When the agent resumes after plan approval, it skips the analyze and design phases (which are the only LLM-calling phases). The extract/validate/persist phases don't use the LLM, so `tokensUsed` stays at `{0, 0, 0}` in state.
-
-The token state in LangGraph uses a **reducer** that accumulates:
-
-```typescript
-tokensUsed: Annotation<TokenUsage>({
-  reducer: (prev, next) => ({
-    prompt: prev.prompt + next.prompt,
-    completion: prev.completion + next.completion,
-    total: prev.total + next.total,
-  }),
-  default: () => ({ prompt: 0, completion: 0, total: 0 }),
-}),
+```
+1. UPLOAD    → User uploads Excel/CSV files to a project
+2. INGEST    → Read the raw files, extract structural metadata per sheet
+3. ANALYZE   → AI examines each sheet's structure (headers, data regions, types)
+4. DESIGN    → AI designs clean output table schemas (column mapping, transformations)
+5. REVIEW    → (Optional) User reviews and approves the extraction plan
+6. EXTRACT   → Read actual cell data from source files, apply transformations,
+                create Parquet files on disk
+7. VALIDATE  → Verify extracted Parquet files (row counts, NULLs, schema conformance)
+8. PERSIST   → Upload Parquet files to S3, save table metadata to DB, generate catalog
 ```
 
-But on resume, the initial state doesn't carry forward the tokens from the previous run. The run's `stats.tokensUsed` from the first execution (analyze+design) is `{total: 73540}` but it's not injected into the initial state on resume.
+The end result: **real Parquet files in S3** that contain the cleaned, transformed spreadsheet data, queryable by tools like DuckDB, Athena, or the Data Agent.
 
-### Evidence from DB
+### What the Agent ACTUALLY Does Today
 
-Run `c8c8af1f`:
-- Stats from first execution pause: `tokensUsed: { total: 73540 }` (from run `2a497450`)
-- Stats after completion: `tokensUsed: { total: 0 }` (new run `c8c8af1f` didn't accumulate)
-
-Note: The user also created **new runs** instead of approving existing ones (see Issue 5), which means tokens from the first run were completely lost.
-
-### Fix Required
-
-When resuming after review, inject the previous run's token usage into the initial state:
-
-```typescript
-if (isResumeAfterReview && run.stats?.tokensUsed) {
-  initialState.tokensUsed = run.stats.tokensUsed;
-}
+```
+1. UPLOAD    → ✅ Works — files written to /tmp/spreadsheet-agent/{projectId}/
+2. INGEST    → ✅ Works — XLSX library parses files, extracts structure + sample rows
+3. ANALYZE   → ✅ Works — LLM identifies logical tables per sheet
+4. DESIGN    → ✅ Works — LLM designs extraction schemas (column mappings, types)
+5. REVIEW    → ✅ Works (after bug fixes) — user can review/modify the plan
+6. EXTRACT   → ❌ STUB — returns fake "success" results with estimated row counts
+                No actual data is read. No Parquet files are created. No transformations run.
+7. VALIDATE  → ⚠️  Runs but validates FAKE data — always passes because the stub
+                returns perfect mock results (row counts match estimates, 0 NULLs, etc.)
+8. PERSIST   → ⚠️  Partially works — writes metadata to DB, but:
+                - No Parquet files exist to upload → totalSizeBytes = 0 for all tables
+                - No S3 upload logic exists
+                - No catalog.json upload exists
+                - Table preview returns empty (no data source to read from)
+                - Table download returns empty URL (no file to serve)
 ```
 
-### Files to Change
+### The Critical Gap
 
-- `apps/api/src/spreadsheet-agent/agent/spreadsheet-agent-agent.service.ts:125-190`
+**The entire data pipeline (Phase 6: Extract) is a placeholder.** The agent successfully uses AI to analyze spreadsheet structure and design clean schemas, but it never actually reads the data from the Excel files, transforms it, or produces any output files. The UI shows "24 tables, 3,114 rows" — but these are **estimated numbers from the LLM**, not real extracted data. There are zero Parquet files on disk or in S3.
+
+### Evidence from Project 6e8d73ae
+
+| Metric | What UI Shows | What's Real |
+|--------|--------------|-------------|
+| Tables | 24 (status: "ready") | 0 Parquet files exist anywhere |
+| Total Rows | 3,114 | 0 rows actually extracted |
+| Total Size | 0 B | Correct — nothing was created |
+| Table Preview | Empty (no data) | Endpoint returns `{ columns: [], rows: [] }` |
+| Table Download | Empty URL | Endpoint returns `{ downloadUrl: '' }` |
+| Source files | 2 XLS files on disk | Only Sample2.xls produced tables; Sample1.xls was ignored |
+| File status | Both "analyzing" | Never updated to "extracted" |
 
 ---
 
-## Issue 3: LLM Hallucinating File IDs → Persist Node Fails Silently
+## Part 2: What Each Phase Currently Does (Detailed)
 
-**Severity**: Critical (Data Loss)
-**Screenshot**: #6 (shows "Agent completed successfully" but 0 tables, 0 rows)
+### Phase 1: Upload (`uploadFile` in spreadsheet-agent.service.ts)
 
-### Root Cause
+**Status: Working**
 
-The extraction plan generated by the LLM in the **design node** includes `sourceFileId` for each table. However, the LLM **does not have access to the actual file UUIDs** from the database. The sheet analysis data passed to the design prompt includes `fileId` and `fileName`, but the LLM fabricates/guesses the file IDs.
+- Accepts multipart file upload (max 50MB per file)
+- Validates extension (.xlsx, .xls, .csv, .tsv, .ods) and MIME type
+- Computes SHA-256 hash of file content
+- Writes file to disk: `/tmp/spreadsheet-agent/{projectId}/{hash}{ext}`
+- Creates `spreadsheet_files` record with `storagePath` pointing to the /tmp file
+- NO S3 upload at this stage — files only exist in the API container's /tmp
 
-**Evidence from DB**:
+**Problem**: Files in `/tmp` are ephemeral — they're lost if the container restarts. For production, source files should be uploaded to S3/object storage during this step.
 
-```
-Plan sourceFileIds: ['362508ab-3330-4063-a320-912dc804139d']  ← This is the PROJECT ID, not a file ID
-Actual file IDs: [
-  { id: '0968cd92-...', name: 'Sample1.xls' },
-  { id: '3062b195-...', name: 'Sample2.xls' }
-]
-```
+### Phase 2: Ingest (`nodes/ingest.ts`)
 
-The LLM used the project ID as the `sourceFileId` for ALL 23 tables because the project ID was mentioned in the prompt (`Project ID: ${projectId}`).
+**Status: Working**
 
-When the **persist node** tries to create `SpreadsheetTable` records, it uses:
+- Reads each file from disk using `fs.readFileSync()` + `XLSX.read()`
+- Per sheet: extracts row/col counts, merged cell ranges, formula detection, data density
+- Extracts sample data: first 30 rows + last 5 rows as string grids
+- Processes files in parallel (concurrency limit from config, default 5)
+- Emits progress events (0-20%)
 
+**Output**: `FileInventory[]` — structural metadata per file, per sheet
+
+### Phase 3: Analyze (`nodes/analyze.ts`)
+
+**Status: Working**
+
+- One LLM call per sheet with structured output (`withStructuredOutput`)
+- Prompt includes: sheet name, dimensions, sample rows (first 30 + last 5)
+- LLM identifies: logical table regions, header rows, data start/end rows, column types
+- Returns `SheetAnalysis[]` with `logicalTables` per sheet
+- Processes sheets in parallel (concurrency limit)
+- Emits progress events (20-40%), token_update events
+
+### Phase 4: Design (`nodes/design.ts`)
+
+**Status: Working**
+
+- One LLM call for entire project with structured output
+- Prompt includes: all sheet analyses serialized as context
+- LLM produces:
+  - Table definitions: names, column schemas (source→output mappings, types, transformations)
+  - Relationships between tables (FK detection)
+  - Catalog metadata: project description, domain notes, data quality notes
+- Post-processes LLM output to fix `sourceFileId` (maps against real DB UUIDs)
+- Emits progress events (40-50%)
+- If `reviewMode='review'`: emits `review_ready` and graph pauses for user approval
+
+### Phase 5: Review Gate (conditional)
+
+**Status: Working (after bug fixes)**
+
+- If review mode: graph ends after design, run status → `review_pending`
+- User reviews extraction plan in `ExtractionPlanReview` component
+- User can include/skip tables, rename output tables, modify columns
+- On approval: run transitions back to `pending`, graph resumes at extract node
+
+### Phase 6: Extract (`nodes/extract.ts`)
+
+**Status: STUB / PLACEHOLDER**
+
+Current implementation:
 ```typescript
-// persist.ts:31
-await prisma.spreadsheetTable.create({
-  data: {
-    projectId,
-    fileId: planTable?.sourceFileId || '',  // ← FK to spreadsheet_files.id
-    ...
-  },
-});
+// TODO: Real implementation will:
+// 1. Build DuckDB SQL from the table's column definitions + transformations
+// 2. Execute in Python sandbox (read source → transform → COPY TO Parquet at /tmp)
+// 3. Retrieve Parquet file from sandbox response
+// 4. Upload to cloud storage via StorageProvider
+// 5. Return row count, size, column null counts
+
+// Placeholder extraction result
+const result: ExtractionResult = {
+  tableId: table.tableName,
+  tableName: table.tableName,
+  outputPath: table.outputPath,        // ← Path where Parquet WOULD go
+  rowCount: table.estimatedRows,       // ← LLM estimate, NOT real count
+  sizeBytes: 0,                        // ← No file created
+  columns: table.columns.map(c => ({
+    name: c.outputName,
+    type: c.outputType,
+    nullCount: 0,                      // ← Fake: no actual null checking
+  })),
+  status: 'success',                   // ← Always succeeds (it's a no-op)
+};
 ```
 
-This fails with a FK constraint violation because `362508ab-...` is not a valid `spreadsheet_files.id`. The error is caught by the try/catch in persist node and returned as `{ error: 'Persist failed: ...' }` — but this sets `state.error` rather than throwing, so the graph completes "successfully".
+**What it does**: Returns fake "success" results using the LLM's estimated row counts. No data is read from Excel files. No transformations are applied. No Parquet files are created. No S3 uploads happen.
 
-The **agent service** then sees no exception from `graph.invoke()` and marks the run as `completed` with `tablesExtracted: 23` (from the mock extraction results), even though 0 tables were actually persisted.
+**What it SHOULD do**:
+1. For each table in the extraction plan:
+   a. Read the source Excel sheet's data region (headerRow, dataStartRow, dataEndRow)
+   b. Apply column mappings (sourceName → outputName)
+   c. Apply type conversions (the `transformation` field, e.g., `CAST(value AS DATE)`)
+   d. Handle special cases: merged cells, transposition, skip rows
+   e. Write the result to a Parquet file
+   f. Upload the Parquet file to S3 at the `outputPath`
+   g. Return actual row count, file size, null counts per column
 
-### Why It's Silent
+### Phase 7: Validate (`nodes/validate.ts`)
 
-1. The persist node catches errors and returns a state update with `error` field, but doesn't throw
-2. The agent service checks `finalState.extractionResults?.length` (which is 23 mock results), not whether tables were actually written to DB
-3. No validation that `sourceFileId` values in the plan correspond to real file records
+**Status: Running but ineffective**
 
-### Fix Required (Multi-Part)
+Validation checks:
+1. **extraction_status**: Was extraction successful? (Always yes for stub)
+2. **row_count**: Is actual row count within 10%-200% of estimated? (Always exactly matches because stub returns estimate)
+3. **null_check**: Are non-nullable columns mostly non-null? (Always passes — stub reports 0 nulls)
+4. **column_count**: Does extracted column count match plan? (Always matches — stub copies plan columns)
 
-**Part A — Don't use LLM-generated file IDs**:
+**Result**: Validation always passes because it's checking stub data against itself. This will become useful once the extract node produces real data.
 
-The `sourceFileId` in the extraction plan should be set **programmatically** from the actual `SheetAnalysis.fileId` values (which come from real DB records via ingest), NOT from the LLM output. The LLM should only generate the schema design (table names, columns, types, transformations).
+### Phase 8: Persist (`nodes/persist.ts`)
 
-In the design node, after the LLM produces the plan, replace `sourceFileId` with the correct value looked up from `sheetAnalyses`:
+**Status: Partially working**
 
+What it does:
+- ✅ Creates `spreadsheet_tables` records in PostgreSQL with metadata
+- ✅ Updates project aggregate stats (tableCount, totalRows, totalSizeBytes)
+- ✅ Generates a catalog JSON structure in memory
+- ❌ Does NOT upload Parquet files to S3 (they don't exist)
+- ❌ Does NOT upload catalog.json to S3 (`// TODO: Upload catalog.json`)
+- ❌ `totalSizeBytes` is always 0 (no real files)
+- ❌ `outputPath` points to a non-existent S3 key
+
+### Endpoints That Don't Work
+
+**Table Preview** (`getTablePreview`):
 ```typescript
-// After LLM generates the plan, fix up file IDs
-for (const table of result.tables) {
-  const analysis = sheetAnalyses.find(a =>
-    a.fileName === table.sourceFileName && a.sheetName === table.sourceSheetName
-  );
-  if (analysis) {
-    table.sourceFileId = analysis.fileId;
-  }
-}
+// TODO: Implement DuckDB-based Parquet preview in Phase 4
+return {
+  columns: [] as string[],
+  rows: [] as Record<string, unknown>[],
+  totalRows: Number(table.rowCount),
+};
 ```
+Returns empty data. Would need to read the Parquet file (which doesn't exist) via DuckDB.
 
-**Part B — Persist node should throw on failure**:
-
-If the persist node fails to create table records, it should throw an error that propagates to the agent service, not silently return a state error. Or at minimum, the agent service should check `finalState.error` before marking the run as completed.
-
-**Part C — Agent service should validate final state**:
-
+**Table Download** (`getTableDownloadUrl`):
 ```typescript
-if (finalState.error) {
-  // Mark run as failed, not completed
-  await this.spreadsheetAgentService.updateRunStatus(runId, 'failed', {
-    errorMessage: finalState.error,
-    completedAt: new Date(),
-  });
-}
+// TODO: Implement signed URL generation via StorageProvider
+return {
+  downloadUrl: '',
+  expiresAt: '',
+};
 ```
-
-### Files to Change
-
-- `apps/api/src/spreadsheet-agent/agent/nodes/design.ts` — Fix up sourceFileId after LLM output
-- `apps/api/src/spreadsheet-agent/agent/nodes/persist.ts` — Throw on failure or report properly
-- `apps/api/src/spreadsheet-agent/agent/spreadsheet-agent-agent.service.ts` — Check `finalState.error`
-- Consider removing `sourceFileId` from the LLM Zod schema entirely and adding it programmatically
+Returns empty URL. Would need to generate an S3 presigned URL for the Parquet file.
 
 ---
 
-## Issue 4: "Start Run" Creates New Run Instead of Resuming Approved Run
+## Part 3: Issues Fixed in PR #58 (2026-02-23)
 
-**Severity**: High (UX/Token Waste)
-**Screenshots**: #4 (agent re-runs analyze+design after "approval")
+The following 9 issues were identified and fixed in branch `fix/spreadsheet-agent-issues`:
 
-### Root Cause
-
-When the user sees the extraction plan review and the "Start Run" button is also visible, they may click "Start Run" instead of "Approve Plan". This creates a **brand new run** that starts from scratch (ingest → analyze → design), wasting LLM tokens.
-
-**Evidence from logs**:
-
-The project had multiple runs:
-- `2a497450` — first run, paused at review_pending, NEVER approved
-- `c8c8af1f` — second run, created via "Start Run" button, went through full analyze+design again
-
-The "Start Run" button is visible when `project.status !== 'processing'` — and after the first run pauses for review, the project status is `review_pending`, so the button reappears.
-
-### Fix Required (Multi-Part)
-
-**Part A — Hide "Start Run" when review is pending**:
-
-```typescript
-// SpreadsheetProjectDetailPage.tsx:369
-{canWrite && project.status !== 'processing' && project.status !== 'review_pending' && !runHook.isStreaming && (
-  <Button ...>Start Run</Button>
-)}
-```
-
-**Part B — Show only "Approve Plan" when in review_pending state**:
-
-The `ExtractionPlanReview` component should be the primary action when a run is in `review_pending`. The "Start Run" button should be hidden or at least clearly secondary.
-
-**Part C — Auto-load extraction plan on page load**:
-
-When the user navigates to a project with a `review_pending` run, the extraction plan review should load automatically (currently only auto-surfaces from streaming events, not from direct page load).
-
-```typescript
-// On initial project load, check for review_pending runs
-useEffect(() => {
-  if (project?.status === 'review_pending') {
-    // Find the review_pending run and surface its plan
-    const reviewRun = runs.find(r => r.status === 'review_pending');
-    if (reviewRun?.extractionPlan) {
-      setReviewPlan(reviewRun.extractionPlan as SpreadsheetExtractionPlan);
-      setReviewRunId(reviewRun.id);
-    }
-  }
-}, [project, runs]);
-```
-
-### Files to Change
-
-- `apps/web/src/pages/SpreadsheetProjectDetailPage.tsx` — Button visibility, auto-load review
+| # | Issue | Severity | Status |
+|---|-------|----------|--------|
+| 1 | Progress bar not shown during streaming | High | ✅ Fixed — hook reads flat event fields |
+| 2 | Token count 0 on resume after review | Medium | ✅ Fixed — tokens injected from previous run stats |
+| 3 | LLM hallucinating file IDs → persist fails silently | Critical | ✅ Fixed — sourceFileId resolved programmatically + persist throws + finalState.error check |
+| 4 | "Start Run" visible during review_pending | High | ✅ Fixed — button hidden + plan auto-loaded |
+| 5 | DuckDB/Parquet details shown in UI | Low | ✅ Fixed — prompt cleaned + cleanDescription utility |
+| 6 | Phase chips show "pending" on resume | Low | ✅ Fixed — synthetic phase events emitted |
+| 7 | Project status stuck at "processing" | High | ✅ Fixed — symptom of Issue 3 |
+| 8 | claimRun overwrites startedAt on resume | Medium | ✅ Fixed — startedAt preserved if already set |
+| 9 | Timer resets to 0:00 on resume | Low | ✅ Fixed — uses run startedAt from DB |
 
 ---
 
-## Issue 5: ExtractionPlanReview Shows Implementation Details (DuckDB references)
+## Part 4: Outstanding Issues (New)
 
-**Severity**: Low (UX Polish)
-**Screenshot**: #5
+### Issue 10: Extract Node Is a Placeholder — No Real Data Extraction
 
-### Root Cause
+**Severity**: **BLOCKER** (Core Feature Missing)
 
-The `ExtractionPlanReview` component renders `plan.catalogMetadata.projectDescription` and `plan.catalogMetadata.dataQualityNotes` directly from the LLM output. The LLM was instructed in the design prompt to "generate DuckDB SQL" and mentions "Parquet tables for DuckDB" — these implementation details leak into the user-facing plan description.
+The extract node (`apps/api/src/spreadsheet-agent/agent/nodes/extract.ts`) is a complete stub. It does not read any data from the source Excel files, does not apply any transformations, and does not produce any output files.
 
-**Evidence from screenshot #5**:
-> "Extract historical financial statements... into analytics-ready Parquet tables for DuckDB."
+**Impact**:
+- All `spreadsheet_tables` records have `outputSizeBytes = 0`
+- All `rowCount` values are LLM estimates, not real
+- No Parquet files exist on disk or in S3
+- Table preview returns empty data
+- Table download returns empty URL
+- The agent reports "success" but delivers zero usable output
 
-### Fix Required (Multi-Part)
+**What needs to be built**:
 
-**Part A — Improve the design prompt**:
+The extract node must implement a real data extraction pipeline for each table in the extraction plan:
 
-Remove technical implementation details from the prompt instructions that would leak into user-facing metadata. The prompt currently says:
+1. **Read source data**: Use the XLSX library to read the specific data region of the source sheet (headerRow, dataStartRow, dataEndRow from the plan). The source file is already on disk at the path stored in `spreadsheet_files.storagePath`.
 
-```
-The extraction plan will be used to generate DuckDB SQL that reads source files and writes Parquet output.
-```
+2. **Apply column mappings**: Map `sourceName` → `outputName` for each column per the extraction plan.
 
-This should be rephrased to avoid mentioning DuckDB or Parquet in the context that leaks to catalog metadata.
+3. **Apply transformations**: The design node generates SQL-like transformations (e.g., `TRIM(value)`, `CAST(value AS DATE)`). These need to be evaluated — either via a DuckDB/SQL engine or via JavaScript transformation functions.
 
-**Part B — Clean up or hide implementation details in the UI**:
+4. **Handle edge cases from the analysis**:
+   - `skipRows`: Skip specified row indices
+   - `needsTranspose`: Transpose the sheet before extraction
+   - Merged cells: Resolve to fill values
+   - Multi-table sheets: Extract only the specified data region
 
-The `ExtractionPlanReview` component should either:
-1. Filter out technical notes (containing "DuckDB", "Parquet", "SQL") from the displayed metadata
-2. Show a simplified summary instead of raw LLM notes
-3. Collapse the detailed notes behind an "Advanced" toggle
+5. **Write Parquet output**: Serialize the transformed data to Parquet format. Options:
+   - Use `parquetjs` or `parquet-wasm` for Node.js native Parquet writing
+   - Use DuckDB's `COPY TO` via a Python sandbox
+   - Use Apache Arrow JS + Parquet writer
 
-### Files to Change
+6. **Return real metrics**: Actual row count, file size in bytes, null count per column.
 
-- `apps/api/src/spreadsheet-agent/agent/nodes/design.ts` — Prompt refinement
-- `apps/web/src/components/spreadsheet-agent/ExtractionPlanReview.tsx` — Hide/simplify details
+**Approach options**:
 
----
+| Approach | Pros | Cons |
+|----------|------|------|
+| **A: Node.js native (XLSX + parquetjs)** | No external dependencies, runs in same process | Parquet writing libs are less mature in JS, complex transformations are harder |
+| **B: DuckDB in-process** | Excellent Parquet support, SQL transformations native, fast | DuckDB Node.js bindings can be tricky in Docker, adds ~50MB to image |
+| **C: Python sandbox** | DuckDB + pandas native, most flexible transformations | Requires separate Python container/process, IPC complexity |
+| **D: DuckDB WASM** | Runs in Node.js via WASM, no native bindings | Slower than native DuckDB, memory limits |
 
-## Issue 6: Phase Chips Show Phases as "Pending" When Agent Completes Instantly
+**Recommended**: Approach B (DuckDB in-process via `@duckdb/node-api` or `duckdb` npm package) or Approach A (pure Node.js) for simplicity.
 
-**Severity**: Low (UX)
-**Screenshot**: #2 (some phases pending despite completion), #6 (Ingest/Analyze/Design show pending icons)
+### Issue 11: No S3 Upload Pipeline
 
-### Root Cause
+**Severity**: **BLOCKER** (Core Feature Missing)
 
-When the agent resumes after review approval, it skips ingest/analyze/design and goes directly to extract → validate → persist. These skipped phases never emit `phase_start` or `phase_complete` events, so their chips remain "pending" (grey/disabled).
+There is no code anywhere in the spreadsheet agent that uploads files to S3 or any cloud storage. The project has `storageProvider: 's3'` and `outputBucket: 'knecta'` configured, but these values are never used.
 
-On resume, the `useSpreadsheetRun` hook resets `events` to `[]` via `setEvents([])` in `startStream()`. So all phase status is lost from the first execution.
+**What needs to be built**:
 
-### Fix Required
+1. **Storage abstraction**: A `StorageProvider` interface with implementations for S3 (and optionally local filesystem for dev).
 
-**Option A**: On resume, pre-populate events from the first run's known completed phases. If `extractionPlan` exists in initial state (resume), emit synthetic `phase_complete` events for ingest, analyze, and design before the graph starts.
+2. **Source file upload** (during file upload step):
+   - Currently files are written only to `/tmp` which is ephemeral
+   - Should also upload to S3 at a stable path (e.g., `s3://knecta/spreadsheet-agent/{projectId}/source/{fileHash}{ext}`)
+   - Update `spreadsheet_files.storagePath` to point to S3 key
 
-**Option B**: Don't reset events on resume — carry forward the events from the first streaming session.
+3. **Parquet file upload** (during extract phase):
+   - After creating each Parquet file locally, upload to S3 at the `outputPath` (e.g., `s3://knecta/spreadsheet-agent/{projectId}/{tableName}.parquet`)
 
-### Files to Change
+4. **Catalog upload** (during persist phase):
+   - Upload `catalog.json` to `s3://knecta/spreadsheet-agent/{projectId}/catalog.json`
 
-- `apps/api/src/spreadsheet-agent/agent/spreadsheet-agent-agent.service.ts` — Emit synthetic phase events on resume
-- OR `apps/web/src/hooks/useSpreadsheetRun.ts` — Don't clear events on resume
+5. **Signed URL generation** (for table download):
+   - `getTableDownloadUrl()` should generate an S3 presigned URL for the Parquet file
 
----
+**Dependencies**: AWS SDK v3 (`@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner`), S3 bucket + IAM credentials in env vars.
 
-## Issue 7: Project Status Stuck at "Processing" After Completion
+### Issue 12: Table Preview Not Implemented
 
-**Severity**: High (Data)
+**Severity**: High (UX — Feature Missing)
 
-### Root Cause
+The `getTablePreview()` endpoint returns empty arrays. Once Parquet files exist (Issue 10), this endpoint needs to read the first N rows from the Parquet file and return them as JSON.
 
-The persist node updates the project status:
+**Options**:
+- **DuckDB**: `SELECT * FROM read_parquet('path.parquet') LIMIT N` — most natural if DuckDB is already used for extraction
+- **parquetjs**: Read Parquet file directly in Node.js
+- **Arrow**: Use Apache Arrow to read Parquet and convert to JSON
 
-```typescript
-// persist.ts:60
-await prisma.spreadsheetProject.update({
-  where: { id: projectId },
-  data: {
-    status: projectStatus as any,  // 'ready', 'partial', or 'failed'
-    tableCount: successfulResults.length,
-    totalRows: BigInt(totalRows),
-    totalSizeBytes: BigInt(totalSizeBytes),
-  },
-});
-```
+### Issue 13: Table Download Not Implemented
 
-But when persist fails (due to Issue 3 — FK violation on invalid fileId), the catch block only sets `state.error` and returns, so the project status remains at `processing` (set during `claimRun`).
+**Severity**: High (UX — Feature Missing)
 
-**Evidence from DB**:
-```
-Project status: processing  (should be 'ready' after completion)
-Project tableCount: 0       (should be 23)
-```
+The `getTableDownloadUrl()` endpoint returns an empty URL. Once Parquet files are in S3 (Issue 11), this needs to generate a presigned URL with expiry.
 
-### Fix Required
+### Issue 14: File Status Never Updated to "extracted"
 
-This is a symptom of Issue 3. Once persist node works correctly (valid file IDs), the project status will be updated properly. Additionally, the agent service should update the project status to 'failed' if `finalState.error` is set.
+**Severity**: Medium (Data Integrity)
 
----
+Both project files show `status: 'analyzing'` even after runs complete. The file status should transition through:
+- `pending` → `uploaded` → `analyzing` (during analyze) → `extracted` (after extraction)
 
-## Issue 8: `claimRun` Allows Re-Claiming Approved Runs as "pending"
+The `file_complete` event handler in the agent service sets status to `'analyzing'`, but nothing ever sets it to `'extracted'` after the extract phase completes.
 
-**Severity**: Medium (Logic Bug)
+**Files to change**:
+- `apps/api/src/spreadsheet-agent/agent/spreadsheet-agent-agent.service.ts` — add status update after extract phase
 
-### Root Cause
+### Issue 15: Sample1.xls Produced Zero Tables
 
-The `approvePlan()` method sets the run status back to `pending`:
+**Severity**: Medium (Data Quality)
 
-```typescript
-// spreadsheet-agent.service.ts:721
-data: {
-  extractionPlanModified: (dto.modifications ?? null) as any,
-  status: 'pending' as SpreadsheetRunStatus,
-},
-```
+In project 6e8d73ae, Sample1.xls (182KB, 1 sheet) produced 0 tables across both runs. All 60 tables (across 2 runs) came from Sample2.xls.
 
-Then `claimRun()` transitions `pending → ingesting`:
+**Possible causes**:
+- The LLM did not identify any logical tables in Sample1.xls's single sheet
+- The sheet may have a structure the LLM couldn't parse (e.g., dashboard, chart-only, or very sparse data)
+- The file may have parsing issues with the old .xls format
 
-```typescript
-const result = await this.prisma.spreadsheetRun.updateMany({
-  where: { id: runId, status: 'pending' },
-  data: { status: 'ingesting', startedAt: new Date(), ... },
-});
-```
+**Investigation needed**: Check the sheet analysis for Sample1.xls — did the analyze node return any logical tables?
 
-This **overwrites `startedAt`** with a new timestamp, losing the original start time from the first execution. It also re-sets the project status to `processing`.
+### Issue 16: Duplicate Tables Across Runs
 
-### Fix Required
+**Severity**: Medium (Data Integrity)
 
-When approving a plan, transition to a different status (e.g., `extracting`) instead of `pending`. Or modify `claimRun` to handle the approved case differently — skip the `startedAt` overwrite if it already exists.
+The project has 60 table records but only 24 unique tables are shown (from the latest run). Run 1 created 36 tables, run 2 created 24 tables. Both sets remain in the DB. The persist node creates new records each time without cleaning up old ones from previous runs.
 
-### Files to Change
+**Fix needed**: Before persisting new tables, delete any existing tables from the same project's previous runs. Or link tables to specific runs and show only the latest successful run's tables.
 
-- `apps/api/src/spreadsheet-agent/spreadsheet-agent.service.ts` — `approvePlan()` and `claimRun()`
+### Issue 17: Validation Is Meaningless on Stub Data
 
----
+**Severity**: Low (Tech Debt — becomes important when extract is real)
 
-## Issue 9: Timer Resets to 0:00 on Resume
+The validation node validates the extract node's output. Since the extract node returns stub data that perfectly matches the plan (exact estimated row counts, 0 nulls, matching column counts), validation always passes. This means the revision loop (max 3 retries) has never been tested with real data.
 
-**Severity**: Low (UX)
+**No fix needed now** — this will naturally start working once the extract node produces real data. But the validation checks should be reviewed when that happens:
+- Row count ratio bounds (0.1x to 2.0x of estimated) may be too tight or too loose
+- NULL ratio threshold (0.8) may need adjustment
+- Additional checks may be needed (e.g., type conformance, data range validation)
 
-### Root Cause
+### Issue 18: Source Files Only in /tmp (Lost on Container Restart)
 
-When `startStream()` is called after approval, it resets `streamStartTime` to `Date.now()`:
+**Severity**: High (Production Readiness)
 
-```typescript
-setStreamStartTime(Date.now());
-```
+Source files are written to `/tmp/spreadsheet-agent/{projectId}/{hash}{ext}` inside the API container. This path is:
+- Ephemeral — lost when the container restarts
+- Local — not accessible from other container instances
+- Not backed up
 
-This makes the timer show 0:04, 0:05 etc. during the extract/validate/persist phase, when the actual wall clock time since the user started the run is much longer (including the ~3.5 minutes of analyze+design).
+The `spreadsheet_files.storagePath` field stores this /tmp path. If the container restarts between upload and run, the ingest node will fail because the files are gone.
 
-### Fix Required
-
-Either:
-1. Don't reset `streamStartTime` if it was already set (carry forward from first stream)
-2. Use the run's `startedAt` timestamp from the DB instead of a client-side timer
+**Fix**: Upload source files to S3 during the upload step (Issue 11). The storagePath should point to the S3 key. The ingest node should download from S3 to a local temp file before parsing.
 
 ---
 
-## Summary Table
+## Part 5: Implementation Roadmap
 
-| # | Issue | Severity | Root Cause Category |
-|---|-------|----------|-------------------|
-| 1 | Progress bar not shown during streaming | High | Frontend event parsing mismatch |
-| 2 | Token count 0 on resume | Medium | State not carried across resume |
-| 3 | Persist fails silently (0 tables created) | **Critical** | LLM hallucinates file IDs + silent error |
-| 4 | "Start Run" creates new run instead of resume | High | Button visible during review_pending |
-| 5 | DuckDB/Parquet details shown to user | Low | Prompt leaks implementation details |
-| 6 | Phase chips show "pending" after instant completion | Low | Events reset on resume |
-| 7 | Project status stuck at "processing" | High | Symptom of Issue 3 |
-| 8 | claimRun overwrites startedAt on resume | Medium | Status transition design |
-| 9 | Timer resets to 0:00 on resume | Low | Client-side timer reset |
+### Phase A: Core Extract Pipeline (Issues 10, 14, 17)
+
+**Goal**: Make the extract node actually read data from Excel files and produce real output.
+
+**Approach**: Use the XLSX library (already a dependency) to read cell data based on the extraction plan's coordinates. Transform data in JavaScript. Write output as JSON initially (Parquet can be added later or via DuckDB).
+
+1. Read source file from disk (already available via `files[].storagePath`)
+2. Open the specific sheet (`sourceSheetName`)
+3. Read the data region (`headerRow`, `dataStartRow`, `dataEndRow`)
+4. Apply column mappings and transformations
+5. Produce an in-memory table (array of row objects)
+6. Write to Parquet format (or CSV as interim)
+7. Return real row count, file size, null counts
+
+### Phase B: Storage Pipeline (Issues 11, 13, 18)
+
+**Goal**: Upload source files and output files to S3.
+
+1. Add `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`
+2. Create `StorageProvider` abstraction (S3 impl + local filesystem for dev)
+3. Upload source files to S3 during upload step
+4. Upload Parquet files to S3 during extract step
+5. Upload catalog.json during persist step
+6. Implement signed URL generation for download endpoint
+7. Add env vars: `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET`
+
+### Phase C: Table Preview (Issue 12)
+
+**Goal**: Let users preview extracted data before downloading.
+
+1. Read first N rows from the Parquet file (from S3 or local cache)
+2. Return as `{ columns: string[], rows: Record<string, any>[], totalRows: number }`
+3. Consider caching the first 500 rows in the `spreadsheet_tables` record for fast preview
+
+### Phase D: Data Quality & Polish (Issues 15, 16)
+
+**Goal**: Handle edge cases and clean up data management.
+
+1. Investigate Sample1.xls non-extraction (Issue 15)
+2. Add run-scoped table management — clean up old tables on new run (Issue 16)
+3. Update file status to "extracted" after extraction (Issue 14)
+4. Review validation thresholds once real data flows through (Issue 17)
 
 ---
 
-## Recommended Fix Order
+## Part 6: Summary Table
 
-1. **Issue 3** (Critical) — Fix file ID handling in design/persist nodes. This unblocks the entire extraction pipeline.
-2. **Issue 1** (High) — Fix progress bar. This is the most visible UX issue.
-3. **Issue 4** (High) — Fix button visibility during review_pending. Prevents token waste.
-4. **Issue 7** (High) — Will be fixed by Issue 3, plus add error state checking in agent service.
-5. **Issue 8** (Medium) — Fix status transition for approved runs.
-6. **Issue 2** (Medium) — Carry tokens across resume.
-7. **Issue 6** (Low) — Emit synthetic phase events on resume.
-8. **Issue 9** (Low) — Use run `startedAt` for timer.
-9. **Issue 5** (Low) — Clean up prompt / UI for implementation details.
+| # | Issue | Severity | Category | Status |
+|---|-------|----------|----------|--------|
+| 1 | Progress bar not shown during streaming | High | UX | ✅ Fixed (PR #58) |
+| 2 | Token count 0 on resume | Medium | UX | ✅ Fixed (PR #58) |
+| 3 | LLM hallucinating file IDs | Critical | Data Loss | ✅ Fixed (PR #58) |
+| 4 | Start Run visible during review_pending | High | UX | ✅ Fixed (PR #58) |
+| 5 | DuckDB/Parquet details in UI | Low | UX | ✅ Fixed (PR #58) |
+| 6 | Phase chips pending on resume | Low | UX | ✅ Fixed (PR #58) |
+| 7 | Project status stuck at processing | High | Data | ✅ Fixed (PR #58) |
+| 8 | claimRun overwrites startedAt | Medium | Logic | ✅ Fixed (PR #58) |
+| 9 | Timer resets on resume | Low | UX | ✅ Fixed (PR #58) |
+| **10** | **Extract node is a stub** | **BLOCKER** | **Core Feature** | ❌ Not built |
+| **11** | **No S3 upload pipeline** | **BLOCKER** | **Core Feature** | ❌ Not built |
+| **12** | **Table preview not implemented** | **High** | **Feature** | ❌ Not built |
+| **13** | **Table download not implemented** | **High** | **Feature** | ❌ Not built |
+| **14** | File status never set to "extracted" | Medium | Data | ❌ Open |
+| **15** | Sample1.xls produced 0 tables | Medium | Quality | ❌ Needs investigation |
+| **16** | Duplicate tables across runs | Medium | Data | ❌ Open |
+| **17** | Validation meaningless on stub data | Low | Tech Debt | ⏳ Deferred until extract is real |
+| **18** | Source files lost on container restart | High | Production | ❌ Open (part of Issue 11) |
