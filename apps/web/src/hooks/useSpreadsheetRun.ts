@@ -74,6 +74,7 @@ export function useSpreadsheetRun(): UseSpreadsheetRunResult {
           },
           credentials: 'include',
           signal: controller.signal,
+          body: JSON.stringify({}),
         })
           .then(async (response) => {
             if (!response.ok) {
