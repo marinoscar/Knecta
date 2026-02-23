@@ -7,6 +7,9 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SpreadsheetRunStatus } from '@prisma/client';
+import { createHash } from 'crypto';
+import { extname } from 'path';
+import { Readable } from 'stream';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateProjectDto,
@@ -16,6 +19,28 @@ import {
   CreateRunDto,
   ApprovePlanDto,
 } from './dto';
+
+/** Allowed spreadsheet MIME types and extensions. */
+const ALLOWED_EXTENSIONS = new Set(['.xlsx', '.xls', '.csv', '.tsv', '.ods']);
+const ALLOWED_MIME_TYPES = new Set([
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'text/csv',
+  'text/tab-separated-values',
+  'application/vnd.oasis.opendocument.spreadsheet',
+  // Browsers sometimes send these generic types
+  'application/octet-stream',
+  'application/csv',
+]);
+
+/** Maximum allowed file size: 50 MB. */
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+
+export interface UploadedFile {
+  filename: string;
+  mimetype: string;
+  file: Readable;
+}
 
 @Injectable()
 export class SpreadsheetAgentService {
@@ -283,6 +308,115 @@ export class SpreadsheetAgentService {
     this.logger.log(
       `File ${fileId} deleted from project ${projectId} by user ${userId}`,
     );
+  }
+
+  /**
+   * Upload a spreadsheet file and create a SpreadsheetFile record.
+   *
+   * The file buffer is consumed from the multipart stream, validated, and its
+   * SHA-256 hash is computed. No S3 storage occurs in this phase — the
+   * storagePath is a logical path that the agent pipeline will use later.
+   */
+  async uploadFile(
+    projectId: string,
+    upload: UploadedFile,
+    userId: string,
+  ) {
+    // Verify project exists and fetch its prefix
+    const project = await this.prisma.spreadsheetProject.findUnique({
+      where: { id: projectId },
+    });
+
+    if (!project) {
+      throw new NotFoundException(
+        `Spreadsheet project with ID ${projectId} not found`,
+      );
+    }
+
+    const { filename, mimetype, file: stream } = upload;
+
+    // Validate extension
+    const ext = extname(filename).toLowerCase();
+    if (!ALLOWED_EXTENSIONS.has(ext)) {
+      throw new BadRequestException(
+        `File type not allowed. Accepted extensions: ${[...ALLOWED_EXTENSIONS].join(', ')}`,
+      );
+    }
+
+    // Validate MIME type (browsers may send octet-stream; we allow it for now
+    // since the extension check is the primary guard)
+    if (!ALLOWED_MIME_TYPES.has(mimetype)) {
+      throw new BadRequestException(
+        `MIME type not allowed: ${mimetype}`,
+      );
+    }
+
+    // Buffer the stream so we can compute the hash and check file size
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+
+    await new Promise<void>((resolve, reject) => {
+      stream.on('data', (chunk: Buffer) => {
+        totalBytes += chunk.length;
+        if (totalBytes > MAX_FILE_SIZE_BYTES) {
+          reject(
+            new BadRequestException(
+              `File exceeds the maximum allowed size of ${MAX_FILE_SIZE_BYTES / 1024 / 1024} MB`,
+            ),
+          );
+        }
+        chunks.push(chunk);
+      });
+      stream.on('end', resolve);
+      stream.on('error', reject);
+    });
+
+    const buffer = Buffer.concat(chunks);
+
+    // Compute SHA-256 hash
+    const fileHash = createHash('sha256').update(buffer).digest('hex');
+
+    // Derive a logical storage path
+    // Format: spreadsheet-agent/{projectId}/{fileHash}{ext}
+    // Using hash in path means re-uploads of the same file reuse the same path.
+    const storagePath = `${project.outputPrefix}/${fileHash}${ext}`;
+
+    // Determine fileType from extension
+    const fileType = ext.replace('.', '').toUpperCase();
+
+    // Persist the file record and increment the project's fileCount atomically
+    const [file] = await this.prisma.$transaction([
+      this.prisma.spreadsheetFile.create({
+        data: {
+          projectId,
+          fileName: filename,
+          fileType,
+          fileSizeBytes: BigInt(totalBytes),
+          fileHash,
+          storagePath,
+          status: 'pending',
+          storageObjectId: null,
+        },
+      }),
+      this.prisma.spreadsheetProject.update({
+        where: { id: projectId },
+        data: { fileCount: { increment: 1 } },
+      }),
+    ]);
+
+    await this.createAuditEvent(
+      userId,
+      'spreadsheet_files:upload',
+      'spreadsheet_file',
+      file.id,
+      { projectId, fileName: filename, fileSizeBytes: totalBytes },
+    );
+
+    this.logger.log(
+      `File "${filename}" (${totalBytes} bytes) uploaded to project ${projectId} by user ${userId} — record ${file.id}`,
+    );
+
+    return this.mapFile(file);
   }
 
   // ---------------------------------------------------------------------------

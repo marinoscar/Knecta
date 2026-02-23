@@ -7,10 +7,11 @@ import {
   Param,
   Query,
   Body,
+  Req,
+  BadRequestException,
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
-  NotImplementedException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -18,7 +19,10 @@ import {
   ApiParam,
   ApiQuery,
   ApiResponse,
+  ApiConsumes,
+  ApiBody,
 } from '@nestjs/swagger';
+import { FastifyRequest } from 'fastify';
 
 import { Auth } from '../auth/decorators/auth.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -125,15 +129,45 @@ export class SpreadsheetAgentController {
 
   @Post('projects/:id/files')
   @Auth({ permissions: [PERMISSIONS.SPREADSHEET_AGENT_WRITE] })
-  @ApiOperation({ summary: 'Upload files to a project (stub — not yet implemented)' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Spreadsheet file to upload (xlsx, xls, csv, tsv, ods — max 50 MB)',
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        projectId: { type: 'string', format: 'uuid' },
+      },
+    },
+  })
+  @ApiOperation({ summary: 'Upload a spreadsheet file to a project' })
   @ApiParam({ name: 'id', type: String, format: 'uuid' })
-  @ApiResponse({ status: 501, description: 'Not yet implemented' })
+  @ApiResponse({ status: 201, description: 'File record created' })
+  @ApiResponse({ status: 400, description: 'Invalid file type or size' })
+  @ApiResponse({ status: 404, description: 'Project not found' })
   async uploadFiles(
+    @Req() req: FastifyRequest,
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
   ) {
-    // TODO: Implement multipart file upload with StorageObjectsService in Phase 4
-    throw new NotImplementedException('File upload not yet implemented');
+    const data = await req.file();
+
+    if (!data) {
+      throw new BadRequestException('No file provided in the request');
+    }
+
+    const file = await this.service.uploadFile(
+      id,
+      {
+        filename: data.filename,
+        mimetype: data.mimetype,
+        file: data.file,
+      },
+      userId,
+    );
+
+    return { data: file };
   }
 
   @Get('projects/:id/files')
