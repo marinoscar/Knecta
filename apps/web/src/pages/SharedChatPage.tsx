@@ -25,7 +25,7 @@ import {
 } from '@mui/icons-material';
 import { ChatMessage } from '../components/data-agent/ChatMessage';
 import { getSharedChat } from '../services/api';
-import type { SharedChatData, DataChatMessage, ChartSpec } from '../types';
+import type { SharedChatData, DataChatMessage, ChartSpec, SharedLlmTrace } from '../types';
 
 // Helper to format duration in ms
 function formatDuration(ms: number): string {
@@ -33,6 +33,24 @@ function formatDuration(ms: number): string {
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
   return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
 }
+
+const PHASE_LABELS: Record<string, string> = {
+  planner: 'Planner',
+  navigator: 'Navigator',
+  sql_builder: 'SQL Builder',
+  executor: 'Executor',
+  verifier: 'Verifier',
+  explainer: 'Explainer',
+};
+
+const PHASE_COLORS: Record<string, 'info' | 'secondary' | 'primary' | 'warning' | 'success' | 'default'> = {
+  planner: 'info',
+  navigator: 'secondary',
+  sql_builder: 'primary',
+  executor: 'warning',
+  verifier: 'success',
+  explainer: 'default',
+};
 
 export default function SharedChatPage() {
   const { shareToken } = useParams<{ shareToken: string }>();
@@ -108,7 +126,6 @@ export default function SharedChatPage() {
                     source: '',
                   })),
                   joinPaths: msg.metadata.joinPlan.joinPaths,
-                  notes: msg.metadata.joinPlan.notes,
                 }
               : undefined,
             cannotAnswer: msg.metadata.cannotAnswer,
@@ -124,6 +141,17 @@ export default function SharedChatPage() {
     const assistants = messages.filter((m) => m.role === 'assistant' && m.status === 'complete');
     return assistants.length > 0 ? assistants[assistants.length - 1].id : null;
   }, [messages]);
+
+  const tracesMap = useMemo(() => {
+    if (!data) return new Map<string, SharedLlmTrace[]>();
+    const map = new Map<string, SharedLlmTrace[]>();
+    data.messages.forEach((msg, index) => {
+      if (msg.traces && msg.traces.length > 0) {
+        map.set(`shared-${index}`, msg.traces);
+      }
+    });
+    return map;
+  }, [data]);
 
   const activeMessageId = selectedMessageId ?? lastAssistantId;
   const selectedMessage = messages.find((m) => m.id === activeMessageId);
@@ -162,7 +190,11 @@ export default function SharedChatPage() {
   if (!data) return null;
 
   const insightsContent = (
-    <InsightsPanel message={selectedMessage ?? null} onClose={() => setInsightsOpen(false)} />
+    <InsightsPanel
+      message={selectedMessage ?? null}
+      traces={tracesMap.get(activeMessageId ?? '') ?? []}
+      onClose={() => setInsightsOpen(false)}
+    />
   );
 
   return (
@@ -297,10 +329,11 @@ export default function SharedChatPage() {
 
 interface InsightsPanelProps {
   message: DataChatMessage | null;
+  traces: SharedLlmTrace[];
   onClose: () => void;
 }
 
-function InsightsPanel({ message, onClose }: InsightsPanelProps) {
+function InsightsPanel({ message, traces, onClose }: InsightsPanelProps) {
   if (!message) {
     return (
       <Box
@@ -487,11 +520,6 @@ function InsightsPanel({ message, onClose }: InsightsPanelProps) {
                 />
               )}
             </Box>
-            {joinPlan.notes && (
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                {joinPlan.notes}
-              </Typography>
-            )}
           </Box>
         </>
       )}
@@ -597,6 +625,66 @@ function InsightsPanel({ message, onClose }: InsightsPanelProps) {
                   <Typography variant="body2">{dataLineage.timeWindow}</Typography>
                 </Box>
               )}
+            </Box>
+          </Box>
+        </>
+      )}
+
+      {/* LLM Traces */}
+      {traces.length > 0 && (
+        <>
+          <Divider />
+          <Box sx={{ p: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <Typography variant="subtitle2" fontWeight={600}>
+                LLM Traces
+              </Typography>
+              <Chip size="small" label={`${traces.length} calls`} variant="outlined" />
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+              {traces.map((trace, idx) => (
+                <Box
+                  key={idx}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    py: 0.5,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <Chip
+                    size="small"
+                    label={PHASE_LABELS[trace.phase] || trace.phase}
+                    color={PHASE_COLORS[trace.phase] || 'default'}
+                    sx={{ fontSize: '0.7rem', height: 22 }}
+                  />
+                  <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
+                    {trace.purpose}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {formatDuration(trace.durationMs)}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+            {/* Token summary */}
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`${traces.reduce((sum, t) => sum + t.promptTokens, 0).toLocaleString()} in`}
+              />
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`${traces.reduce((sum, t) => sum + t.completionTokens, 0).toLocaleString()} out`}
+              />
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`${traces.reduce((sum, t) => sum + t.totalTokens, 0).toLocaleString()} total`}
+              />
             </Box>
           </Box>
         </>

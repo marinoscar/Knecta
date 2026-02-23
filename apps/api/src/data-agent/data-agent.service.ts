@@ -666,7 +666,28 @@ export class DataAgentService {
     const chat = await this.prisma.dataChat.findUnique({
       where: { id: share.chatId },
       include: {
-        messages: { orderBy: { createdAt: 'asc' } },
+        messages: {
+          orderBy: { createdAt: 'asc' },
+          include: {
+            llmTraces: {
+              orderBy: { callIndex: 'asc' },
+              select: {
+                phase: true,
+                callIndex: true,
+                stepId: true,
+                purpose: true,
+                provider: true,
+                model: true,
+                structuredOutput: true,
+                promptTokens: true,
+                completionTokens: true,
+                totalTokens: true,
+                durationMs: true,
+                error: true,
+              },
+            },
+          },
+        },
         ontology: { select: { name: true } },
       },
     });
@@ -690,21 +711,21 @@ export class DataAgentService {
   private sanitizeMessageForShare(message: DataChatMessage) {
     const raw = (message.metadata ?? {}) as Record<string, any>;
 
-    // Strip yaml from relevantDatasets items in joinPlan (keep only name + description)
+    // Strip yaml and notes from joinPlan (keep only relevantDatasets name+description and joinPaths)
     let joinPlan: any = undefined;
     if (raw.joinPlan) {
-      joinPlan = { ...raw.joinPlan };
-      if (Array.isArray(joinPlan.relevantDatasets)) {
-        joinPlan = {
-          ...joinPlan,
-          relevantDatasets: joinPlan.relevantDatasets.map(
-            ({ name, description }: { name?: string; description?: string; yaml?: string; [key: string]: any }) => ({
-              name,
-              description,
-            }),
-          ),
-        };
-      }
+      const jp = raw.joinPlan;
+      joinPlan = {
+        relevantDatasets: Array.isArray(jp.relevantDatasets)
+          ? jp.relevantDatasets.map(
+              ({ name, description }: { name?: string; description?: string; [key: string]: any }) => ({
+                name,
+                description,
+              }),
+            )
+          : [],
+        joinPaths: jp.joinPaths ?? [],
+      };
     }
 
     const safeMetadata: Record<string, any> = {};
@@ -718,12 +739,16 @@ export class DataAgentService {
     if (raw.durationMs !== undefined) safeMetadata.durationMs = raw.durationMs;
     if (raw.revisionsUsed !== undefined) safeMetadata.revisionsUsed = raw.revisionsUsed;
 
+    // Include sanitized LLM traces (no prompt messages or response content)
+    const traces = (message as any).llmTraces;
+
     return {
       role: message.role,
       content: message.content,
       status: message.status,
       createdAt: message.createdAt,
       metadata: safeMetadata,
+      traces: Array.isArray(traces) ? traces : [],
     };
   }
 }

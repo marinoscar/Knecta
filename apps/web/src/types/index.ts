@@ -523,6 +523,21 @@ export interface SharedChatData {
   sharedAt: string;
 }
 
+export interface SharedLlmTrace {
+  phase: string;
+  callIndex: number;
+  stepId: number | null;
+  purpose: string;
+  provider: string;
+  model: string;
+  structuredOutput: boolean;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  durationMs: number;
+  error: string | null;
+}
+
 export interface SharedChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -565,7 +580,6 @@ export interface SharedChatMessage {
           relationshipName: string;
         }>;
       }>;
-      notes: string;
     };
     cannotAnswer?: {
       reason: string;
@@ -575,6 +589,7 @@ export interface SharedChatMessage {
     durationMs?: number;
     revisionsUsed?: number;
   };
+  traces?: SharedLlmTrace[];
 }
 
 export interface DataAgentStreamEvent {
