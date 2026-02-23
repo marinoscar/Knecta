@@ -71,6 +71,20 @@ export class SpreadsheetAgentAgentService {
           );
       }
 
+      if (event.type === 'file_complete') {
+        this.prisma.spreadsheetFile
+          .update({
+            where: { id: event.fileId as string },
+            data: {
+              status: 'analyzing',
+              sheetCount: (event.sheetCount as number) || 0,
+            },
+          })
+          .catch((err: Error) =>
+            this.logger.error(`Failed to update file status: ${err.message}`),
+          );
+      }
+
       if (event.type === 'phase_start') {
         const phaseToStatus: Record<string, string> = {
           ingest: 'ingesting',
@@ -136,6 +150,16 @@ export class SpreadsheetAgentAgentService {
             revisionCycles: 0,
           },
         });
+
+        // Also update the project status to 'review_pending'
+        await this.prisma.spreadsheetProject
+          .update({
+            where: { id: run.projectId },
+            data: { status: 'review_pending' },
+          })
+          .catch((err: Error) =>
+            this.logger.error(`Failed to update project status: ${err.message}`),
+          );
 
         onEvent({
           type: 'review_ready',
