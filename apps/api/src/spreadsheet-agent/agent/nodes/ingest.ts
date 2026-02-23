@@ -1,4 +1,6 @@
+import { readFileSync } from 'fs';
 import { Logger } from '@nestjs/common';
+import * as XLSX from 'xlsx';
 import { SpreadsheetAgentStateType } from '../state';
 import { FileInventory } from '../types';
 import { EmitFn } from '../graph';
@@ -114,11 +116,93 @@ async function processFilesWithConcurrency(
 async function inventoryFile(
   file: SpreadsheetAgentStateType['files'][0],
 ): Promise<FileInventory> {
-  // For Excel files (.xlsx / .xls) we enumerate sheets via openpyxl in the sandbox.
-  // For tabular files (.csv / .json) there is a single implicit sheet named after the file.
-  // This placeholder creates a minimal inventory record that downstream nodes can refine.
-  const isExcel = ['xlsx', 'xls'].includes(file.fileType.toLowerCase());
-  const sheetName = isExcel ? 'Sheet1' : file.fileName;
+  const buffer = readFileSync(file.storagePath);
+  const workbook = XLSX.read(buffer, { type: 'buffer' });
+
+  logger.debug(
+    `Parsed ${file.fileName}: ${workbook.SheetNames.length} sheet(s) — ${workbook.SheetNames.join(', ')}`,
+  );
+
+  const sheets = workbook.SheetNames.map((sheetName) => {
+    const sheet = workbook.Sheets[sheetName];
+    const ref = sheet['!ref'];
+
+    if (!ref) {
+      // Empty sheet — no data range
+      logger.debug(`Sheet "${sheetName}" in ${file.fileName} is empty`);
+      return {
+        name: sheetName,
+        rowCount: 0,
+        colCount: 0,
+        hasMergedCells: false,
+        hasFormulas: false,
+        dataDensity: 0,
+        sampleGrid: [] as string[][],
+        lastRows: [] as string[][],
+        mergedCellRanges: [] as string[],
+      };
+    }
+
+    const range = XLSX.utils.decode_range(ref);
+    const rowCount = range.e.r - range.s.r + 1;
+    const colCount = range.e.c - range.s.c + 1;
+
+    // Merged cell ranges
+    const merges: XLSX.Range[] = sheet['!merges'] ?? [];
+    const mergedCellRanges = merges.map((m) => XLSX.utils.encode_range(m));
+
+    // Formula detection — iterate all cells in the ref range
+    let hasFormulas = false;
+    for (const cellAddress of Object.keys(sheet)) {
+      if (cellAddress.startsWith('!')) continue;
+      const cell = sheet[cellAddress] as XLSX.CellObject;
+      if (cell && cell.f) {
+        hasFormulas = true;
+        break;
+      }
+    }
+
+    // Count non-empty cells for density calculation
+    let nonEmptyCells = 0;
+    for (const cellAddress of Object.keys(sheet)) {
+      if (cellAddress.startsWith('!')) continue;
+      const cell = sheet[cellAddress] as XLSX.CellObject;
+      if (cell && cell.v !== undefined && cell.v !== null && cell.v !== '') {
+        nonEmptyCells++;
+      }
+    }
+    const totalCells = rowCount * colCount;
+    const dataDensity = totalCells > 0 ? nonEmptyCells / totalCells : 0;
+
+    // Full grid as strings for sampling
+    const fullGrid = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+      header: 1,
+      range: 0,
+      defval: '',
+    }) as unknown[][];
+
+    const toStringGrid = (rows: unknown[][]): string[][] =>
+      rows.map((row) => (row as unknown[]).map((cell) => String(cell ?? '')));
+
+    const sampleGrid = toStringGrid(fullGrid.slice(0, 30));
+    const lastRows = toStringGrid(fullGrid.slice(-5));
+
+    logger.debug(
+      `Sheet "${sheetName}": ${rowCount}r x ${colCount}c, density=${dataDensity.toFixed(2)}, formulas=${hasFormulas}, merges=${mergedCellRanges.length}`,
+    );
+
+    return {
+      name: sheetName,
+      rowCount,
+      colCount,
+      hasMergedCells: merges.length > 0,
+      hasFormulas,
+      dataDensity,
+      sampleGrid,
+      lastRows,
+      mergedCellRanges,
+    };
+  });
 
   return {
     fileId: file.fileId,
@@ -126,18 +210,6 @@ async function inventoryFile(
     fileType: file.fileType,
     fileSizeBytes: file.fileSizeBytes,
     fileHash: file.fileHash,
-    sheets: [
-      {
-        name: sheetName,
-        rowCount: 0, // Populated by sandbox execution in full implementation
-        colCount: 0,
-        hasMergedCells: false,
-        hasFormulas: false,
-        dataDensity: 0,
-        sampleGrid: [],
-        lastRows: [],
-        mergedCellRanges: [],
-      },
-    ],
+    sheets,
   };
 }
