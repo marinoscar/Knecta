@@ -676,14 +676,9 @@ export class DataAgentService {
     }
 
     return {
-      id: chat.id,
-      name: chat.name,
+      chatName: chat.name,
       ontologyName: chat.ontology?.name ?? null,
-      createdAt: chat.createdAt,
-      share: {
-        expiresAt: share.expiresAt,
-        viewCount: share.viewCount + 1,
-      },
+      sharedAt: share.createdAt.toISOString(),
       messages: chat.messages.map((m) => this.sanitizeMessageForShare(m)),
     };
   }
