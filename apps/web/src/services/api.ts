@@ -703,7 +703,8 @@ export async function deleteSpreadsheetProject(id: string): Promise<void> {
 }
 
 export async function getSpreadsheetFiles(projectId: string): Promise<SpreadsheetFile[]> {
-  return api.get<SpreadsheetFile[]>(`/spreadsheet-agent/projects/${projectId}/files`);
+  const result = await api.get<{ items: SpreadsheetFile[]; total: number }>(`/spreadsheet-agent/projects/${projectId}/files`);
+  return result.items;
 }
 
 export async function getSpreadsheetFile(projectId: string, fileId: string): Promise<SpreadsheetFile> {
