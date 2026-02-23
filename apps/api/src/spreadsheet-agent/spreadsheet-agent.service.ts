@@ -868,6 +868,7 @@ export class SpreadsheetAgentService {
       errorMessage?: string;
       stats?: any;
       completedAt?: Date;
+      extractionPlan?: any;
     },
   ) {
     await this.prisma.spreadsheetRun.update({
@@ -878,6 +879,7 @@ export class SpreadsheetAgentService {
         ...(data?.errorMessage !== undefined && { errorMessage: data.errorMessage }),
         ...(data?.stats !== undefined && { stats: data.stats }),
         ...(data?.completedAt !== undefined && { completedAt: data.completedAt }),
+        ...(data?.extractionPlan !== undefined && { extractionPlan: data.extractionPlan }),
       },
     });
   }

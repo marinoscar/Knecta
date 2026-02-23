@@ -116,32 +116,59 @@ export class SpreadsheetAgentAgentService {
 
       // 8. Execute graph
       const result = await graph.invoke(initialState, { signal });
-
-      // 9. Update run as completed
       const finalState = result as SpreadsheetAgentStateType;
-      await this.spreadsheetAgentService.updateRunStatus(runId, 'completed', {
-        completedAt: new Date(),
-        stats: {
+
+      // 9. Determine final status
+      const isReviewPause =
+        config.reviewMode === 'review' &&
+        finalState.extractionPlan != null &&
+        !finalState.extractionResults?.length;
+
+      if (isReviewPause) {
+        // Review mode: save plan and pause for user approval
+        await this.spreadsheetAgentService.updateRunStatus(runId, 'review_pending', {
+          extractionPlan: finalState.extractionPlan,
+          stats: {
+            tablesExtracted: 0,
+            totalRows: 0,
+            totalSizeBytes: 0,
+            tokensUsed: finalState.tokensUsed,
+            revisionCycles: 0,
+          },
+        });
+
+        onEvent({
+          type: 'review_ready',
+          projectId: run.projectId,
+          extractionPlan: finalState.extractionPlan,
+          tokensUsed: finalState.tokensUsed,
+        });
+      } else {
+        // Full completion (auto mode or after extraction)
+        await this.spreadsheetAgentService.updateRunStatus(runId, 'completed', {
+          completedAt: new Date(),
+          stats: {
+            tablesExtracted: finalState.extractionResults?.length ?? 0,
+            totalRows:
+              finalState.extractionResults?.reduce((sum, r) => sum + r.rowCount, 0) ?? 0,
+            totalSizeBytes:
+              finalState.extractionResults?.reduce((sum, r) => sum + r.sizeBytes, 0) ?? 0,
+            tokensUsed: finalState.tokensUsed,
+            revisionCycles: finalState.revisionCount,
+          },
+        });
+
+        onEvent({
+          type: 'run_complete',
+          projectId: run.projectId,
           tablesExtracted: finalState.extractionResults?.length ?? 0,
           totalRows:
             finalState.extractionResults?.reduce((sum, r) => sum + r.rowCount, 0) ?? 0,
-          totalSizeBytes:
-            finalState.extractionResults?.reduce((sum, r) => sum + r.sizeBytes, 0) ?? 0,
           tokensUsed: finalState.tokensUsed,
-          revisionCycles: finalState.revisionCount,
-        },
-      });
+        });
+      }
 
-      onEvent({
-        type: 'run_complete',
-        projectId: run.projectId,
-        tablesExtracted: finalState.extractionResults?.length ?? 0,
-        totalRows:
-          finalState.extractionResults?.reduce((sum, r) => sum + r.rowCount, 0) ?? 0,
-        tokensUsed: finalState.tokensUsed,
-      });
-
-      this.logger.log(`Agent execution completed for run ${runId}`);
+      this.logger.log(`Agent execution ${isReviewPause ? 'paused for review' : 'completed'} for run ${runId}`);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
