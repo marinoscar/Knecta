@@ -496,11 +496,10 @@ describe('Chat Share Endpoints (Integration)', () => {
         .expect(200);
 
       const body = response.body.data ?? response.body;
-      expect(body).toHaveProperty('id', chatId);
-      expect(body).toHaveProperty('name');
+      expect(body).toHaveProperty('chatName');
       expect(body).toHaveProperty('ontologyName', 'My Ontology');
       expect(body).toHaveProperty('messages');
-      expect(body).toHaveProperty('share');
+      expect(body).toHaveProperty('sharedAt');
     });
 
     it('should return sanitized messages that exclude sensitive metadata fields', async () => {
@@ -617,10 +616,11 @@ describe('Chat Share Endpoints (Integration)', () => {
         .expect(200);
 
       const body = response.body.data ?? response.body;
-      // The service increments viewCount by 1 before returning
-      expect(body.share).toHaveProperty('viewCount', 3);
+      // The response contains chatName, ontologyName, sharedAt, messages (no share object)
+      expect(body).toHaveProperty('chatName');
+      expect(body).toHaveProperty('messages');
 
-      // Verify update was called with increment
+      // Verify update was called with increment (fire-and-forget)
       expect(context.prismaMock.dataChatShare.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: shareId },
