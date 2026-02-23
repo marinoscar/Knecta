@@ -22,7 +22,11 @@ interface UseSpreadsheetRunResult {
   approvePlan: (runId: string, modifications?: SpreadsheetPlanModification[]) => Promise<void>;
 }
 
-export function useSpreadsheetRun(): UseSpreadsheetRunResult {
+interface UseSpreadsheetRunOptions {
+  onStreamEnd?: () => void;
+}
+
+export function useSpreadsheetRun(opts?: UseSpreadsheetRunOptions): UseSpreadsheetRunResult {
   const [run, setRun] = useState<SpreadsheetRun | null>(null);
   const [events, setEvents] = useState<SpreadsheetStreamEvent[]>([]);
   const [progress, setProgress] = useState<SpreadsheetRunProgress | null>(null);
@@ -123,6 +127,8 @@ export function useSpreadsheetRun(): UseSpreadsheetRunResult {
                       setIsStreaming(false);
                       // Refresh the run to get final state
                       fetchRun(runId);
+                      // Notify the consuming page so it can refetch related data
+                      opts?.onStreamEnd?.();
                     }
                   } catch {
                     // Skip malformed JSON
