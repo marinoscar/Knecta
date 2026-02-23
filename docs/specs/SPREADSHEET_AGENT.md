@@ -69,7 +69,7 @@ The Spreadsheet Agent enables users to upload multiple spreadsheet files (Excel,
 │                                                                       │
 │  SpreadsheetAgentPage (project list)                                │
 │  NewSpreadsheetProjectPage (wizard: name → upload → process)        │
-│  SpreadsheetProjectDetailPage (tabs: Overview, Files, Tables, Runs) │
+│  SpreadsheetProjectDetailPage (header + tabs: Files, Tables, Runs, Catalog) │
 │  ExtractionPlanReview (review gate component)                       │
 │  AgentProgressView (SSE-driven progress)                            │
 │  FileUploadZone (drag & drop multi-file)                            │
@@ -152,7 +152,7 @@ The Spreadsheet Agent enables users to upload multiple spreadsheet files (Excel,
 
 - **SpreadsheetAgentPage**: Project list with search, status filter, and pagination
 - **NewSpreadsheetProjectPage**: Multi-step wizard (name → upload → process → progress)
-- **SpreadsheetProjectDetailPage**: Tabbed detail view (Overview, Files, Tables, Runs, Catalog)
+- **SpreadsheetProjectDetailPage**: Detail view with header overview and 4 tabs (Files, Tables, Runs, Catalog)
 - **ExtractionPlanReview**: Review gate — editable table cards with per-table approve/modify actions
 - **AgentProgressView**: SSE-driven progress with per-file and per-table status
 - **FileUploadZone**: Drag-and-drop multi-file upload area with file type validation
@@ -1701,7 +1701,92 @@ DELETE /api/spreadsheet-agent/projects/:id/tables/:tableId
 
 ### Runs
 
-#### 15. Create Run
+#### 15. List All Runs (Global)
+
+```http
+GET /api/spreadsheet-agent/runs
+```
+
+**Permission:** `spreadsheet_agent:read`
+
+**Query Parameters:**
+- `page` (number, default: 1) — Page number
+- `pageSize` (number, default: 20) — Items per page (max: 100)
+- `status` (enum, optional) — Filter by run status
+
+**Response (200):**
+```json
+{
+  "data": {
+    "runs": [
+      {
+        "id": "uuid",
+        "projectId": "uuid",
+        "project": { "id": "uuid", "name": "Q4 Financial Reports" },
+        "status": "completed",
+        "tokensUsed": { "prompt": 12000, "completion": 4000, "total": 16000 },
+        "startedAt": "2026-02-21T10:00:00Z",
+        "completedAt": "2026-02-21T10:05:30Z",
+        "createdAt": "2026-02-21T10:00:00Z"
+      }
+    ],
+    "total": 42,
+    "page": 1,
+    "pageSize": 20
+  }
+}
+```
+
+**Notes:**
+- Returns runs across all projects accessible to the user
+- Each run includes a `project: { id, name }` summary for display in the global runs tab
+- `tokensUsed` is extracted from the `stats` JSONB column via `mapRun()`
+
+---
+
+#### 15a. List Runs for Project
+
+```http
+GET /api/spreadsheet-agent/projects/:id/runs
+```
+
+**Parameters:**
+- `id` (UUID, path) — Project ID
+
+**Permission:** `spreadsheet_agent:read`
+
+**Query Parameters:**
+- `page` (number, default: 1) — Page number
+- `pageSize` (number, default: 20) — Items per page (max: 100)
+- `status` (enum, optional) — Filter by run status
+
+**Response (200):**
+```json
+{
+  "data": {
+    "runs": [
+      {
+        "id": "uuid",
+        "projectId": "uuid",
+        "status": "completed",
+        "tokensUsed": { "prompt": 12000, "completion": 4000, "total": 16000 },
+        "startedAt": "2026-02-21T10:00:00Z",
+        "completedAt": "2026-02-21T10:05:30Z",
+        "createdAt": "2026-02-21T10:00:00Z"
+      }
+    ],
+    "total": 5,
+    "page": 1,
+    "pageSize": 20
+  }
+}
+```
+
+**Response (404):** Project not found.
+
+---
+
+#### 15b. Create Run
 
 ```http
 POST /api/spreadsheet-agent/runs
@@ -1824,7 +1909,29 @@ POST /api/spreadsheet-agent/runs/:runId/cancel
 
 ---
 
-#### 19. Approve Extraction Plan
+#### 19. Delete Run
+
+```http
+DELETE /api/spreadsheet-agent/runs/:runId
+```
+
+**Permission:** `spreadsheet_agent:delete`
+
+**Response (204):** No content (success).
+
+**Response (400):** Run is in a non-deletable state (not `failed` or `cancelled`).
+
+**Response (404):** Run not found.
+
+**Business Rule:** Only runs with `status: failed` or `status: cancelled` may be deleted. Attempting to delete a run in any other state returns `400`.
+
+**Side Effects:**
+- Deletes the `SpreadsheetRun` record from the database
+- Creates an audit event
+
+---
+
+#### 20. Approve Extraction Plan
 
 ```http
 POST /api/spreadsheet-agent/runs/:runId/approve
@@ -2051,10 +2158,13 @@ Spreadsheets → [Spreadsheet Agent] → Parquet on S3 / Azure / MinIO
 
 **File:** `apps/web/src/pages/SpreadsheetAgentPage.tsx`
 
-**Purpose:** Main project list page for the Spreadsheet Agent feature.
+**Purpose:** Main landing page for the Spreadsheet Agent feature. Uses a two-tab layout matching the Semantic Models page pattern.
 
-**Key Features:**
-- Table with columns: Name, Status, Files, Tables, Total Rows, Size, Created, Actions
+**Two-Tab Layout:**
+
+#### Tab 0: Projects
+
+- Table with columns: Name, Status, Files, Tables, Rows, Review Mode, Updated, Actions
 - Search by name and description
 - Status filter (All, Draft, Processing, Review Pending, Ready, Failed, Partial)
 - Pagination (server-side)
@@ -2067,6 +2177,16 @@ Spreadsheets → [Spreadsheet Agent] → Parquet on S3 / Azure / MinIO
   - Partial (orange — some tables ready, some failed)
 - Action buttons per row: View, Delete (permission-aware)
 - "New Project" button — only visible to `spreadsheet_agent:write` users
+
+#### Tab 1: Runs
+
+- Table with columns: Project, Status, Tokens, Duration, Error, Created, Actions
+- Status filter for the runs table (its own independent filter and pagination)
+- Actions per row:
+  - View Project — navigates to `/spreadsheets/:projectId`
+  - Retry — creates a new run for the same project (requires `spreadsheet_agent:write`)
+  - Delete — removes failed or cancelled runs (requires `spreadsheet_agent:delete`)
+- Delete is only enabled for runs with `status: failed` or `status: cancelled`
 
 **State Management:**
 ```typescript
@@ -2125,37 +2245,36 @@ const {
 
 **Purpose:** Tabbed detail view for an existing project.
 
-**5-Tab Layout:**
+**Page Header (above tabs):**
 
-#### Tab 1: Overview
+The page renders a header section above the tab bar that contains the project overview information:
 - Project name and description (inline editable for `write` permission)
-- Storage provider and output path
-- Review mode badge
-- Aggregate stats: Files, Tables, Total Rows, Total Size
-- Status badge
-- Created and updated timestamps
-- Action buttons: Delete Project (with confirmation dialog), Re-process (triggers new run)
+- Status chip with color coding
+- Stats cards: Files, Tables, Rows, Review Mode
+- "Start Run" / "Re-process" button (requires `spreadsheet_agent:write`)
 
-#### Tab 2: Files
+There is no separate "Overview" tab. All overview content lives in the header.
+
+**4-Tab Layout:**
+
+#### Tab 0: Files
 - Table: Name, Type, Size, Sheets, Status, Uploaded At, Actions
 - Status per file: pending (gray), analyzing (blue), analyzed (blue), extracting (blue), ready (green), failed (red)
 - File type icons (XLSX, CSV, JSON)
 - Delete file action (with confirmation)
 - Upload additional files button
 
-#### Tab 3: Tables
+#### Tab 1: Tables
 - Table: Name, Source File, Source Sheet, Rows, Size, Status, Actions
 - Actions: Preview (opens TablePreview dialog), Download (gets signed URL), Delete
 - Status per table: pending, extracting, ready, failed
 - Column count badge
 
-#### Tab 4: Runs
-- Run history table: Started At, Status, Phase, Duration, Tables Extracted, Token Usage, Actions
-- Status per run: pending, ingesting, analyzing, designing, review_pending, extracting, validating, persisting, completed, failed, cancelled
-- "Retry" action for failed runs (creates a new run for the same project)
-- For `review_pending` runs: "Review Plan" button navigates to `ExtractionPlanReview`
+#### Tab 2: Runs
+- Run history table rendered by the `RunHistory` component
+- See RunHistory component documentation for columns and actions
 
-#### Tab 5: Catalog
+#### Tab 3: Catalog
 - JSON manifest preview (syntax-highlighted, formatted)
 - Shows: tables, relationships, data quality notes, token usage
 - Copy to clipboard button
@@ -2184,12 +2303,14 @@ const {
 **Props:**
 ```typescript
 interface ExtractionPlanReviewProps {
-  runId: string;
   plan: ExtractionPlan;
-  onApproved: () => void;
-  onCancelled: () => void;
+  onApprove: (modifications: PlanModification[]) => void;
+  onCancel: () => void;
+  isSubmitting: boolean;
 }
 ```
+
+The `runId` is not a prop — the parent page component holds the run ID and handles the `POST /runs/:runId/approve` API call. The component receives the parsed `plan` and fires `onApprove` with the collected modifications when the user clicks "Approve".
 
 ---
 
@@ -2199,18 +2320,29 @@ interface ExtractionPlanReviewProps {
 
 **Purpose:** SSE-driven progress display during agent execution (reuses patterns from `AgentLog` in Semantic Models).
 
+**Props:**
+```typescript
+interface AgentProgressViewProps {
+  events: SpreadsheetStreamEvent[];
+  progress: SpreadsheetRunProgress | null;
+  isStreaming: boolean;
+  tokensUsed?: { prompt: number; completion: number; total: number };
+  startTime?: number | null;
+}
+```
+
 **Key Features:**
 - Overall `LinearProgress` bar (0–100% derived from `progress` event payload)
-- Elapsed timer (mm:ss format, same as AgentLog)
+- Elapsed timer chip (MM:SS format) shown when `isStreaming` is true and `startTime` is provided
+- Token count chip shown when `tokensUsed.total > 0`
 - Phase indicator: current phase name displayed (Ingesting, Analyzing, Designing, Extracting, Validating, Persisting)
 - Per-file status list during ingestion:
   - File name, type icon, status (downloading → analyzing → analyzed → failed)
 - Per-table status list during extraction:
   - Table name, source file, status (extracting → ready → failed), row count on completion
 - Log entries with markdown rendering for `text` SSE events
-- Token usage display (prompt, completion, total — updated per `token_update` event)
-- Success state: "Completed — {N} tables extracted"
-- Failure state: "Failed" with error message and retry option
+- Success state: MUI Alert shown on `run_complete` event with final token count
+- Failure state: MUI Alert shown on `run_error` event with the error message
 
 **SSE Connection Pattern** (identical to AgentLog):
 ```typescript
@@ -2286,7 +2418,39 @@ interface FileUploadZoneProps {
 
 ---
 
-### 7. TablePreview
+### 7. RunHistory
+
+**File:** `apps/web/src/components/spreadsheet-agent/RunHistory.tsx`
+
+**Purpose:** Run history table used in the Runs tab of `SpreadsheetProjectDetailPage` and in the global Runs tab of `SpreadsheetAgentPage`.
+
+**Columns:**
+- **Status** — Status chip with color coding for all 11 run statuses
+- **Tokens** — `run.tokensUsed.total.toLocaleString()` (structured format extracted from `stats` JSONB)
+- **Duration** — Calculated from `startedAt` / `completedAt` in MM:SS format; shows "Running..." for active runs
+- **Error** — Error message truncated to one line (shown only for `failed` runs)
+- **Created** — `createdAt` timestamp
+- **Actions** — Permission-aware action buttons
+
+**Action Buttons (permission-aware):**
+- **View** — Navigates to the project detail page (always visible)
+- **Cancel** — Cancels an active run; visible for non-terminal statuses (requires `spreadsheet_agent:write`)
+- **Retry** — Creates a new run for the same project; visible for `failed` and `cancelled` runs (requires `spreadsheet_agent:write`)
+- **Delete** — Deletes the run record; visible for `failed` and `cancelled` runs (requires `spreadsheet_agent:delete`)
+
+**tokensUsed type:**
+```typescript
+run.tokensUsed: {
+  prompt: number;
+  completion: number;
+  total: number;
+}
+```
+The `tokensUsed` field is a structured object (not a flat number). It is extracted by `mapRun()` from the `stats` JSONB column. Defaults to `{ prompt: 0, completion: 0, total: 0 }` when `stats` is null.
+
+---
+
+### 8. TablePreview
 
 **File:** `apps/web/src/components/spreadsheet-agent/TablePreview.tsx`
 
@@ -2302,17 +2466,19 @@ interface FileUploadZoneProps {
 **Props:**
 ```typescript
 interface TablePreviewProps {
-  projectId: string;
-  tableId: string;
-  tableName: string;
   open: boolean;
+  tableName: string;
+  data: { columns: string[]; rows: unknown[][] } | null;
+  isLoading: boolean;
   onClose: () => void;
 }
 ```
 
+The parent page component fetches the preview data via `GET /tables/:tableId/preview` and passes the result in as `data`. The component itself does not make any API calls — it is a pure display component.
+
 ---
 
-### 8. Hooks
+### 9. Hooks
 
 #### useSpreadsheetProjects
 
@@ -2333,19 +2499,12 @@ const [error, setError] = useState<string | null>(null);
 **Methods:**
 ```typescript
 fetchProjects({ page?, pageSize?, search?, status?, sortBy?, sortOrder? })
-getProjectById(id: string)
 createProject(data: CreateProjectDto)
 updateProject(id: string, data: UpdateProjectDto)
 deleteProject(id: string)
-uploadFiles(projectId: string, files: File[])
-getFiles(projectId: string)
-deleteFile(projectId: string, fileId: string)
-getTables(projectId: string, query?: QueryTablesDto)
-getTablePreview(projectId: string, tableId: string, limit?: number)
-getTableDownloadUrl(projectId: string, tableId: string)
-deleteTable(projectId: string, tableId: string)
-getRuns(projectId: string)
 ```
+
+The hook manages project-level CRUD and pagination only. File operations (upload, list, delete), table operations (list, preview, download, delete), and run operations (list, create, cancel, approve) are performed via direct API calls within the page components, not through this hook. Use `useSpreadsheetRun` for run state management and `useSpreadsheetUpload` for file upload state.
 
 ---
 
@@ -2360,9 +2519,12 @@ getRuns(projectId: string)
 const [run, setRun] = useState<SpreadsheetRun | null>(null);
 const [streamEvents, setStreamEvents] = useState<SpreadsheetStreamEvent[]>([]);
 const [isStreaming, setIsStreaming] = useState(false);
-const [progress, setProgress] = useState<RunProgress | null>(null);
+const [progress, setProgress] = useState<SpreadsheetRunProgress | null>(null);
 const [tokensUsed, setTokensUsed] = useState({ prompt: 0, completion: 0, total: 0 });
+const [streamStartTime, setStreamStartTime] = useState<number | null>(null);
 ```
+
+`streamStartTime` is set to `Date.now()` when the SSE stream begins and is reset to `null` when streaming ends. It is passed to `AgentProgressView` as the `startTime` prop to drive the elapsed timer.
 
 **Methods:**
 ```typescript
@@ -2372,6 +2534,8 @@ startStream(runId: string)
 cancelRun(runId: string)
 approvePlan(runId: string, modifications?: PlanModification[])
 ```
+
+**Exported values include:** `run`, `streamEvents`, `isStreaming`, `progress`, `tokensUsed`, `streamStartTime`, and all methods.
 
 ---
 
@@ -2396,29 +2560,18 @@ clearAll()
 
 ---
 
-### 9. Routing
+### 10. Routing
 
 ```tsx
 // In apps/web/src/App.tsx
-<Route path="/spreadsheet-agent" element={<SpreadsheetAgentPage />} />
-<Route path="/spreadsheet-agent/new" element={<NewSpreadsheetProjectPage />} />
-<Route path="/spreadsheet-agent/:id" element={<SpreadsheetProjectDetailPage />} />
+<Route path="/spreadsheets" element={<SpreadsheetAgentPage />} />
+<Route path="/spreadsheets/new" element={<NewSpreadsheetProjectPage />} />
+<Route path="/spreadsheets/:id" element={<SpreadsheetProjectDetailPage />} />
 ```
 
 **Sidebar Entry** (in `apps/web/src/components/navigation/Sidebar.tsx`):
 
-```tsx
-import TableViewIcon from '@mui/icons-material/TableView';
-
-<RequirePermission permission="spreadsheet_agent:read">
-  <ListItem button component={Link} to="/spreadsheet-agent">
-    <ListItemIcon>
-      <TableViewIcon />
-    </ListItemIcon>
-    <ListItemText primary="Spreadsheet Agent" />
-  </ListItem>
-</RequirePermission>
-```
+The sidebar uses a centralised navigation configuration array. The Spreadsheet Agent entry uses the label "Spreadsheets" and links to `/spreadsheets`. The icon is configured via the navigation structure rather than imported individually in the sidebar file itself.
 
 ---
 
@@ -2485,40 +2638,28 @@ AZURE_OPENAI_API_VERSION=2024-02-01
 
 ### Docker Compose Integration
 
-Add MinIO service for local development in `infra/compose/dev.compose.yml`:
+The Spreadsheet Agent does not introduce a dedicated MinIO service to the compose files. Storage configuration is handled through the shared S3 environment variables already present in `infra/compose/.env.example`. There are no `SPREADSHEET_*` prefixed variables in `base.compose.yml`.
 
-```yaml
-minio:
-  image: minio/minio:latest
-  command: server /data --console-address ":9001"
-  environment:
-    MINIO_ROOT_USER: minioadmin
-    MINIO_ROOT_PASSWORD: minioadmin
-  ports:
-    - "9000:9000"   # S3 API
-    - "9001:9001"   # Web console
-  volumes:
-    - minio_data:/data
+Storage for the Spreadsheet Agent is configured via the same S3 variables used by the rest of the application:
 
-volumes:
-  minio_data:
+```bash
+# From infra/compose/.env.example — shared S3 configuration
+S3_ENDPOINT=http://localhost:9000
+S3_BUCKET=my-bucket
+S3_REGION=us-east-1
+S3_ACCESS_KEY=minioadmin
+S3_SECRET_KEY=minioadmin
 ```
 
-Add environment variables to the `api` service in `base.compose.yml`:
+The Spreadsheet Agent-specific variables that are added to `infra/compose/.env.example` are limited to concurrency and limits:
 
-```yaml
-api:
-  environment:
-    SPREADSHEET_STORAGE_PROVIDER: ${SPREADSHEET_STORAGE_PROVIDER:-minio}
-    SPREADSHEET_S3_BUCKET: ${SPREADSHEET_S3_BUCKET:-spreadsheets}
-    SPREADSHEET_S3_REGION: ${SPREADSHEET_S3_REGION:-us-east-1}
-    SPREADSHEET_S3_ACCESS_KEY: ${SPREADSHEET_S3_ACCESS_KEY:-minioadmin}
-    SPREADSHEET_S3_SECRET_KEY: ${SPREADSHEET_S3_SECRET_KEY:-minioadmin}
-    SPREADSHEET_MINIO_ENDPOINT: ${SPREADSHEET_MINIO_ENDPOINT:-http://minio:9000}
-    SPREADSHEET_AGENT_CONCURRENCY: ${SPREADSHEET_AGENT_CONCURRENCY:-5}
-    SPREADSHEET_MAX_FILE_SIZE_MB: ${SPREADSHEET_MAX_FILE_SIZE_MB:-500}
-    SPREADSHEET_MAX_FILES_PER_PROJECT: ${SPREADSHEET_MAX_FILES_PER_PROJECT:-50}
+```bash
+SPREADSHEET_AGENT_CONCURRENCY=5
+SPREADSHEET_MAX_FILE_SIZE_MB=500
+SPREADSHEET_MAX_FILES_PER_PROJECT=50
 ```
+
+If you need local S3-compatible storage during development, configure a MinIO instance separately and point the shared `S3_*` variables at it. No additional compose service is bundled with this feature.
 
 ---
 
@@ -2553,31 +2694,24 @@ apps/api/
 │   │   │   ├── types.ts                               # TypeScript interfaces: FileInventory, SheetAnalysis, ExtractionPlan, ExtractionResult, ValidationReport
 │   │   │   ├── state.ts                               # LangGraph Annotation.Root state definition
 │   │   │   ├── graph.ts                               # StateGraph definition with nodes, edges, and routing functions
-│   │   │   ├── nodes/
-│   │   │   │   ├── ingest.ts                          # Phase 1: Ingest & Inventory (programmatic)
-│   │   │   │   ├── analyze.ts                         # Phase 2: Sheet Analyzer (LLM per sheet, parallel)
-│   │   │   │   ├── design.ts                          # Phase 3: Schema Designer (single LLM call)
-│   │   │   │   ├── extract.ts                         # Phase 5: Extractor (DuckDB, parallel)
-│   │   │   │   ├── validate.ts                        # Phase 6: Validator (programmatic + optional LLM)
-│   │   │   │   └── persist.ts                         # Phase 7: Persist & Catalog
-│   │   │   ├── prompts/
-│   │   │   │   ├── sheet-analyzer.prompt.ts           # Prompt template for Phase 2 LLM calls
-│   │   │   │   ├── schema-designer.prompt.ts          # Prompt template for Phase 3 LLM call
-│   │   │   │   └── validator.prompt.ts                # Prompt template for Phase 6 optional LLM review
-│   │   │   └── utils/
-│   │   │       ├── file-reader.ts                     # Python sandbox calls for openpyxl-based file reading
-│   │   │       ├── duckdb-executor.ts                 # Python sandbox calls for DuckDB extraction
-│   │   │       └── parquet-writer.ts                  # Parquet write verification utilities
-│   │   └── storage/
-│   │       ├── storage-provider.interface.ts          # StorageProvider interface
-│   │       ├── s3-storage.provider.ts                 # AWS S3 and MinIO implementation
-│   │       ├── azure-storage.provider.ts              # Azure Blob Storage implementation
-│   │       └── storage.module.ts                      # NestJS module with factory for provider selection
+│   │   │   └── nodes/
+│   │   │       ├── ingest.ts                          # Phase 1: Ingest & Inventory (programmatic)
+│   │   │       ├── analyze.ts                         # Phase 2: Sheet Analyzer (LLM per sheet, parallel)
+│   │   │       ├── design.ts                          # Phase 3: Schema Designer (single LLM call)
+│   │   │       ├── extract.ts                         # Phase 5: Extractor (DuckDB, parallel)
+│   │   │       ├── validate.ts                        # Phase 6: Validator (programmatic + optional LLM)
+│   │   │       └── persist.ts                         # Phase 7: Persist & Catalog
+│   └── storage/                                       # Shared storage module (sibling of spreadsheet-agent, not inside it)
+│       ├── providers/
+│       │   ├── storage-provider.interface.ts           # StorageProvider interface
+│       │   ├── s3/
+│       │   │   └── s3-storage.provider.ts              # AWS S3 and MinIO implementation
+│       │   └── storage-providers.module.ts             # Provider factory
+│       └── storage.module.ts                           # NestJS module
 └── test/
     ├── spreadsheet-agent.integration.spec.ts          # Integration tests for CRUD endpoints
     ├── spreadsheet-agent-run.integration.spec.ts      # Integration tests for run and approve endpoints
-    └── fixtures/
-        └── spreadsheet-test.factory.ts                # createMockProject, createMockFile, createMockRun helpers
+    └── spreadsheet-agent-runs-new.integration.spec.ts # Integration tests for list runs, project runs, delete run
 ```
 
 ### Frontend Files
@@ -2587,7 +2721,7 @@ apps/web/src/
 ├── pages/
 │   ├── SpreadsheetAgentPage.tsx               # Project list page
 │   ├── NewSpreadsheetProjectPage.tsx          # 4-step creation wizard
-│   └── SpreadsheetProjectDetailPage.tsx       # 5-tab project detail view
+│   └── SpreadsheetProjectDetailPage.tsx       # 4-tab project detail view (header + Files, Tables, Runs, Catalog)
 ├── components/spreadsheet-agent/
 │   ├── ExtractionPlanReview.tsx               # Review gate: editable extraction plan cards
 │   ├── AgentProgressView.tsx                  # SSE-driven progress (phases, files, tables, tokens)
@@ -2607,13 +2741,12 @@ apps/web/src/
 │   └── index.ts                               # SpreadsheetProject, SpreadsheetFile, SpreadsheetTable, SpreadsheetRun TypeScript types
 └── __tests__/
     ├── pages/
-    │   ├── SpreadsheetAgentPage.test.tsx      # Component tests for list page
-    │   ├── NewSpreadsheetProjectPage.test.tsx # Component tests for creation wizard
-    │   └── SpreadsheetProjectDetailPage.test.tsx # Component tests for detail view
+    │   └── SpreadsheetAgentPage.test.tsx      # Component tests for list page (Projects + Runs tabs)
     └── components/spreadsheet-agent/
         ├── ExtractionPlanReview.test.tsx
         ├── AgentProgressView.test.tsx
-        └── FileUploadZone.test.tsx
+        ├── FileUploadZone.test.tsx
+        └── RunHistory.test.tsx                # Run history table with duration, tokens, and actions
 ```
 
 ### Configuration Files Modified
@@ -2626,14 +2759,12 @@ apps/api/
 
 apps/web/
 └── src/
-    ├── App.tsx                                # Added routes: /spreadsheet-agent, /spreadsheet-agent/new, /spreadsheet-agent/:id
+    ├── App.tsx                                # Added routes: /spreadsheets, /spreadsheets/new, /spreadsheets/:id
     └── components/navigation/
         └── Sidebar.tsx                        # Added sidebar entry with TableViewIcon
 
 infra/compose/
-├── base.compose.yml                           # Added SPREADSHEET_* environment variables to api service
-├── dev.compose.yml                            # Added MinIO service for local development
-└── .env.example                              # Added all SPREADSHEET_* environment variables with documentation
+└── .env.example                               # Added SPREADSHEET_AGENT_CONCURRENCY, SPREADSHEET_MAX_FILE_SIZE_MB, SPREADSHEET_MAX_FILES_PER_PROJECT
 ```
 
 ---
@@ -2705,6 +2836,7 @@ cd apps/api && npm test -- spreadsheet-agent.integration
 
 **File:** `apps/api/test/spreadsheet-agent-run.integration.spec.ts`
 
+
 **Coverage:**
 
 **POST /api/spreadsheet-agent/runs**
@@ -2734,6 +2866,49 @@ cd apps/api && npm test -- spreadsheet-agent.integration
 **Run:**
 ```bash
 cd apps/api && npm test -- spreadsheet-agent-run.integration
+```
+
+---
+
+#### Integration Tests: List Runs, Project Runs, and Delete Run
+
+**File:** `apps/api/test/spreadsheet-agent-runs-new.integration.spec.ts`
+
+**Coverage (40 tests):**
+
+**GET /api/spreadsheet-agent/runs**
+- `401` if not authenticated
+- `200` empty list when no runs
+- `200` paginated results with correct total
+- `200` includes `project: { id, name }` on each run
+- `200` filter by status
+- `200` `tokensUsed` extracted correctly from `stats` JSONB via `mapRun()`
+- `200` `tokensUsed` defaults to `{ prompt: 0, completion: 0, total: 0 }` when `stats` is null
+
+**GET /api/spreadsheet-agent/projects/:id/runs**
+- `401` if not authenticated
+- `200` returns only runs belonging to the specified project
+- `200` filter by status
+- `404` for non-existent project
+
+**DELETE /api/spreadsheet-agent/runs/:runId**
+- `401` if not authenticated
+- `403` for Viewer
+- `204` on success (deletes `failed` run)
+- `204` on success (deletes `cancelled` run)
+- `400` when run status is `completed` (non-deletable state)
+- `400` when run status is `pending` (non-deletable state)
+- `400` when run status is `analyzing` (non-deletable state)
+- `404` for non-existent run
+
+**`mapRun()` tokensUsed extraction:**
+- Extracts `prompt`, `completion`, `total` from `stats.tokensUsed` when present
+- Returns zeros when `stats` is null or `stats.tokensUsed` is absent
+- Handles partial `stats.tokensUsed` objects gracefully
+
+**Run:**
+```bash
+cd apps/api && npm test -- spreadsheet-agent-runs-new.integration
 ```
 
 ---
@@ -2780,33 +2955,46 @@ cd apps/api && npm test -- spreadsheet-agent
 
 **Files:** `apps/web/src/__tests__/`
 
+**Note:** `NewSpreadsheetProjectPage.test.tsx` and `SpreadsheetProjectDetailPage.test.tsx` do not exist. Those pages are covered by component-level tests rather than page-level test files.
+
 **Coverage:**
 
-**SpreadsheetAgentPage:**
-- Renders project list table
-- Search input filters results
+**SpreadsheetAgentPage** (`pages/SpreadsheetAgentPage.test.tsx`):
+- Renders project list table with both tabs (Projects, Runs)
+- Search input filters project results
 - Status filter chip changes query
 - "New Project" button hidden for Viewer role
 - Delete confirmation dialog appears on delete action
 
-**NewSpreadsheetProjectPage:**
-- Step 1: form validation (name required)
-- Step 2: file drop zone accepts valid types, rejects invalid types
-- Step 3: shows summary of uploaded files, "Start Processing" triggers run creation
-- Step 4: SSE events update progress display, `run_complete` triggers navigation
-
-**ExtractionPlanReview:**
+**ExtractionPlanReview** (`components/spreadsheet-agent/ExtractionPlanReview.test.tsx`):
 - Renders table cards from plan
 - Table name editable (text field)
 - Skip toggle marks table as excluded in submission
 - Approve button sends modifications to API
 
-**AgentProgressView:**
+**AgentProgressView** (`components/spreadsheet-agent/AgentProgressView.test.tsx`):
 - `phase_start` event updates phase indicator
 - `file_complete` event adds file to status list
 - `table_complete` event adds table to status list with row count
-- `run_complete` event shows success state
-- `run_error` event shows failure state
+- `run_complete` event shows success state with token count
+- `run_error` event shows failure state with error message
+- Elapsed timer chip visible when `startTime` is provided and `isStreaming` is true
+- Token count chip visible when `tokensUsed.total > 0`
+
+**FileUploadZone** (`components/spreadsheet-agent/FileUploadZone.test.tsx`):
+- Drop zone accepts valid file types
+- Drop zone rejects invalid file types
+- Per-file remove button removes the file from the list
+- File size limit enforced client-side
+
+**RunHistory** (`components/spreadsheet-agent/RunHistory.test.tsx`):
+- Renders run history table with correct columns (Status, Tokens, Duration, Error, Created, Actions)
+- Duration column shows MM:SS for completed runs
+- Duration column shows "Running..." for active runs
+- Cancel button visible for active runs (requires `spreadsheet_agent:write`)
+- Retry button visible for failed and cancelled runs (requires `spreadsheet_agent:write`)
+- Delete button visible for failed and cancelled runs (requires `spreadsheet_agent:delete`)
+- `tokensUsed.total` rendered with `toLocaleString()` formatting
 
 **Run:**
 ```bash
