@@ -100,6 +100,32 @@ export function createDesignNode(deps: DesignNodeDeps) {
       const result = rawResult.parsed as z.infer<typeof extractionPlanSchema>;
       const tokens: TokenUsage = extractTokenUsage(rawResult.raw);
 
+      // Programmatically fix sourceFileId — the LLM doesn't have real DB UUIDs,
+      // so we resolve them from the sheetAnalyses which carry actual file IDs.
+      for (const table of result.tables) {
+        const analysis = sheetAnalyses.find(
+          (a) => a.fileName === table.sourceFileName && a.sheetName === table.sourceSheetName,
+        );
+        if (analysis) {
+          table.sourceFileId = analysis.fileId;
+        } else {
+          // Fallback: match by fileName only (handles single-sheet files)
+          const fileMatch = sheetAnalyses.find((a) => a.fileName === table.sourceFileName);
+          if (fileMatch) {
+            table.sourceFileId = fileMatch.fileId;
+            logger.warn(
+              `Table "${table.tableName}": sheet "${table.sourceSheetName}" not found in analyses, ` +
+                `matched by fileName "${table.sourceFileName}" to fileId ${fileMatch.fileId}`,
+            );
+          } else {
+            logger.error(
+              `Table "${table.tableName}": could not resolve sourceFileId ` +
+                `for file="${table.sourceFileName}", sheet="${table.sourceSheetName}"`,
+            );
+          }
+        }
+      }
+
       const extractionPlan: ExtractionPlan = {
         tables: result.tables,
         relationships: result.relationships,
