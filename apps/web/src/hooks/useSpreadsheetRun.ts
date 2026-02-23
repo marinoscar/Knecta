@@ -114,8 +114,12 @@ export function useSpreadsheetRun(opts?: UseSpreadsheetRunOptions): UseSpreadshe
                     const event: SpreadsheetStreamEvent = JSON.parse(jsonStr);
                     setEvents((prev) => [...prev, event]);
 
-                    if (event.type === 'progress' && event.progress) {
-                      setProgress(event.progress);
+                    if (event.type === 'progress') {
+                      setProgress({
+                        percentComplete: (event.percentComplete as number) ?? 0,
+                        message: (event.message as string) ?? 'Processing...',
+                        phase: (event.phase as string) ?? '',
+                      });
                     }
                     if (event.type === 'token_update' && event.tokensUsed) {
                       setTokensUsed(event.tokensUsed);
