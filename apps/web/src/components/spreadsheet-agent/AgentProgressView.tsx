@@ -168,7 +168,7 @@ export function AgentProgressView({ events, progress, isStreaming, tokensUsed, s
       )}
 
       {/* Timer and token chips */}
-      {isStreaming && (
+      {(isStreaming || events.length > 0) && (
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 1 }}>
           <Chip
             size="small"
@@ -245,6 +245,19 @@ export function AgentProgressView({ events, progress, isStreaming, tokensUsed, s
           Agent completed successfully
           {startTime && (
             <> in {Math.floor((Date.now() - startTime) / 1000)} seconds</>
+          )}
+          {tokensUsed && tokensUsed.total > 0 && (
+            <> &mdash; {tokensUsed.total.toLocaleString()} tokens used</>
+          )}
+        </Alert>
+      )}
+
+      {/* Review ready alert */}
+      {!isStreaming && events.some((e) => e.type === 'review_ready') && (
+        <Alert severity="info" sx={{ mt: 2 }}>
+          Extraction plan ready for review
+          {startTime && (
+            <> — completed in {Math.floor((Date.now() - startTime) / 1000)} seconds</>
           )}
           {tokensUsed && tokensUsed.total > 0 && (
             <> &mdash; {tokensUsed.total.toLocaleString()} tokens used</>
