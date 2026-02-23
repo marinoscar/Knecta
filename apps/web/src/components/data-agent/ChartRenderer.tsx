@@ -10,6 +10,21 @@ export function ChartRenderer({ chartSpec }: ChartRendererProps) {
   const theme = useTheme();
   const chartHeight = 350;
 
+  const chartSx = {
+    '.MuiChartsAxis-tickLabel': {
+      fill: theme.palette.text.primary,
+    },
+    '.MuiChartsAxis-label': {
+      fill: theme.palette.text.primary,
+    },
+    '.MuiChartsAxis-line': {
+      stroke: theme.palette.text.secondary,
+    },
+    '.MuiChartsAxis-tick': {
+      stroke: theme.palette.text.secondary,
+    },
+  };
+
   const containerSx = {
     p: 2,
     my: 2,
@@ -53,6 +68,7 @@ export function ChartRenderer({ chartSpec }: ChartRendererProps) {
                 direction: 'horizontal',
               },
             }}
+            sx={chartSx}
           />
         </Paper>
       );
@@ -84,6 +100,7 @@ export function ChartRenderer({ chartSpec }: ChartRendererProps) {
                 direction: 'horizontal',
               },
             }}
+            sx={chartSx}
           />
         </Paper>
       );
@@ -113,6 +130,7 @@ export function ChartRenderer({ chartSpec }: ChartRendererProps) {
                 direction: 'vertical',
               },
             }}
+            sx={chartSx}
           />
         </Paper>
       );
@@ -137,6 +155,7 @@ export function ChartRenderer({ chartSpec }: ChartRendererProps) {
             ]}
             xAxis={[{ label: chartSpec.xAxisLabel }]}
             yAxis={[{ label: chartSpec.yAxisLabel }]}
+            sx={chartSx}
           />
         </Paper>
       );

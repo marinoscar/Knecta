@@ -221,6 +221,8 @@ import type {
   DataChatsResponse,
   DataChat,
   LlmTraceRecord,
+  ChatShareInfo,
+  SharedChatData,
   SpreadsheetProjectsResponse,
   SpreadsheetProject,
   SpreadsheetFile,
@@ -625,6 +627,32 @@ export async function deleteAgentPreference(id: string): Promise<void> {
 export async function clearAgentPreferences(ontologyId?: string): Promise<void> {
   const params = ontologyId ? `?ontologyId=${ontologyId}` : '';
   return api.delete<void>(`/data-agent/preferences${params}`);
+}
+
+// ============================================================================
+// Chat Sharing API
+// ============================================================================
+
+export async function createChatShare(
+  chatId: string,
+  expiresInDays?: number,
+): Promise<ChatShareInfo> {
+  return api.post<ChatShareInfo>(
+    `/data-agent/chats/${chatId}/share`,
+    expiresInDays !== undefined ? { expiresInDays } : {},
+  );
+}
+
+export async function getChatShareStatus(chatId: string): Promise<ChatShareInfo> {
+  return api.get<ChatShareInfo>(`/data-agent/chats/${chatId}/share`);
+}
+
+export async function revokeChatShare(chatId: string): Promise<void> {
+  return api.delete<void>(`/data-agent/chats/${chatId}/share`);
+}
+
+export async function getSharedChat(shareToken: string): Promise<SharedChatData> {
+  return api.get<SharedChatData>(`/data-agent/share/${shareToken}`, { skipAuth: true });
 }
 
 // ============================================================================

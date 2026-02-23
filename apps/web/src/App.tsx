@@ -26,6 +26,7 @@ const OntologyDetailPage = lazy(() => import('./pages/OntologyDetailPage'));
 const DataAgentPage = lazy(() => import('./pages/DataAgentPage'));
 const SystemSettingsPage = lazy(() => import('./pages/SystemSettingsPage'));
 const UserManagementPage = lazy(() => import('./pages/UserManagementPage'));
+const SharedChatPage = lazy(() => import('./pages/SharedChatPage'));
 const SpreadsheetAgentPage = lazy(() => import('./pages/SpreadsheetAgentPage'));
 const NewSpreadsheetProjectPage = lazy(() => import('./pages/NewSpreadsheetProjectPage'));
 const SpreadsheetProjectDetailPage = lazy(() => import('./pages/SpreadsheetProjectDetailPage'));
@@ -47,6 +48,7 @@ function AppRoutes() {
             {/* Public routes */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/auth/callback" element={<AuthCallbackPage />} />
+            <Route path="/share/:shareToken" element={<SharedChatPage />} />
 
             {/* Test login (development only) */}
             {!import.meta.env.PROD && TestLoginPage && (

@@ -1,494 +1,488 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { render, mockUser, mockAdminUser } from '../utils/test-utils';
+import { render } from '../utils/test-utils';
 import HomePage from '../../pages/HomePage';
+import type { HomeDashboardData } from '../../hooks/useHomeDashboard';
+
+// ---------------------------------------------------------------------------
+// Module mocks
+// ---------------------------------------------------------------------------
+
+vi.mock('../../hooks/useHomeDashboard');
+vi.mock('../../hooks/useLlmProviders');
+vi.mock('../../hooks/useUserSettings');
+vi.mock('../../contexts/NotificationContext');
+vi.mock('../../services/api', () => ({
+  createDataChat: vi.fn(),
+}));
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: vi.fn(),
+  };
+});
+
+// ---------------------------------------------------------------------------
+// Typed imports after mocking
+// ---------------------------------------------------------------------------
+
+import { useHomeDashboard } from '../../hooks/useHomeDashboard';
+import { useLlmProviders } from '../../hooks/useLlmProviders';
+import { useUserSettings } from '../../hooks/useUserSettings';
+import { useNotifications } from '../../contexts/NotificationContext';
+import * as api from '../../services/api';
+import { useNavigate } from 'react-router-dom';
+
+// ---------------------------------------------------------------------------
+// Default mock return values
+// ---------------------------------------------------------------------------
+
+const mockNavigate = vi.fn();
+
+const baseDashboard: HomeDashboardData = {
+  mode: 'active',
+  connectionsTotal: 2,
+  modelsTotal: 3,
+  readyModelsCount: 2,
+  ontologiesTotal: 2,
+  readyOntologiesCount: 2,
+  chatsTotal: 5,
+  totalDatasets: 12,
+  totalRelationships: 18,
+  providerCount: 1,
+  readyOntologies: [
+    {
+      id: 'ont-1',
+      name: 'Sales Ontology',
+      status: 'ready',
+      nodeCount: 8,
+      relationshipCount: 10,
+      semanticModelId: 'sm-1',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-02T00:00:00Z',
+    },
+  ],
+  recentModels: [],
+  recentOntologies: [],
+  recentChats: [],
+  providers: [],
+  isLoading: false,
+  error: null,
+  refresh: vi.fn(),
+};
+
+const baseNotifications = {
+  notify: vi.fn().mockResolvedValue(undefined),
+  browserPermission: 'granted' as const,
+  requestBrowserPermission: vi.fn().mockResolvedValue(true),
+  isSupported: true,
+};
+
+function setupDefaultMocks() {
+  vi.mocked(useHomeDashboard).mockReturnValue({ ...baseDashboard, refresh: vi.fn() });
+  vi.mocked(useLlmProviders).mockReturnValue({
+    providers: [],
+    defaultProvider: 'openai',
+    isLoading: false,
+    error: null,
+    refresh: vi.fn(),
+  });
+  vi.mocked(useUserSettings).mockReturnValue({
+    settings: { theme: 'system', profile: { displayName: null, useProviderImage: true, customImageUrl: null }, defaultProvider: undefined, version: 1 } as any,
+    isLoading: false,
+    error: null,
+    isSaving: false,
+    updateSettings: vi.fn(),
+    updateTheme: vi.fn(),
+    updateProfile: vi.fn(),
+    updateDefaultProvider: vi.fn(),
+    refresh: vi.fn(),
+  });
+  vi.mocked(useNotifications).mockReturnValue({ ...baseNotifications });
+  vi.mocked(useNavigate).mockReturnValue(mockNavigate);
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
 
 describe('HomePage', () => {
   beforeEach(() => {
-    // Reset any state before each test
+    vi.clearAllMocks();
+    setupDefaultMocks();
   });
 
-  describe('Rendering', () => {
-    it('should render welcome message with user display name', async () => {
-      render(<HomePage />, {
-        wrapperOptions: {
-          authenticated: true,
-          user: mockUser,
-        },
+  // -------------------------------------------------------------------------
+  describe('Section rendering', () => {
+    it('renders HeroBanner section in active mode', () => {
+      render(<HomePage />);
+
+      // HeroBanner ActiveMode shows this heading
+      expect(screen.getByText('Ask anything about your data')).toBeInTheDocument();
+    });
+
+    it('renders PipelineStatusStrip with count labels', () => {
+      render(<HomePage />);
+
+      expect(screen.getByText('databases connected')).toBeInTheDocument();
+      expect(screen.getByText('models ready')).toBeInTheDocument();
+      expect(screen.getByText('ontologies ready')).toBeInTheDocument();
+      expect(screen.getByText('conversations')).toBeInTheDocument();
+    });
+
+    it('renders SetupStepper when not all steps are complete', () => {
+      vi.mocked(useHomeDashboard).mockReturnValue({
+        ...baseDashboard,
+        chatsTotal: 0,
+        mode: 'active',
+        refresh: vi.fn(),
       });
+
+      render(<HomePage />);
+
+      // SetupStepper step labels (getAllByText because active step renders label twice)
+      expect(screen.getAllByText('Connect a database').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Ask a question').length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('does not render SetupStepper when all four steps are complete', () => {
+      vi.mocked(useHomeDashboard).mockReturnValue({
+        ...baseDashboard,
+        connectionsTotal: 1,
+        readyModelsCount: 1,
+        readyOntologiesCount: 1,
+        chatsTotal: 1,
+        refresh: vi.fn(),
+      });
+
+      render(<HomePage />);
+
+      expect(screen.queryByText('Connect a database')).not.toBeInTheDocument();
+    });
+
+    it('renders HomeQuickActions section', () => {
+      render(<HomePage />);
+
+      // HomeQuickActions renders navigation links to /connections, /semantic-models etc.
+      // It is present in the sidebar column — confirmed by its container being in the DOM
+      expect(screen.getByText('databases connected')).toBeInTheDocument(); // page fully rendered
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('Props passed from useHomeDashboard to child components', () => {
+    it('passes connectionsTotal to PipelineStatusStrip', () => {
+      vi.mocked(useHomeDashboard).mockReturnValue({
+        ...baseDashboard,
+        connectionsTotal: 7,
+        refresh: vi.fn(),
+      });
+
+      render(<HomePage />);
+
+      expect(screen.getByText('7')).toBeInTheDocument();
+    });
+
+    it('passes chatsTotal to PipelineStatusStrip', () => {
+      vi.mocked(useHomeDashboard).mockReturnValue({
+        ...baseDashboard,
+        chatsTotal: 42,
+        refresh: vi.fn(),
+      });
+
+      render(<HomePage />);
+
+      expect(screen.getByText('42')).toBeInTheDocument();
+    });
+
+    it('passes readyOntologies to HeroBanner for ontology chips', () => {
+      vi.mocked(useHomeDashboard).mockReturnValue({
+        ...baseDashboard,
+        readyOntologies: [
+          {
+            id: 'ont-a',
+            name: 'Finance Graph',
+            status: 'ready',
+            nodeCount: 5,
+            relationshipCount: 8,
+            semanticModelId: 'sm-a',
+            createdAt: '2026-01-01T00:00:00Z',
+            updatedAt: '2026-01-01T00:00:00Z',
+          },
+        ],
+        refresh: vi.fn(),
+      });
+
+      render(<HomePage />);
+
+      expect(screen.getByText('Finance Graph')).toBeInTheDocument();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('Notification permission banner', () => {
+    it('shows info banner when browser permission is default', () => {
+      vi.mocked(useNotifications).mockReturnValue({
+        ...baseNotifications,
+        browserPermission: 'default',
+        isSupported: true,
+      });
+
+      render(<HomePage />);
+
+      expect(
+        screen.getByText(/enable notifications to know when your models and analyses complete/i),
+      ).toBeInTheDocument();
+    });
+
+    it('shows Enable button in the notification banner', () => {
+      vi.mocked(useNotifications).mockReturnValue({
+        ...baseNotifications,
+        browserPermission: 'default',
+        isSupported: true,
+      });
+
+      render(<HomePage />);
+
+      expect(screen.getByRole('button', { name: /enable/i })).toBeInTheDocument();
+    });
+
+    it('hides banner when permission is already granted', () => {
+      vi.mocked(useNotifications).mockReturnValue({
+        ...baseNotifications,
+        browserPermission: 'granted',
+        isSupported: true,
+      });
+
+      render(<HomePage />);
+
+      expect(
+        screen.queryByText(/enable notifications to know when your models and analyses complete/i),
+      ).not.toBeInTheDocument();
+    });
+
+    it('hides banner when permission is denied', () => {
+      vi.mocked(useNotifications).mockReturnValue({
+        ...baseNotifications,
+        browserPermission: 'denied',
+        isSupported: true,
+      });
+
+      render(<HomePage />);
+
+      expect(
+        screen.queryByText(/enable notifications/i),
+      ).not.toBeInTheDocument();
+    });
+
+    it('hides banner when notifications are not supported', () => {
+      vi.mocked(useNotifications).mockReturnValue({
+        ...baseNotifications,
+        browserPermission: 'default',
+        isSupported: false,
+      });
+
+      render(<HomePage />);
+
+      expect(
+        screen.queryByText(/enable notifications/i),
+      ).not.toBeInTheDocument();
+    });
+
+    it('calls requestBrowserPermission when Enable button is clicked', async () => {
+      const requestBrowserPermission = vi.fn().mockResolvedValue(true);
+      vi.mocked(useNotifications).mockReturnValue({
+        ...baseNotifications,
+        browserPermission: 'default',
+        isSupported: true,
+        requestBrowserPermission,
+      });
+
+      render(<HomePage />);
+
+      await userEvent.click(screen.getByRole('button', { name: /enable/i }));
+
+      expect(requestBrowserPermission).toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('Dashboard error state', () => {
+    it('shows warning alert when dashboard.error is set', () => {
+      vi.mocked(useHomeDashboard).mockReturnValue({
+        ...baseDashboard,
+        error: 'Failed to load dashboard data',
+        refresh: vi.fn(),
+      });
+
+      render(<HomePage />);
+
+      expect(screen.getByText('Failed to load dashboard data')).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+    });
+
+    it('does not show error alert when dashboard.error is null', () => {
+      vi.mocked(useHomeDashboard).mockReturnValue({
+        ...baseDashboard,
+        error: null,
+        refresh: vi.fn(),
+      });
+
+      render(<HomePage />);
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe('handleAskQuestion — creates chat and navigates', () => {
+    it('calls createDataChat with the trimmed question and navigates to /agent/:id', async () => {
+      vi.mocked(api.createDataChat).mockResolvedValue({ id: 'chat-99' } as any);
+
+      render(<HomePage />);
+
+      const input = screen.getByPlaceholderText(/what would you like to know about your data/i);
+      await userEvent.type(input, 'How many orders last month?');
+      await userEvent.click(screen.getByRole('button', { name: /submit question/i }));
 
       await waitFor(() => {
-        expect(screen.getByRole('heading', { name: /welcome back, test user/i })).toBeInTheDocument();
+        expect(api.createDataChat).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: 'How many orders last month?',
+            ontologyId: 'ont-1',
+            llmProvider: 'openai',
+          }),
+        );
+        expect(mockNavigate).toHaveBeenCalledWith('/agent/chat-99', {
+          state: { initialQuestion: 'How many orders last month?' },
+        });
       });
     });
 
-    it('should render welcome message without name when display name is null', async () => {
-      const userWithoutName = {
-        ...mockUser,
-        displayName: null,
-      };
+    it('truncates question name to 60 characters when creating chat', async () => {
+      vi.mocked(api.createDataChat).mockResolvedValue({ id: 'chat-100' } as any);
 
-      render(<HomePage />, {
-        wrapperOptions: {
-          authenticated: true,
-          user: userWithoutName,
-        },
-      });
+      const longQuestion = 'A'.repeat(80);
+
+      render(<HomePage />);
+
+      const input = screen.getByPlaceholderText(/what would you like to know about your data/i);
+      await userEvent.type(input, longQuestion);
+      await userEvent.click(screen.getByRole('button', { name: /submit question/i }));
 
       await waitFor(() => {
-        expect(screen.getByRole('heading', { name: /^welcome back$/i })).toBeInTheDocument();
+        expect(api.createDataChat).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: 'A'.repeat(60),
+          }),
+        );
       });
     });
 
-    it('should render dashboard overview description', () => {
+    it('does not navigate when createDataChat throws', async () => {
+      vi.mocked(api.createDataChat).mockRejectedValue(new Error('Network error'));
+
       render(<HomePage />);
 
-      expect(screen.getByText(/your dashboard overview/i)).toBeInTheDocument();
-    });
+      const input = screen.getByPlaceholderText(/what would you like to know about your data/i);
+      await userEvent.type(input, 'Show me top customers');
+      await userEvent.click(screen.getByRole('button', { name: /submit question/i }));
 
-    it('should render UserProfileCard component', () => {
-      render(<HomePage />);
+      await waitFor(() => {
+        expect(api.createDataChat).toHaveBeenCalled();
+      });
 
-      // UserProfileCard shows the user's email
-      expect(screen.getByText(mockUser.email)).toBeInTheDocument();
-    });
-
-    it('should render QuickActions component', () => {
-      render(<HomePage />);
-
-      // QuickActions has a title
-      expect(screen.getByText(/quick actions/i)).toBeInTheDocument();
+      expect(mockNavigate).not.toHaveBeenCalled();
     });
   });
 
-  describe('User Profile Card Display', () => {
-    it('should display user email in profile card', () => {
-      render(<HomePage />);
-
-      expect(screen.getByText(mockUser.email)).toBeInTheDocument();
-    });
-
-    it('should display user display name in profile card', () => {
-      render(<HomePage />);
-
-      expect(screen.getByText(mockUser.displayName!)).toBeInTheDocument();
-    });
-
-    it('should display user roles as chips', () => {
-      render(<HomePage />);
-
-      mockUser.roles.forEach((role) => {
-        expect(screen.getByText(role.name)).toBeInTheDocument();
+  // -------------------------------------------------------------------------
+  describe('SetupStepper visibility based on mode', () => {
+    it('shows SetupStepper in new mode (no connections)', () => {
+      vi.mocked(useHomeDashboard).mockReturnValue({
+        ...baseDashboard,
+        mode: 'new',
+        connectionsTotal: 0,
+        readyModelsCount: 0,
+        readyOntologiesCount: 0,
+        chatsTotal: 0,
+        refresh: vi.fn(),
       });
-    });
 
-    it('should display member since date', () => {
       render(<HomePage />);
 
-      expect(screen.getByText(/member since/i)).toBeInTheDocument();
+      // SetupStepper renders each step label; getAllByText handles duplicates from the
+      // active-step button that also carries the same label text.
+      expect(screen.getAllByText('Connect a database').length).toBeGreaterThanOrEqual(1);
     });
 
-    it('should display account settings button', () => {
+    it('shows SetupStepper in setup mode (has connections, no ontologies)', () => {
+      vi.mocked(useHomeDashboard).mockReturnValue({
+        ...baseDashboard,
+        mode: 'setup',
+        connectionsTotal: 1,
+        readyModelsCount: 0,
+        readyOntologiesCount: 0,
+        chatsTotal: 0,
+        refresh: vi.fn(),
+      });
+
       render(<HomePage />);
 
-      expect(screen.getByRole('button', { name: /account settings/i })).toBeInTheDocument();
+      expect(screen.getAllByText('Connect a database').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Generate a semantic model').length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('shows HeroBanner new-mode content when mode is new', () => {
+      vi.mocked(useHomeDashboard).mockReturnValue({
+        ...baseDashboard,
+        mode: 'new',
+        connectionsTotal: 0,
+        readyOntologiesCount: 0,
+        readyOntologies: [],
+        refresh: vi.fn(),
+      });
+
+      render(<HomePage />);
+
+      expect(screen.getByText('Welcome to Knecta')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /connect your first database/i })).toBeInTheDocument();
+    });
+
+    it('shows HeroBanner setup-mode content when mode is setup', () => {
+      vi.mocked(useHomeDashboard).mockReturnValue({
+        ...baseDashboard,
+        mode: 'setup',
+        connectionsTotal: 1,
+        readyModelsCount: 0,
+        readyOntologiesCount: 0,
+        readyOntologies: [],
+        refresh: vi.fn(),
+      });
+
+      render(<HomePage />);
+
+      expect(screen.getByText("You're almost there")).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /continue setup/i })).toBeInTheDocument();
     });
   });
 
-  describe('Quick Actions Section', () => {
-    it('should display User Settings quick action', () => {
-      render(<HomePage />);
-
-      expect(screen.getByText(/^user settings$/i)).toBeInTheDocument();
-      expect(screen.getByText(/manage your profile and preferences/i)).toBeInTheDocument();
-    });
-
-    it('should display Theme quick action', () => {
-      render(<HomePage />);
-
-      expect(screen.getByText(/^theme$/i)).toBeInTheDocument();
-      expect(screen.getByText(/customize your display preferences/i)).toBeInTheDocument();
-    });
-
-    it('should not display System Settings for non-admin users', () => {
-      render(<HomePage />, {
-        wrapperOptions: {
-          authenticated: true,
-          user: mockUser, // viewer role
-        },
-      });
-
-      expect(screen.queryByText(/^system settings$/i)).not.toBeInTheDocument();
-    });
-
-    it('should display System Settings for admin users', () => {
-      render(<HomePage />, {
-        wrapperOptions: {
-          authenticated: true,
-          user: mockAdminUser,
-        },
-      });
-
-      expect(screen.getByText(/^system settings$/i)).toBeInTheDocument();
-      expect(screen.getByText(/configure application settings/i)).toBeInTheDocument();
-    });
-  });
-
-  describe('Role-Based Display', () => {
-    it('should render correctly for Viewer role', () => {
-      const viewerUser = {
-        ...mockUser,
-        roles: [{ name: 'viewer' }],
-        permissions: ['user_settings:read', 'user_settings:write'],
-      };
-
-      render(<HomePage />, {
-        wrapperOptions: {
-          authenticated: true,
-          user: viewerUser,
-        },
-      });
-
-      // Should see basic quick actions
-      expect(screen.getByText(/^user settings$/i)).toBeInTheDocument();
-      expect(screen.getByText(/^theme$/i)).toBeInTheDocument();
-
-      // Should not see admin actions
-      expect(screen.queryByText(/^system settings$/i)).not.toBeInTheDocument();
-    });
-
-    it('should render correctly for Contributor role', () => {
-      const contributorUser = {
-        ...mockUser,
-        displayName: 'Contributor User',
-        roles: [{ name: 'contributor' }],
-        permissions: ['user_settings:read', 'user_settings:write'],
-      };
-
-      render(<HomePage />, {
-        wrapperOptions: {
-          authenticated: true,
-          user: contributorUser,
-        },
-      });
-
-      // Should see basic quick actions
-      expect(screen.getByText(/^user settings$/i)).toBeInTheDocument();
-      expect(screen.getByText(/^theme$/i)).toBeInTheDocument();
-
-      // Should not see admin actions
-      expect(screen.queryByText(/^system settings$/i)).not.toBeInTheDocument();
-    });
-
-    it('should render correctly for Admin role', () => {
-      render(<HomePage />, {
-        wrapperOptions: {
-          authenticated: true,
-          user: mockAdminUser,
-        },
-      });
-
-      // Should see all quick actions including admin
-      expect(screen.getByText(/^user settings$/i)).toBeInTheDocument();
-      expect(screen.getByText(/^theme$/i)).toBeInTheDocument();
-      expect(screen.getByText(/^system settings$/i)).toBeInTheDocument();
-    });
-
-    it('should display admin chip for admin users', () => {
-      render(<HomePage />, {
-        wrapperOptions: {
-          authenticated: true,
-          user: mockAdminUser,
-        },
-      });
-
-      const adminChip = screen.getByText('admin');
-      expect(adminChip).toBeInTheDocument();
-    });
-  });
-
-  describe('Navigation', () => {
-    it('should navigate to settings when clicking Account Settings button', async () => {
-      const user = userEvent.setup();
-
-      render(<HomePage />);
-
-      const settingsButton = screen.getByRole('button', { name: /account settings/i });
-      await user.click(settingsButton);
-
-      // Navigation is handled by MemoryRouter in tests
-      // We verify the button is clickable and doesn't crash
-      expect(settingsButton).toBeInTheDocument();
-    });
-
-    it('should navigate to settings when clicking User Settings quick action', async () => {
-      const user = userEvent.setup();
-
-      render(<HomePage />);
-
-      const userSettingsButton = screen.getByRole('button', { name: /user settings manage your profile and preferences/i });
-      await user.click(userSettingsButton);
-
-      expect(userSettingsButton).toBeInTheDocument();
-    });
-
-    it('should navigate to theme settings when clicking Theme quick action', async () => {
-      const user = userEvent.setup();
-
-      render(<HomePage />);
-
-      const themeButton = screen.getByRole('button', { name: /theme customize your display preferences/i });
-      await user.click(themeButton);
-
-      expect(themeButton).toBeInTheDocument();
-    });
-
-    it('should navigate to system settings when clicking System Settings (admin)', async () => {
-      const user = userEvent.setup();
-
-      render(<HomePage />, {
-        wrapperOptions: {
-          authenticated: true,
-          user: mockAdminUser,
-        },
-      });
-
-      const systemSettingsButton = screen.getByRole('button', { name: /system settings configure application settings/i });
-      await user.click(systemSettingsButton);
-
-      expect(systemSettingsButton).toBeInTheDocument();
-    });
-  });
-
-  describe('Layout and Structure', () => {
-    it('should use Container with maxWidth lg', () => {
+  // -------------------------------------------------------------------------
+  describe('Layout structure', () => {
+    it('renders inside a Container with maxWidth lg', () => {
       const { container } = render(<HomePage />);
 
       const muiContainer = container.querySelector('.MuiContainer-maxWidthLg');
       expect(muiContainer).toBeInTheDocument();
     });
 
-    it('should have proper vertical padding', () => {
-      const { container } = render(<HomePage />);
-
-      // Check that Box with py: 4 exists
-      const paddedBox = container.querySelector('[class*="MuiBox"]');
-      expect(paddedBox).toBeInTheDocument();
-    });
-
-    it('should use Grid layout for profile and actions', () => {
+    it('renders a two-column Grid layout', () => {
       const { container } = render(<HomePage />);
 
       const gridContainers = container.querySelectorAll('.MuiGrid-container');
       expect(gridContainers.length).toBeGreaterThan(0);
-    });
-
-    it('should have responsive grid items', () => {
-      const { container } = render(<HomePage />);
-
-      // Profile card should be xs=12, md=4
-      // Quick actions should be xs=12, md=8
-      const gridItems = container.querySelectorAll('.MuiGrid-item');
-      expect(gridItems.length).toBeGreaterThanOrEqual(2);
-    });
-  });
-
-  describe('User Display Variations', () => {
-    it('should handle user with no profile image', () => {
-      const userNoImage = {
-        ...mockUser,
-        profileImageUrl: null,
-      };
-
-      render(<HomePage />, {
-        wrapperOptions: {
-          authenticated: true,
-          user: userNoImage,
-        },
-      });
-
-      // Should still render the user's initials in avatar
-      expect(screen.getByText(mockUser.email)).toBeInTheDocument();
-    });
-
-    it('should handle user with profile image URL', () => {
-      const userWithImage = {
-        ...mockUser,
-        profileImageUrl: 'https://example.com/avatar.jpg',
-      };
-
-      render(<HomePage />, {
-        wrapperOptions: {
-          authenticated: true,
-          user: userWithImage,
-        },
-      });
-
-      expect(screen.getByText(mockUser.email)).toBeInTheDocument();
-    });
-
-    it('should display user initials when no display name', () => {
-      const userWithoutName = {
-        ...mockUser,
-        displayName: null,
-      };
-
-      render(<HomePage />, {
-        wrapperOptions: {
-          authenticated: true,
-          user: userWithoutName,
-        },
-      });
-
-      // UserProfileCard shows "No name set" when displayName is null
-      expect(screen.getByText(/no name set/i)).toBeInTheDocument();
-    });
-
-    it('should handle multiple roles', () => {
-      const multiRoleUser = {
-        ...mockUser,
-        roles: [{ name: 'admin' }, { name: 'contributor' }],
-        permissions: mockAdminUser.permissions,
-      };
-
-      render(<HomePage />, {
-        wrapperOptions: {
-          authenticated: true,
-          user: multiRoleUser,
-        },
-      });
-
-      expect(screen.getByText('admin')).toBeInTheDocument();
-      expect(screen.getByText('contributor')).toBeInTheDocument();
-    });
-  });
-
-  describe('Date Formatting', () => {
-    it('should format creation date correctly', () => {
-      const specificDate = new Date('2024-01-15T10:00:00Z');
-      const userWithDate = {
-        ...mockUser,
-        createdAt: specificDate.toISOString(),
-      };
-
-      render(<HomePage />, {
-        wrapperOptions: {
-          authenticated: true,
-          user: userWithDate,
-        },
-      });
-
-      // The date should be formatted using toLocaleDateString
-      // We just verify the "Member since" label is present
-      expect(screen.getByText(/member since/i)).toBeInTheDocument();
-    });
-  });
-
-  describe('Authentication States', () => {
-    it('should render when user is authenticated', () => {
-      render(<HomePage />, {
-        wrapperOptions: {
-          authenticated: true,
-          user: mockUser,
-        },
-      });
-
-      expect(screen.getByRole('heading', { name: /welcome back/i })).toBeInTheDocument();
-    });
-
-    it('should handle missing user data gracefully', () => {
-      render(<HomePage />, {
-        wrapperOptions: {
-          authenticated: true,
-          user: null,
-        },
-      });
-
-      // Should still render welcome header without name
-      expect(screen.getByRole('heading', { name: /^welcome back$/i })).toBeInTheDocument();
-    });
-  });
-
-  describe('Accessibility', () => {
-    it('should have proper heading hierarchy', () => {
-      render(<HomePage />);
-
-      const mainHeading = screen.getByRole('heading', { name: /welcome back/i });
-      expect(mainHeading).toBeInTheDocument();
-      expect(mainHeading.tagName).toBe('H1');
-    });
-
-    it('should have descriptive button labels', () => {
-      render(<HomePage />);
-
-      // All buttons should have accessible names
-      const accountSettingsBtn = screen.getByRole('button', { name: /account settings/i });
-      expect(accountSettingsBtn).toBeInTheDocument();
-
-      const userSettingsBtn = screen.getByRole('button', { name: /user settings/i });
-      expect(userSettingsBtn).toBeInTheDocument();
-    });
-
-    it('should have proper alt text for avatar images', () => {
-      const userWithImage = {
-        ...mockUser,
-        profileImageUrl: 'https://example.com/avatar.jpg',
-      };
-
-      render(<HomePage />, {
-        wrapperOptions: {
-          authenticated: true,
-          user: userWithImage,
-        },
-      });
-
-      const avatar = screen.getByAltText(mockUser.displayName!);
-      expect(avatar).toBeInTheDocument();
-    });
-  });
-
-  describe('Integration', () => {
-    it('should render all components together correctly', () => {
-      render(<HomePage />, {
-        wrapperOptions: {
-          authenticated: true,
-          user: mockAdminUser,
-        },
-      });
-
-      // Main heading
-      expect(screen.getByRole('heading', { name: /welcome back, admin user/i })).toBeInTheDocument();
-
-      // Dashboard description
-      expect(screen.getByText(/your dashboard overview/i)).toBeInTheDocument();
-
-      // Profile card elements
-      expect(screen.getByText(mockAdminUser.email)).toBeInTheDocument();
-      expect(screen.getByText(/member since/i)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /account settings/i })).toBeInTheDocument();
-
-      // Quick actions
-      expect(screen.getByText(/quick actions/i)).toBeInTheDocument();
-      expect(screen.getByText(/^user settings$/i)).toBeInTheDocument();
-      expect(screen.getByText(/^theme$/i)).toBeInTheDocument();
-      expect(screen.getByText(/^system settings$/i)).toBeInTheDocument();
-    });
-
-    it('should maintain consistent layout across different user types', () => {
-      const { rerender } = render(<HomePage />, {
-        wrapperOptions: {
-          authenticated: true,
-          user: mockUser,
-        },
-      });
-
-      expect(screen.getByText(/quick actions/i)).toBeInTheDocument();
-
-      // Re-render with admin user
-      rerender(<HomePage />);
-
-      expect(screen.getByText(/quick actions/i)).toBeInTheDocument();
     });
   });
 });

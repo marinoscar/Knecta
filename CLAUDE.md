@@ -337,8 +337,23 @@ cd apps/api && npm run prisma:migrate
 ### LLM Providers
 - `GET /api/llm/providers` - List enabled LLM providers
 
-### CopilotKit
-- `POST /api/copilotkit` - CopilotKit runtime (SSE)
+### Data Agent
+- `GET /api/data-agent/chats` - List chats (paginated)
+- `POST /api/data-agent/chats` - Create chat
+- `GET /api/data-agent/chats/:id` - Get chat with messages
+- `PATCH /api/data-agent/chats/:id` - Update chat name
+- `DELETE /api/data-agent/chats/:id` - Delete chat
+- `GET /api/data-agent/chats/:id/messages` - List messages (paginated)
+- `POST /api/data-agent/chats/:id/messages` - Send message (SSE streaming)
+- `POST /api/data-agent/chats/:id/share` - Create public share link
+- `GET /api/data-agent/chats/:id/share` - Get share status
+- `DELETE /api/data-agent/chats/:id/share` - Revoke share link
+- `GET /api/data-agent/share/:shareToken` - View shared chat (Public)
+- `GET /api/data-agent/preferences` - List user preferences
+- `POST /api/data-agent/preferences` - Create/update preference
+- `PATCH /api/data-agent/preferences/:id` - Update preference
+- `DELETE /api/data-agent/preferences/:id` - Delete preference
+- `DELETE /api/data-agent/preferences` - Clear all preferences
 
 ### Spreadsheet Agent
 - `GET /api/spreadsheet-agent/projects` - List spreadsheet projects (paginated)
@@ -383,6 +398,7 @@ cd apps/api && npm run prisma:migrate
 - `connections:read/write/delete/test` - Database connection management
 - `semantic_models:read/write/delete/generate` - Semantic model management
 - `ontologies:read/write/delete` - Ontology management
+- `data_agent:read/write/delete` - Data Agent chat management
 - `spreadsheet_agent:read/write/delete` - Spreadsheet project management
 
 ## Database Tables
@@ -403,6 +419,10 @@ cd apps/api && npm run prisma:migrate
 - `semantic_models` - AI-generated semantic models (OSI spec, JSON model, system-level)
 - `semantic_model_runs` - Agent execution tracking (status, plan, progress)
 - `ontologies` - Graph ontology metadata (status, counts, link to semantic model)
+- `data_chats` - Data Agent chat conversations (owner, ontology, LLM provider)
+- `data_chat_messages` - Chat messages with metadata (phase artifacts, clarification)
+- `data_agent_preferences` - Per-user agent preferences (global and ontology-scoped)
+- `data_chat_shares` - Public chat share links (token, expiry, view count, revocation)
 - `spreadsheet_projects` - Spreadsheet extraction project metadata (status, storage config)
 - `spreadsheet_files` - Source files uploaded to projects
 - `spreadsheet_tables` - Extracted output tables (Parquet)

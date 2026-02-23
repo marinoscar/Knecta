@@ -10,6 +10,7 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -22,6 +23,7 @@ import {
 import { DataAgentService } from './data-agent.service';
 import { Auth } from '../auth/decorators/auth.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { PERMISSIONS } from '../common/constants/roles.constants';
 import { CreateChatDto } from './dto/create-chat.dto';
 import { UpdateChatDto } from './dto/update-chat.dto';
@@ -30,6 +32,7 @@ import { SendMessageDto } from './dto/send-message.dto';
 import { CreatePreferenceDto } from './dto/create-preference.dto';
 import { UpdatePreferenceDto } from './dto/update-preference.dto';
 import { PreferenceQueryDto } from './dto/preference-query.dto';
+import { CreateShareDto } from './dto/create-share.dto';
 
 @ApiTags('Data Agent')
 @Controller('data-agent')
@@ -102,6 +105,19 @@ export class DataAgentController {
     @CurrentUser('id') userId: string,
   ) {
     await this.dataAgentService.clearPreferences(userId, ontologyId || undefined);
+  }
+
+  // ─── Public share endpoint — MUST be before chats/:id to avoid route collision ───
+
+  @Get('share/:shareToken')
+  @Public()
+  @ApiOperation({ summary: 'View a publicly shared chat (no auth required)' })
+  @ApiParam({ name: 'shareToken', type: String })
+  @ApiResponse({ status: 200, description: 'Shared chat data returned' })
+  @ApiResponse({ status: 404, description: 'Share not found' })
+  @ApiResponse({ status: 410, description: 'Share expired or revoked' })
+  async getSharedChat(@Param('shareToken') shareToken: string) {
+    return this.dataAgentService.getSharedChat(shareToken);
   }
 
   @Post('chats')
@@ -203,5 +219,50 @@ export class DataAgentController {
     @CurrentUser('id') userId: string,
   ) {
     return this.dataAgentService.createMessagePair(id, dto.content, userId);
+  }
+
+  // ─── Share management endpoints (owner-only) ───
+
+  @Post('chats/:id/share')
+  @Auth({ permissions: [PERMISSIONS.DATA_AGENT_WRITE] })
+  @ApiOperation({ summary: 'Create a share link for a chat' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiResponse({ status: 201, description: 'Share link created' })
+  @ApiResponse({ status: 404, description: 'Chat not found' })
+  async createShare(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateShareDto,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.dataAgentService.createShare(id, userId, dto.expiresInDays);
+  }
+
+  @Get('chats/:id/share')
+  @Auth({ permissions: [PERMISSIONS.DATA_AGENT_READ] })
+  @ApiOperation({ summary: 'Get share status for a chat' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Share status returned' })
+  @ApiResponse({ status: 404, description: 'Chat or share not found' })
+  async getShareStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    const share = await this.dataAgentService.getShareStatus(id, userId);
+    if (!share) throw new NotFoundException('No active share found');
+    return share;
+  }
+
+  @Delete('chats/:id/share')
+  @Auth({ permissions: [PERMISSIONS.DATA_AGENT_WRITE] })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Revoke share link for a chat' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiResponse({ status: 204, description: 'Share revoked' })
+  @ApiResponse({ status: 404, description: 'Chat or share not found' })
+  async revokeShare(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    await this.dataAgentService.revokeShare(id, userId);
   }
 }

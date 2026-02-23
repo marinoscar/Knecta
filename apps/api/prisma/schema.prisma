@@ -43,6 +43,7 @@ model User {
   ontologies                Ontology[]       @relation("UserOntologies")
   dataChats                 DataChat[]       @relation("UserDataChats")
   dataAgentPreferences      DataAgentPreference[] @relation("UserDataAgentPreferences")
+  dataChatShares            DataChatShare[]  @relation("UserDataChatShares")
   oauthCodes                OAuthAuthorizationCode[] @relation("UserOAuthCodes")
   spreadsheetProjects       SpreadsheetProject[]     @relation("UserSpreadsheetProjects")
   spreadsheetRuns           SpreadsheetRun[]         @relation("UserSpreadsheetRuns")
@@ -497,6 +498,7 @@ model DataChat {
   ontology Ontology          @relation("OntologyDataChats", fields: [ontologyId], references: [id], onDelete: Cascade)
   owner    User              @relation("UserDataChats", fields: [ownerId], references: [id], onDelete: Cascade)
   messages DataChatMessage[]
+  shares   DataChatShare[]
 
   @@index([ownerId])
   @@index([ontologyId])
@@ -573,6 +575,31 @@ model DataAgentPreference {
   @@index([userId])
   @@index([ontologyId])
   @@map("data_agent_preferences")
+}
+
+// =============================================================================
+// Data Chat Shares
+// =============================================================================
+
+model DataChatShare {
+  id          String    @id @default(uuid()) @db.Uuid
+  chatId      String    @map("chat_id") @db.Uuid
+  shareToken  String    @unique @map("share_token") @db.VarChar(64)
+  createdById String    @map("created_by_id") @db.Uuid
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz
+  isActive    Boolean   @default(true) @map("is_active")
+  viewCount   Int       @default(0) @map("view_count")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  chat      DataChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  createdBy User     @relation("UserDataChatShares", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+  @@index([shareToken])
+  @@index([createdById])
+  @@map("data_chat_shares")
 }
 
 // =============================================================================

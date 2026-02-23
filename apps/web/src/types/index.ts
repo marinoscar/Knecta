@@ -468,6 +468,8 @@ export interface DataChatMessage {
       joins: Array<{ from: string; to: string; on: string }>;
       grain: string;
       rowCount: number | null;
+      filters?: string[];
+      timeWindow?: string;
     };
     revisionsUsed?: number;
     durationMs?: number;
@@ -500,6 +502,104 @@ export interface DataChatsResponse {
   page: number;
   pageSize: number;
   totalPages: number;
+}
+
+// ==========================================
+// Chat Sharing
+// ==========================================
+
+export interface ChatShareInfo {
+  id: string;
+  shareToken: string;
+  shareUrl: string;
+  expiresAt: string | null;
+  isActive: boolean;
+  viewCount: number;
+  createdAt: string;
+}
+
+export interface SharedChatData {
+  chatName: string;
+  ontologyName: string;
+  messages: SharedChatMessage[];
+  sharedAt: string;
+}
+
+export interface SharedLlmTrace {
+  phase: string;
+  callIndex: number;
+  stepId: number | null;
+  purpose: string;
+  provider: string;
+  model: string;
+  temperature: number | null;
+  structuredOutput: boolean;
+  promptMessages: Array<{ role: string; content: string }>;
+  responseContent: string;
+  toolCalls: Array<{ name: string; args: Record<string, unknown> }> | null;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  error: string | null;
+}
+
+export interface SharedChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  status: string;
+  createdAt: string;
+  metadata?: {
+    plan?: {
+      complexity?: string;
+      intent?: string;
+      steps?: Array<{ id: number; description: string; strategy: string }>;
+    };
+    stepResults?: Array<{
+      stepId: number;
+      description?: string;
+      strategy?: string;
+      sqlResult?: { rowCount: number; columns: string[]; data: string };
+      pythonResult?: { stdout: string; charts?: string[] };
+      chartSpec?: unknown;
+      error?: string;
+    }>;
+    verificationReport?: {
+      passed: boolean;
+      checks: Array<{ name: string; passed: boolean; message: string }>;
+    };
+    dataLineage?: {
+      datasets: string[];
+      joins: Array<{ from: string; to: string; on: string }>;
+      grain: string;
+      rowCount: number | null;
+      filters?: string[];
+      timeWindow?: string;
+    };
+    joinPlan?: {
+      relevantDatasets: Array<{ name: string; description: string }>;
+      joinPaths: Array<{
+        datasets: string[];
+        edges: Array<{
+          fromDataset: string;
+          toDataset: string;
+          fromColumns: string[];
+          toColumns: string[];
+          relationshipName: string;
+        }>;
+      }>;
+    };
+    cannotAnswer?: {
+      reason: string;
+      missingDatasets?: string[];
+      availableDatasets?: string[];
+    };
+    durationMs?: number;
+    revisionsUsed?: number;
+  };
+  traces?: SharedLlmTrace[];
 }
 
 export interface DataAgentStreamEvent {
