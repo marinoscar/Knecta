@@ -119,11 +119,74 @@ export class SpreadsheetAgentAgentService {
         config,
       };
 
-      // If resuming after review, inject the plan and modifications
+      // If resuming after review, inject the plan and modifications, and
+      // populate minimal fileInventory/sheetAnalyses so the extract node's
+      // progress events have correct counts without re-running ingest/analyze.
       if (isResumeAfterReview) {
         initialState.extractionPlan = run.extractionPlan as any;
         initialState.planModifications = run.extractionPlanModified as any;
-        // TODO: When resume support is added, invoke from 'extract' node
+
+        const plan = run.extractionPlan as any;
+        if (plan?.tables) {
+          // Collect unique files and their sheets from the extraction plan.
+          const uniqueFiles = new Map<
+            string,
+            { fileId: string; fileName: string; sheets: Set<string> }
+          >();
+          for (const t of plan.tables) {
+            const existing = uniqueFiles.get(t.sourceFileId);
+            if (existing) {
+              existing.sheets.add(t.sourceSheetName);
+            } else {
+              uniqueFiles.set(t.sourceFileId, {
+                fileId: t.sourceFileId,
+                fileName: t.sourceFileName,
+                sheets: new Set([t.sourceSheetName]),
+              });
+            }
+          }
+
+          // Minimal FileInventory — only `.length` is used in progress events.
+          initialState.fileInventory = Array.from(uniqueFiles.values()).map((f) => ({
+            fileId: f.fileId,
+            fileName: f.fileName,
+            fileType: '',
+            fileSizeBytes: 0,
+            fileHash: '',
+            sheets: Array.from(f.sheets).map((name) => ({
+              name,
+              rowCount: 0,
+              colCount: 0,
+              hasMergedCells: false,
+              hasFormulas: false,
+              dataDensity: 0,
+              sampleGrid: [],
+              lastRows: [],
+              mergedCellRanges: [],
+            })),
+          }));
+
+          // Minimal SheetAnalysis — one entry per unique file+sheet pair.
+          const sheetSet = new Set<string>();
+          for (const t of plan.tables) {
+            sheetSet.add(`${t.sourceFileId}:${t.sourceSheetName}`);
+          }
+          initialState.sheetAnalyses = Array.from(sheetSet).map((key) => {
+            const colonIdx = key.indexOf(':');
+            const fileId = key.slice(0, colonIdx);
+            const sheetName = key.slice(colonIdx + 1);
+            const table = plan.tables.find(
+              (t: any) => t.sourceFileId === fileId && t.sourceSheetName === sheetName,
+            );
+            return {
+              fileId,
+              fileName: table?.sourceFileName ?? '',
+              sheetName,
+              logicalTables: [],
+              crossFileHints: [],
+            };
+          });
+        }
       }
 
       onEvent({ type: 'run_start' });

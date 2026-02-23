@@ -21,6 +21,17 @@ export interface GraphDeps {
 
 // ─── Routing Functions ───
 
+function routeFromStart(
+  state: SpreadsheetAgentStateType,
+): 'ingest' | 'extract' {
+  // If we already have an extraction plan (resume after review approval),
+  // skip directly to the extract phase.
+  if (state.extractionPlan != null) {
+    return 'extract';
+  }
+  return 'ingest';
+}
+
 function routeAfterDesign(
   state: SpreadsheetAgentStateType,
 ): 'extract' | typeof END {
@@ -50,7 +61,7 @@ export function buildSpreadsheetAgentGraph(deps: GraphDeps, emit: EmitFn) {
     .addNode('extract', createExtractNode(emit))
     .addNode('validate', createValidateNode(emit))
     .addNode('persist', createPersistNode({ prisma: deps.prisma, emit }))
-    .addEdge(START, 'ingest')
+    .addConditionalEdges(START, routeFromStart)
     .addEdge('ingest', 'analyze')
     .addEdge('analyze', 'design')
     .addConditionalEdges('design', routeAfterDesign)
