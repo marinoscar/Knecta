@@ -116,10 +116,10 @@ export function useSpreadsheetRun(): UseSpreadsheetRunResult {
                     if (event.type === 'token_update' && event.tokensUsed) {
                       setTokensUsed(event.tokensUsed);
                     }
-                    if (event.type === 'run_complete' && event.tokensUsed) {
+                    if ((event.type === 'run_complete' || event.type === 'review_ready') && event.tokensUsed) {
                       setTokensUsed(event.tokensUsed);
                     }
-                    if (event.type === 'run_complete' || event.type === 'run_error') {
+                    if (event.type === 'run_complete' || event.type === 'run_error' || event.type === 'review_ready') {
                       setIsStreaming(false);
                       // Refresh the run to get final state
                       fetchRun(runId);
