@@ -771,12 +771,13 @@ export interface SpreadsheetRun {
   validationReport: Record<string, unknown> | null;
   progress: SpreadsheetRunProgress | null;
   errorMessage: string | null;
-  tokensUsed: number;
+  tokensUsed: { prompt: number; completion: number; total: number };
   startedAt: string | null;
   completedAt: string | null;
   createdByUserId: string | null;
   createdAt: string;
   updatedAt: string;
+  project?: { id: string; name: string };
 }
 
 export interface SpreadsheetRunProgress {

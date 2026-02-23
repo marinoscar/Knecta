@@ -36,6 +36,8 @@ import {
   deleteSpreadsheetFile,
   deleteSpreadsheetTable,
   createSpreadsheetRun,
+  listProjectSpreadsheetRuns,
+  deleteSpreadsheetRun,
 } from '../services/api';
 import type {
   SpreadsheetProject,
@@ -77,6 +79,7 @@ export default function SpreadsheetProjectDetailPage() {
   const [tablesPage, setTablesPage] = useState(1);
   const [tablesPageSize, setTablesPageSize] = useState(20);
   const [runs, setRuns] = useState<SpreadsheetRun[]>([]);
+  const [runsLoading, setRunsLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -148,6 +151,23 @@ export default function SpreadsheetProjectDetailPage() {
     [id],
   );
 
+  const fetchRuns = useCallback(async () => {
+    if (!id) return;
+    setRunsLoading(true);
+    try {
+      const result = await listProjectSpreadsheetRuns(id);
+      setRuns(result.runs);
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        message: err instanceof Error ? err.message : 'Failed to load runs',
+        severity: 'error',
+      });
+    } finally {
+      setRunsLoading(false);
+    }
+  }, [id]);
+
   useEffect(() => {
     fetchProject();
   }, [fetchProject]);
@@ -155,7 +175,8 @@ export default function SpreadsheetProjectDetailPage() {
   useEffect(() => {
     if (activeTab === 0) fetchFiles();
     if (activeTab === 1) fetchTables(tablesPage, tablesPageSize);
-  }, [activeTab, fetchFiles, fetchTables, tablesPage, tablesPageSize]);
+    if (activeTab === 2) fetchRuns();
+  }, [activeTab, fetchFiles, fetchTables, fetchRuns, tablesPage, tablesPageSize]);
 
   const handleStartRun = async () => {
     if (!id) return;
@@ -171,6 +192,24 @@ export default function SpreadsheetProjectDetailPage() {
       setSnackbar({
         open: true,
         message: err instanceof Error ? err.message : 'Failed to start run',
+        severity: 'error',
+      });
+    }
+  };
+
+  const handleRetryRun = () => {
+    handleStartRun();
+  };
+
+  const handleDeleteRun = async (runId: string) => {
+    try {
+      await deleteSpreadsheetRun(runId);
+      setSnackbar({ open: true, message: 'Run deleted', severity: 'success' });
+      fetchRuns();
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        message: err instanceof Error ? err.message : 'Failed to delete run',
         severity: 'error',
       });
     }
@@ -364,6 +403,8 @@ export default function SpreadsheetProjectDetailPage() {
               events={runHook.events}
               progress={runHook.progress}
               isStreaming={runHook.isStreaming}
+              tokensUsed={runHook.tokensUsed}
+              startTime={runHook.streamStartTime}
             />
           </Paper>
         )}
@@ -416,9 +457,12 @@ export default function SpreadsheetProjectDetailPage() {
           {activeTab === 2 && (
             <RunHistory
               runs={runs}
+              isLoading={runsLoading}
               canWrite={canWrite}
               canDelete={canDelete}
               onCancel={(runId) => runHook.cancelRun(runId)}
+              onRetry={handleRetryRun}
+              onDelete={handleDeleteRun}
             />
           )}
           {activeTab === 3 && <CatalogPreview catalog={null} />}

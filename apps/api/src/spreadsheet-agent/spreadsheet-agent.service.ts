@@ -736,6 +736,102 @@ export class SpreadsheetAgentService {
   }
 
   /**
+   * List all runs across all projects with pagination and optional status filter.
+   */
+  async listAllRuns(opts: { page?: number; pageSize?: number; status?: string }) {
+    const { page = 1, pageSize = 20, status } = opts;
+    const skip = (page - 1) * pageSize;
+    const where: any = {};
+    if (status) where.status = status;
+
+    const [runs, total] = await Promise.all([
+      this.prisma.spreadsheetRun.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+        include: {
+          project: { select: { id: true, name: true } },
+        },
+      }),
+      this.prisma.spreadsheetRun.count({ where }),
+    ]);
+
+    return {
+      runs: runs.map((run) => ({
+        ...this.mapRun(run),
+        project: run.project,
+      })),
+      total,
+      page,
+      pageSize,
+    };
+  }
+
+  /**
+   * List runs for a specific project with pagination and optional status filter.
+   */
+  async listProjectRuns(
+    projectId: string,
+    opts: { page?: number; pageSize?: number; status?: string },
+  ) {
+    await this.requireProject(projectId);
+
+    const { page = 1, pageSize = 20, status } = opts;
+    const skip = (page - 1) * pageSize;
+    const where: any = { projectId };
+    if (status) where.status = status;
+
+    const [runs, total] = await Promise.all([
+      this.prisma.spreadsheetRun.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.spreadsheetRun.count({ where }),
+    ]);
+
+    return {
+      runs: runs.map((run) => this.mapRun(run)),
+      total,
+      page,
+      pageSize,
+    };
+  }
+
+  /**
+   * Delete a failed or cancelled run.
+   */
+  async deleteRun(runId: string, userId: string) {
+    const run = await this.prisma.spreadsheetRun.findUnique({
+      where: { id: runId },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`Spreadsheet run with ID ${runId} not found`);
+    }
+
+    if (!['failed', 'cancelled'].includes(run.status)) {
+      throw new BadRequestException(
+        'Only failed or cancelled runs can be deleted',
+      );
+    }
+
+    await this.prisma.spreadsheetRun.delete({ where: { id: runId } });
+
+    await this.createAuditEvent(
+      userId,
+      'spreadsheet_run:delete',
+      'spreadsheet_run',
+      runId,
+      { status: run.status },
+    );
+
+    this.logger.log(`Spreadsheet run ${runId} deleted by user ${userId}`);
+  }
+
+  /**
    * Atomically claim a pending run for execution (pending → ingesting).
    * Returns true if this caller claimed it; false if already claimed by another process.
    */
@@ -830,7 +926,18 @@ export class SpreadsheetAgentService {
   }
 
   private mapRun(run: any) {
-    return { ...run };
+    const stats = run.stats as Record<string, any> | null;
+    const tokensUsed = stats?.tokensUsed ?? null;
+    return {
+      ...run,
+      tokensUsed: tokensUsed
+        ? {
+            prompt: Number(tokensUsed.prompt ?? 0),
+            completion: Number(tokensUsed.completion ?? 0),
+            total: Number(tokensUsed.total ?? 0),
+          }
+        : { prompt: 0, completion: 0, total: 0 },
+    };
   }
 
   private async createAuditEvent(

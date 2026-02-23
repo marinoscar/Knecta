@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
+  Alert,
   Box,
   Typography,
   LinearProgress,
@@ -15,6 +16,7 @@ import {
   Error as ErrorIcon,
   HourglassTop as PendingIcon,
   Loop as ProcessingIcon,
+  Timer as TimerIcon,
 } from '@mui/icons-material';
 import type { SpreadsheetStreamEvent, SpreadsheetRunProgress } from '../../types';
 
@@ -22,6 +24,8 @@ interface AgentProgressViewProps {
   events: SpreadsheetStreamEvent[];
   progress: SpreadsheetRunProgress | null;
   isStreaming: boolean;
+  tokensUsed?: { prompt: number; completion: number; total: number };
+  startTime?: number | null;
 }
 
 const PHASE_LABELS: Record<string, string> = {
@@ -35,7 +39,22 @@ const PHASE_LABELS: Record<string, string> = {
 
 const PHASE_ORDER = ['ingest', 'analyze', 'design', 'extract', 'validate', 'persist'];
 
-export function AgentProgressView({ events, progress, isStreaming }: AgentProgressViewProps) {
+export function AgentProgressView({ events, progress, isStreaming, tokensUsed, startTime }: AgentProgressViewProps) {
+  const [elapsed, setElapsed] = useState('0:00');
+
+  useEffect(() => {
+    if (!isStreaming || !startTime) {
+      return;
+    }
+    const interval = setInterval(() => {
+      const seconds = Math.floor((Date.now() - startTime) / 1000);
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      setElapsed(`${mins}:${secs.toString().padStart(2, '0')}`);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isStreaming, startTime]);
+
   const phaseStatus = useMemo(() => {
     const status: Record<string, 'pending' | 'active' | 'complete' | 'error'> = {};
     PHASE_ORDER.forEach((p) => (status[p] = 'pending'));
@@ -148,6 +167,27 @@ export function AgentProgressView({ events, progress, isStreaming }: AgentProgre
         </Box>
       )}
 
+      {/* Timer and token chips */}
+      {isStreaming && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 1 }}>
+          <Chip
+            size="small"
+            variant="outlined"
+            icon={<TimerIcon />}
+            label={elapsed}
+            sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}
+          />
+          {tokensUsed && tokensUsed.total > 0 && (
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`${tokensUsed.total.toLocaleString()} tokens`}
+              sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}
+            />
+          )}
+        </Box>
+      )}
+
       {/* Phase indicators */}
       <Box sx={{ display: 'flex', gap: 1, mb: 3, flexWrap: 'wrap' }}>
         {PHASE_ORDER.map((phase) => (
@@ -197,6 +237,26 @@ export function AgentProgressView({ events, progress, isStreaming }: AgentProgre
 
       {isStreaming && !progress && (
         <LinearProgress sx={{ mt: 2 }} />
+      )}
+
+      {/* Completion alert */}
+      {!isStreaming && events.some((e) => e.type === 'run_complete') && (
+        <Alert severity="success" sx={{ mt: 2 }}>
+          Agent completed successfully
+          {startTime && (
+            <> in {Math.floor((Date.now() - startTime) / 1000)} seconds</>
+          )}
+          {tokensUsed && tokensUsed.total > 0 && (
+            <> &mdash; {tokensUsed.total.toLocaleString()} tokens used</>
+          )}
+        </Alert>
+      )}
+
+      {/* Error alert */}
+      {!isStreaming && events.some((e) => e.type === 'run_error') && (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {events.find((e) => e.type === 'run_error')?.error || events.find((e) => e.type === 'run_error')?.message || 'Agent execution failed'}
+        </Alert>
       )}
     </Box>
   );

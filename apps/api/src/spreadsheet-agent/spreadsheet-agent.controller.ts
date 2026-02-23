@@ -301,9 +301,51 @@ export class SpreadsheetAgentController {
     await this.service.deleteTable(id, tableId, userId);
   }
 
+  @Get('projects/:id/runs')
+  @Auth({ permissions: [PERMISSIONS.SPREADSHEET_AGENT_READ] })
+  @ApiOperation({ summary: 'List runs for a specific project' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
+  @ApiQuery({ name: 'status', required: false, type: String })
+  @ApiResponse({ status: 200, description: 'Paginated list of runs for the project' })
+  @ApiResponse({ status: 404, description: 'Project not found' })
+  async listProjectRuns(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('status') status?: string,
+  ) {
+    const result = await this.service.listProjectRuns(id, {
+      page: page ? parseInt(page, 10) : undefined,
+      pageSize: pageSize ? parseInt(pageSize, 10) : undefined,
+      status,
+    });
+    return { data: result };
+  }
+
   // ============================================================================
   // RUNS — static routes MUST come before parameterized routes
   // ============================================================================
+
+  @Get('runs')
+  @Auth({ permissions: [PERMISSIONS.SPREADSHEET_AGENT_READ] })
+  @ApiOperation({ summary: 'List all runs across all projects' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
+  @ApiQuery({ name: 'status', required: false, type: String })
+  @ApiResponse({ status: 200, description: 'Paginated list of all runs' })
+  async listAllRuns(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.service.listAllRuns({
+      page: page ? parseInt(page, 10) : undefined,
+      pageSize: pageSize ? parseInt(pageSize, 10) : undefined,
+      status,
+    });
+  }
 
   @Post('runs')
   @Auth({ permissions: [PERMISSIONS.SPREADSHEET_AGENT_WRITE] })
@@ -328,6 +370,21 @@ export class SpreadsheetAgentController {
   async getRun(@Param('runId', ParseUUIDPipe) runId: string) {
     const run = await this.service.getRun(runId);
     return { data: run };
+  }
+
+  @Delete('runs/:runId')
+  @Auth({ permissions: [PERMISSIONS.SPREADSHEET_AGENT_DELETE] })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a failed or cancelled run' })
+  @ApiParam({ name: 'runId', type: String, format: 'uuid' })
+  @ApiResponse({ status: 204, description: 'Run deleted' })
+  @ApiResponse({ status: 404, description: 'Run not found' })
+  @ApiResponse({ status: 400, description: 'Only failed or cancelled runs can be deleted' })
+  async deleteRun(
+    @Param('runId', ParseUUIDPipe) runId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    await this.service.deleteRun(runId, userId);
   }
 
   @Post('runs/:runId/cancel')

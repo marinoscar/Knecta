@@ -5,7 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../mocks/server';
 import { render } from '../utils/test-utils';
 import SpreadsheetAgentPage from '../../pages/SpreadsheetAgentPage';
-import type { SpreadsheetProject } from '../../types';
+import type { SpreadsheetProject, SpreadsheetRun } from '../../types';
 
 // Mock useNavigate so navigation calls can be asserted
 const mockNavigate = vi.fn();
@@ -40,6 +40,29 @@ vi.mock('../../hooks/usePermissions', () => ({
   }),
 }));
 
+// Helper to build a mock run
+function buildRun(overrides: Partial<SpreadsheetRun> = {}): SpreadsheetRun {
+  return {
+    id: 'run-1',
+    projectId: 'proj-1',
+    status: 'completed',
+    config: null,
+    extractionPlan: null,
+    extractionPlanModified: null,
+    validationReport: null,
+    progress: null,
+    errorMessage: null,
+    tokensUsed: { prompt: 500, completion: 250, total: 750 },
+    startedAt: '2026-02-01T10:00:00Z',
+    completedAt: '2026-02-01T10:02:00Z',
+    createdByUserId: 'user-1',
+    createdAt: '2026-02-01T09:59:00Z',
+    updatedAt: '2026-02-01T10:02:00Z',
+    project: { id: 'proj-1', name: 'Sales Analysis' },
+    ...overrides,
+  };
+}
+
 // Helper to build a mock project
 function buildProject(overrides: Partial<SpreadsheetProject> = {}): SpreadsheetProject {
   return {
@@ -71,13 +94,27 @@ const emptyResponse = {
 };
 
 describe('SpreadsheetAgentPage', () => {
+  const emptyRunsResponse = {
+    runs: [],
+    total: 0,
+    page: 1,
+    pageSize: 20,
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Default: empty list
+    // Default: empty projects list
     server.use(
       http.get('*/api/spreadsheet-agent/projects', () =>
         HttpResponse.json({ data: emptyResponse }),
+      ),
+    );
+
+    // Default: empty runs list
+    server.use(
+      http.get('*/api/spreadsheet-agent/runs', () =>
+        HttpResponse.json(emptyRunsResponse),
       ),
     );
   });
@@ -409,6 +446,298 @@ describe('SpreadsheetAgentPage', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Spreadsheet Agent')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Runs tab', () => {
+    it('renders two tabs: Projects and Runs', async () => {
+      render(<SpreadsheetAgentPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: 'Projects' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'Runs' })).toBeInTheDocument();
+      });
+    });
+
+    it('Projects tab is selected by default', async () => {
+      render(<SpreadsheetAgentPage />);
+
+      await waitFor(() => {
+        const projectsTab = screen.getByRole('tab', { name: 'Projects' });
+        expect(projectsTab).toHaveAttribute('aria-selected', 'true');
+      });
+    });
+
+    it('switching to Runs tab triggers data fetch from the API', async () => {
+      const user = userEvent.setup();
+      let runsFetched = false;
+
+      server.use(
+        http.get('*/api/spreadsheet-agent/runs', () => {
+          runsFetched = true;
+          return HttpResponse.json(emptyRunsResponse);
+        }),
+      );
+
+      render(<SpreadsheetAgentPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: 'Runs' })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: 'Runs' }));
+
+      await waitFor(() => {
+        expect(runsFetched).toBe(true);
+      });
+    });
+
+    it('shows empty state when there are no runs', async () => {
+      const user = userEvent.setup();
+
+      render(<SpreadsheetAgentPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: 'Runs' })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: 'Runs' }));
+
+      await waitFor(() => {
+        expect(screen.getByText('No runs found')).toBeInTheDocument();
+      });
+    });
+
+    it('shows loading spinner while fetching runs', async () => {
+      const user = userEvent.setup();
+
+      server.use(
+        http.get('*/api/spreadsheet-agent/runs', async () => {
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          return HttpResponse.json(emptyRunsResponse);
+        }),
+      );
+
+      render(<SpreadsheetAgentPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: 'Runs' })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: 'Runs' }));
+
+      // Spinner should appear immediately while fetch is in progress
+      expect(screen.getByRole('progressbar')).toBeInTheDocument();
+
+      await waitFor(() => {
+        expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+      });
+    });
+
+    it('renders runs table with Project, Status, Tokens, Duration, Error, Created columns', async () => {
+      const user = userEvent.setup();
+      const run = buildRun();
+
+      server.use(
+        http.get('*/api/spreadsheet-agent/runs', () =>
+          HttpResponse.json({ runs: [run], total: 1, page: 1, pageSize: 20 }),
+        ),
+      );
+
+      render(<SpreadsheetAgentPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: 'Runs' })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: 'Runs' }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('columnheader', { name: 'Project' })).toBeInTheDocument();
+        expect(screen.getByRole('columnheader', { name: 'Status' })).toBeInTheDocument();
+        expect(screen.getByRole('columnheader', { name: 'Tokens' })).toBeInTheDocument();
+        expect(screen.getByRole('columnheader', { name: 'Duration' })).toBeInTheDocument();
+        expect(screen.getByRole('columnheader', { name: 'Error' })).toBeInTheDocument();
+        expect(screen.getByRole('columnheader', { name: 'Created' })).toBeInTheDocument();
+      });
+    });
+
+    it('renders project name in runs table row', async () => {
+      const user = userEvent.setup();
+      const run = buildRun({ project: { id: 'proj-1', name: 'Quarterly Report' } });
+
+      server.use(
+        http.get('*/api/spreadsheet-agent/runs', () =>
+          HttpResponse.json({ runs: [run], total: 1, page: 1, pageSize: 20 }),
+        ),
+      );
+
+      render(<SpreadsheetAgentPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: 'Runs' })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: 'Runs' }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Quarterly Report')).toBeInTheDocument();
+      });
+    });
+
+    it('renders status chip in runs table row', async () => {
+      const user = userEvent.setup();
+
+      server.use(
+        http.get('*/api/spreadsheet-agent/runs', () =>
+          HttpResponse.json({ runs: [buildRun({ status: 'completed' })], total: 1, page: 1, pageSize: 20 }),
+        ),
+      );
+
+      render(<SpreadsheetAgentPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: 'Runs' })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: 'Runs' }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Completed')).toBeInTheDocument();
+      });
+    });
+
+    it('renders structured tokensUsed.total in runs table row', async () => {
+      const user = userEvent.setup();
+      const run = buildRun({ tokensUsed: { prompt: 600, completion: 400, total: 1000 } });
+
+      server.use(
+        http.get('*/api/spreadsheet-agent/runs', () =>
+          HttpResponse.json({ runs: [run], total: 1, page: 1, pageSize: 20 }),
+        ),
+      );
+
+      render(<SpreadsheetAgentPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: 'Runs' })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: 'Runs' }));
+
+      await waitFor(() => {
+        expect(screen.getByText('1,000')).toBeInTheDocument();
+      });
+    });
+
+    it('renders formatted duration in runs table row', async () => {
+      const user = userEvent.setup();
+      const run = buildRun({
+        startedAt: '2026-02-01T10:00:00Z',
+        completedAt: '2026-02-01T10:01:30Z', // 1:30
+      });
+
+      server.use(
+        http.get('*/api/spreadsheet-agent/runs', () =>
+          HttpResponse.json({ runs: [run], total: 1, page: 1, pageSize: 20 }),
+        ),
+      );
+
+      render(<SpreadsheetAgentPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: 'Runs' })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: 'Runs' }));
+
+      await waitFor(() => {
+        expect(screen.getByText('1:30')).toBeInTheDocument();
+      });
+    });
+
+    it('opens delete confirmation dialog when delete run button is clicked', async () => {
+      const user = userEvent.setup();
+      const run = buildRun({ id: 'run-del', status: 'failed' });
+
+      server.use(
+        http.get('*/api/spreadsheet-agent/runs', () =>
+          HttpResponse.json({ runs: [run], total: 1, page: 1, pageSize: 20 }),
+        ),
+        http.delete('*/api/spreadsheet-agent/runs/run-del', () =>
+          new HttpResponse(null, { status: 204 }),
+        ),
+      );
+
+      render(<SpreadsheetAgentPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: 'Runs' })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: 'Runs' }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Failed')).toBeInTheDocument();
+      });
+
+      // Find and click the delete button in the runs table
+      const row = screen.getByText('Sales Analysis').closest('tr')!;
+      const buttons = within(row).getAllByRole('button');
+      // Last button in the row should be delete (trash icon)
+      await user.click(buttons[buttons.length - 1]);
+
+      await waitFor(() => {
+        expect(screen.getByText('Delete Run')).toBeInTheDocument();
+        expect(screen.getByText(/are you sure you want to delete this run/i)).toBeInTheDocument();
+      });
+    });
+
+    it('navigates to project detail when View Project button is clicked in runs table', async () => {
+      const user = userEvent.setup();
+      const run = buildRun({ id: 'run-view', projectId: 'proj-99', project: { id: 'proj-99', name: 'My Report' } });
+
+      server.use(
+        http.get('*/api/spreadsheet-agent/runs', () =>
+          HttpResponse.json({ runs: [run], total: 1, page: 1, pageSize: 20 }),
+        ),
+      );
+
+      render(<SpreadsheetAgentPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: 'Runs' })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: 'Runs' }));
+
+      await waitFor(() => {
+        expect(screen.getByText('My Report')).toBeInTheDocument();
+      });
+
+      const row = screen.getByText('My Report').closest('tr')!;
+      const viewButton = within(row).getAllByRole('button')[0];
+      await user.click(viewButton);
+
+      expect(mockNavigate).toHaveBeenCalledWith('/spreadsheets/proj-99');
+    });
+
+    it('shows status filter select in Runs tab', async () => {
+      const user = userEvent.setup();
+
+      render(<SpreadsheetAgentPage />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: 'Runs' })).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole('tab', { name: 'Runs' }));
+
+      await waitFor(() => {
+        // MUI Select renders as combobox
+        const comboboxes = screen.getAllByRole('combobox');
+        expect(comboboxes.length).toBeGreaterThanOrEqual(1);
       });
     });
   });

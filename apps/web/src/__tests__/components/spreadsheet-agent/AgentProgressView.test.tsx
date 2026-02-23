@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen } from '@testing-library/react';
 import { render } from '../../utils/test-utils';
 import { AgentProgressView } from '../../../components/spreadsheet-agent/AgentProgressView';
@@ -192,6 +192,285 @@ describe('AgentProgressView', () => {
       render(<AgentProgressView events={events} progress={null} isStreaming={true} />);
 
       expect(screen.getByText('Ingesting Files')).toBeInTheDocument();
+    });
+  });
+
+  describe('Elapsed timer chip', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('renders the timer chip when isStreaming=true and startTime is provided', () => {
+      const startTime = Date.now();
+      render(
+        <AgentProgressView
+          events={[]}
+          progress={null}
+          isStreaming={true}
+          startTime={startTime}
+        />,
+      );
+
+      // Timer chip shows initial elapsed time (0:00)
+      expect(screen.getByText('0:00')).toBeInTheDocument();
+    });
+
+    it('shows timer icon alongside the elapsed time', () => {
+      const startTime = Date.now();
+      render(
+        <AgentProgressView
+          events={[]}
+          progress={null}
+          isStreaming={true}
+          startTime={startTime}
+        />,
+      );
+
+      const timerIcons = document.querySelectorAll('[data-testid="TimerIcon"]');
+      expect(timerIcons.length).toBeGreaterThan(0);
+    });
+
+    it('does NOT render timer chip when isStreaming=false', () => {
+      render(
+        <AgentProgressView
+          events={[]}
+          progress={null}
+          isStreaming={false}
+          startTime={Date.now()}
+        />,
+      );
+
+      // Timer chip is only shown while streaming
+      expect(screen.queryByText(/^\d+:\d{2}$/)).not.toBeInTheDocument();
+    });
+
+    it('renders timer chip with "0:00" when isStreaming=true but startTime is not provided', () => {
+      render(
+        <AgentProgressView
+          events={[]}
+          progress={null}
+          isStreaming={true}
+        />,
+      );
+
+      // Timer chip is rendered but frozen at 0:00 since no startTime to tick from
+      expect(screen.getByText('0:00')).toBeInTheDocument();
+    });
+
+    it('updates elapsed time display as time passes', async () => {
+      const startTime = Date.now();
+      const { act: actFn } = await import('@testing-library/react');
+      render(
+        <AgentProgressView
+          events={[]}
+          progress={null}
+          isStreaming={true}
+          startTime={startTime}
+        />,
+      );
+
+      expect(screen.getByText('0:00')).toBeInTheDocument();
+
+      // Advance 65 seconds, wrapped in act so React flushes the state update
+      await actFn(() => {
+        vi.advanceTimersByTime(65_000);
+      });
+
+      expect(screen.getByText('1:05')).toBeInTheDocument();
+    });
+  });
+
+  describe('Token count chip', () => {
+    it('renders token count chip when isStreaming=true and tokensUsed.total > 0', () => {
+      render(
+        <AgentProgressView
+          events={[]}
+          progress={null}
+          isStreaming={true}
+          startTime={Date.now()}
+          tokensUsed={{ prompt: 100, completion: 50, total: 1500 }}
+        />,
+      );
+
+      expect(screen.getByText('1,500 tokens')).toBeInTheDocument();
+    });
+
+    it('does NOT render token count chip when total is 0', () => {
+      render(
+        <AgentProgressView
+          events={[]}
+          progress={null}
+          isStreaming={true}
+          startTime={Date.now()}
+          tokensUsed={{ prompt: 0, completion: 0, total: 0 }}
+        />,
+      );
+
+      expect(screen.queryByText(/tokens/)).not.toBeInTheDocument();
+    });
+
+    it('does NOT render token count chip when isStreaming=false', () => {
+      render(
+        <AgentProgressView
+          events={[]}
+          progress={null}
+          isStreaming={false}
+          tokensUsed={{ prompt: 200, completion: 100, total: 300 }}
+        />,
+      );
+
+      // Token chip is inside the isStreaming block; not rendered when streaming stopped
+      expect(screen.queryByText('300 tokens')).not.toBeInTheDocument();
+    });
+
+    it('does NOT render token count chip when tokensUsed is not provided', () => {
+      render(
+        <AgentProgressView
+          events={[]}
+          progress={null}
+          isStreaming={true}
+          startTime={Date.now()}
+        />,
+      );
+
+      expect(screen.queryByText(/tokens/)).not.toBeInTheDocument();
+    });
+
+    it('formats large token counts with locale separators', () => {
+      render(
+        <AgentProgressView
+          events={[]}
+          progress={null}
+          isStreaming={true}
+          startTime={Date.now()}
+          tokensUsed={{ prompt: 5000, completion: 3000, total: 8000 }}
+        />,
+      );
+
+      // toLocaleString formats 8000 as "8,000" in en-US locales
+      expect(screen.getByText(/8[,.]?000 tokens/)).toBeInTheDocument();
+    });
+  });
+
+  describe('Completion alert', () => {
+    it('renders success alert when events include run_complete', () => {
+      const events: SpreadsheetStreamEvent[] = [
+        { type: 'run_complete' },
+      ];
+
+      render(
+        <AgentProgressView events={events} progress={null} isStreaming={false} />,
+      );
+
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+      expect(screen.getByText(/agent completed successfully/i)).toBeInTheDocument();
+    });
+
+    it('includes token count in success alert when tokensUsed.total > 0', () => {
+      const events: SpreadsheetStreamEvent[] = [
+        { type: 'run_complete' },
+      ];
+
+      render(
+        <AgentProgressView
+          events={events}
+          progress={null}
+          isStreaming={false}
+          tokensUsed={{ prompt: 1000, completion: 500, total: 1500 }}
+        />,
+      );
+
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+      expect(screen.getByText(/1,500 tokens used/i)).toBeInTheDocument();
+    });
+
+    it('does NOT render success alert when no run_complete event', () => {
+      const events: SpreadsheetStreamEvent[] = [
+        { type: 'file_complete', fileName: 'data.xlsx' },
+      ];
+
+      render(
+        <AgentProgressView events={events} progress={null} isStreaming={false} />,
+      );
+
+      expect(screen.queryByText(/agent completed successfully/i)).not.toBeInTheDocument();
+    });
+
+    it('does NOT render success alert while still streaming', () => {
+      const events: SpreadsheetStreamEvent[] = [
+        { type: 'run_complete' },
+      ];
+
+      render(
+        <AgentProgressView events={events} progress={null} isStreaming={true} />,
+      );
+
+      // Alert is suppressed while isStreaming=true
+      expect(screen.queryByText(/agent completed successfully/i)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Error alert', () => {
+    it('renders error alert when events include run_error', () => {
+      const events: SpreadsheetStreamEvent[] = [
+        { type: 'run_error', message: 'Something went wrong during extraction' },
+      ];
+
+      render(
+        <AgentProgressView events={events} progress={null} isStreaming={false} />,
+      );
+
+      const alerts = screen.getAllByRole('alert');
+      expect(alerts.length).toBeGreaterThan(0);
+      expect(screen.getByText('Something went wrong during extraction')).toBeInTheDocument();
+    });
+
+    it('renders error alert with error field when present', () => {
+      const events: SpreadsheetStreamEvent[] = [
+        { type: 'run_error', error: 'Database connection refused' },
+      ];
+
+      render(
+        <AgentProgressView events={events} progress={null} isStreaming={false} />,
+      );
+
+      expect(screen.getByText('Database connection refused')).toBeInTheDocument();
+    });
+
+    it('renders fallback message when run_error has no error or message fields', () => {
+      const events: SpreadsheetStreamEvent[] = [
+        { type: 'run_error' },
+      ];
+
+      render(
+        <AgentProgressView events={events} progress={null} isStreaming={false} />,
+      );
+
+      expect(screen.getByText('Agent execution failed')).toBeInTheDocument();
+    });
+
+    it('does NOT render error alert when no run_error event', () => {
+      render(
+        <AgentProgressView events={[]} progress={null} isStreaming={false} />,
+      );
+
+      expect(screen.queryByText(/agent execution failed/i)).not.toBeInTheDocument();
+    });
+
+    it('does NOT render error alert while still streaming', () => {
+      const events: SpreadsheetStreamEvent[] = [
+        { type: 'run_error', message: 'Transient error' },
+      ];
+
+      render(
+        <AgentProgressView events={events} progress={null} isStreaming={true} />,
+      );
+
+      expect(screen.queryByText('Transient error')).not.toBeInTheDocument();
     });
   });
 });

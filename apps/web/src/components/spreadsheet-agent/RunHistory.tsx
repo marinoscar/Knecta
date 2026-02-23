@@ -20,6 +20,15 @@ import {
 } from '@mui/icons-material';
 import type { SpreadsheetRun, SpreadsheetRunStatus } from '../../types';
 
+function formatDuration(startedAt: string | null, completedAt: string | null): string {
+  if (!startedAt || !completedAt) return '-';
+  const ms = new Date(completedAt).getTime() - new Date(startedAt).getTime();
+  const seconds = Math.floor(ms / 1000);
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
 interface RunHistoryProps {
   runs: SpreadsheetRun[];
   isLoading?: boolean;
@@ -93,6 +102,7 @@ export function RunHistory({
             <TableCell>Tokens</TableCell>
             <TableCell>Started</TableCell>
             <TableCell>Completed</TableCell>
+            <TableCell>Duration</TableCell>
             <TableCell>Error</TableCell>
             <TableCell align="right">Actions</TableCell>
           </TableRow>
@@ -107,12 +117,23 @@ export function RunHistory({
                   size="small"
                 />
               </TableCell>
-              <TableCell>{run.tokensUsed.toLocaleString()}</TableCell>
+              <TableCell>
+                {typeof run.tokensUsed === 'object'
+                  ? run.tokensUsed.total.toLocaleString()
+                  : String(run.tokensUsed || 0)}
+              </TableCell>
               <TableCell>
                 {run.startedAt ? new Date(run.startedAt).toLocaleString() : '-'}
               </TableCell>
               <TableCell>
                 {run.completedAt ? new Date(run.completedAt).toLocaleString() : '-'}
+              </TableCell>
+              <TableCell>
+                {run.startedAt && run.completedAt
+                  ? formatDuration(run.startedAt, run.completedAt)
+                  : ACTIVE_STATUSES.includes(run.status)
+                    ? 'Running...'
+                    : '-'}
               </TableCell>
               <TableCell>
                 {run.errorMessage ? (
