@@ -367,7 +367,7 @@ export default function SpreadsheetProjectDetailPage() {
             color={STATUS_CONFIG[project.status]?.color || 'default'}
           />
           {canWrite && project.status !== 'processing' && (
-            <Button variant="contained" startIcon={<RunIcon />} onClick={handleStartRun}>
+            <Button variant="contained" startIcon={<RunIcon />} onClick={handleStartRun} disabled={runHook.isStreaming}>
               Start Run
             </Button>
           )}
