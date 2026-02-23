@@ -67,7 +67,6 @@ function ActiveMode({
   totalDatasets,
   onAskQuestion,
 }: Pick<HeroBannerProps, 'readyOntologies' | 'totalDatasets' | 'onAskQuestion'>) {
-  const theme = useTheme();
   const [question, setQuestion] = useState('');
   const [selectedOntologyId, setSelectedOntologyId] = useState<string>(
     readyOntologies[0]?.id ?? ''

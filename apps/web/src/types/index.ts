@@ -468,6 +468,8 @@ export interface DataChatMessage {
       joins: Array<{ from: string; to: string; on: string }>;
       grain: string;
       rowCount: number | null;
+      filters?: string[];
+      timeWindow?: string;
     };
     revisionsUsed?: number;
     durationMs?: number;
@@ -573,6 +575,8 @@ export interface SharedChatMessage {
       joins: Array<{ from: string; to: string; on: string }>;
       grain: string;
       rowCount: number | null;
+      filters?: string[];
+      timeWindow?: string;
     };
     joinPlan?: {
       relevantDatasets: Array<{ name: string; description: string }>;
