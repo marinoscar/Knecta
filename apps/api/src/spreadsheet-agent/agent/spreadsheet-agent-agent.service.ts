@@ -126,6 +126,17 @@ export class SpreadsheetAgentAgentService {
         initialState.extractionPlan = run.extractionPlan as any;
         initialState.planModifications = run.extractionPlanModified as any;
 
+        // Carry forward tokens from the first execution (analyze+design phases)
+        const prevStats = run.stats as Record<string, unknown> | null;
+        if (prevStats?.tokensUsed) {
+          const prevTokens = prevStats.tokensUsed as { prompt?: number; completion?: number; total?: number };
+          initialState.tokensUsed = {
+            prompt: prevTokens.prompt ?? 0,
+            completion: prevTokens.completion ?? 0,
+            total: prevTokens.total ?? 0,
+          };
+        }
+
         const plan = run.extractionPlan as any;
         if (plan?.tables) {
           // Collect unique files and their sheets from the extraction plan.
@@ -190,6 +201,16 @@ export class SpreadsheetAgentAgentService {
       }
 
       onEvent({ type: 'run_start' });
+
+      // On resume, emit synthetic phase events for already-completed phases
+      // so the frontend phase chips show "complete" rather than "pending".
+      // Use onEvent (not emit) to avoid triggering DB status updates.
+      if (isResumeAfterReview) {
+        for (const phase of ['ingest', 'analyze', 'design']) {
+          onEvent({ type: 'phase_start', phase });
+          onEvent({ type: 'phase_complete', phase });
+        }
+      }
 
       // 8. Execute graph
       const result = await graph.invoke(initialState, { signal });
