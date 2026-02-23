@@ -671,20 +671,6 @@ export class DataAgentService {
           include: {
             llmTraces: {
               orderBy: { callIndex: 'asc' },
-              select: {
-                phase: true,
-                callIndex: true,
-                stepId: true,
-                purpose: true,
-                provider: true,
-                model: true,
-                structuredOutput: true,
-                promptTokens: true,
-                completionTokens: true,
-                totalTokens: true,
-                durationMs: true,
-                error: true,
-              },
             },
           },
         },

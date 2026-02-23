@@ -12,6 +12,10 @@ import {
   Drawer,
   useTheme,
   useMediaQuery,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Button,
 } from '@mui/material';
 import {
   Analytics as AnalyticsIcon,
@@ -22,10 +26,12 @@ import {
   RadioButtonUnchecked,
   Loop,
   Error as ErrorIcon,
+  ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
 import { ChatMessage } from '../components/data-agent/ChatMessage';
+import { LlmTraceDialog } from '../components/data-agent/LlmTraceDialog';
 import { getSharedChat } from '../services/api';
-import type { SharedChatData, DataChatMessage, ChartSpec, SharedLlmTrace } from '../types';
+import type { SharedChatData, DataChatMessage, ChartSpec, SharedLlmTrace, LlmTraceRecord } from '../types';
 
 // Helper to format duration in ms
 function formatDuration(ms: number): string {
@@ -51,6 +57,31 @@ const PHASE_COLORS: Record<string, 'info' | 'secondary' | 'primary' | 'warning' 
   verifier: 'success',
   explainer: 'default',
 };
+
+function sharedTraceToRecord(trace: SharedLlmTrace, index: number): LlmTraceRecord {
+  return {
+    id: `shared-trace-${index}`,
+    messageId: '',
+    phase: trace.phase,
+    callIndex: trace.callIndex,
+    stepId: trace.stepId,
+    purpose: trace.purpose,
+    provider: trace.provider,
+    model: trace.model,
+    temperature: trace.temperature,
+    structuredOutput: trace.structuredOutput,
+    promptMessages: trace.promptMessages ?? [],
+    responseContent: trace.responseContent ?? '',
+    toolCalls: trace.toolCalls,
+    promptTokens: trace.promptTokens,
+    completionTokens: trace.completionTokens,
+    totalTokens: trace.totalTokens,
+    startedAt: trace.startedAt ?? '',
+    completedAt: trace.completedAt ?? '',
+    durationMs: trace.durationMs,
+    error: trace.error,
+  };
+}
 
 export default function SharedChatPage() {
   const { shareToken } = useParams<{ shareToken: string }>();
@@ -334,6 +365,8 @@ interface InsightsPanelProps {
 }
 
 function InsightsPanel({ message, traces, onClose }: InsightsPanelProps) {
+  const [selectedTrace, setSelectedTrace] = useState<LlmTraceRecord | null>(null);
+
   if (!message) {
     return (
       <Box
@@ -641,32 +674,97 @@ function InsightsPanel({ message, traces, onClose }: InsightsPanelProps) {
               </Typography>
               <Chip size="small" label={`${traces.length} calls`} variant="outlined" />
             </Box>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-              {traces.map((trace, idx) => (
-                <Box
-                  key={idx}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1,
-                    py: 0.5,
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <Chip
-                    size="small"
-                    label={PHASE_LABELS[trace.phase] || trace.phase}
-                    color={PHASE_COLORS[trace.phase] || 'default'}
-                    sx={{ fontSize: '0.7rem', height: 22 }}
-                  />
-                  <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
-                    {trace.purpose}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {formatDuration(trace.durationMs)}
-                  </Typography>
-                </Box>
-              ))}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {traces.map((trace, idx) => {
+                const phaseColor = PHASE_COLORS[trace.phase] || 'default';
+                const phaseLabel = PHASE_LABELS[trace.phase] || trace.phase;
+
+                return (
+                  <Accordion
+                    key={idx}
+                    disableGutters
+                    elevation={0}
+                    sx={{
+                      '&:before': { display: 'none' },
+                      bgcolor: 'transparent',
+                    }}
+                  >
+                    <AccordionSummary
+                      expandIcon={<ExpandMoreIcon />}
+                      sx={{
+                        px: 1,
+                        minHeight: 48,
+                        '&.Mui-expanded': { minHeight: 48 },
+                        '& .MuiAccordionSummary-content': { my: 1 },
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          width: '100%',
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <Chip
+                          size="small"
+                          label={phaseLabel}
+                          color={phaseColor}
+                          sx={{ fontSize: '0.7rem', height: 22 }}
+                        />
+                        <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
+                          {trace.purpose}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {formatDuration(trace.durationMs)}
+                        </Typography>
+                      </Box>
+                    </AccordionSummary>
+                    <AccordionDetails sx={{ px: 2, py: 1 }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                        {trace.promptTokens.toLocaleString()} in / {trace.completionTokens.toLocaleString()} out
+                      </Typography>
+                      {trace.responseContent && (
+                        <Box
+                          sx={{
+                            fontSize: '0.8rem',
+                            bgcolor: 'action.hover',
+                            p: 1,
+                            borderRadius: 1,
+                            mb: 1,
+                            maxHeight: 120,
+                            overflow: 'hidden',
+                            position: 'relative',
+                            '&::after': {
+                              content: '""',
+                              position: 'absolute',
+                              bottom: 0,
+                              left: 0,
+                              right: 0,
+                              height: 40,
+                              background: 'linear-gradient(transparent, var(--bg, rgba(0,0,0,0.03)))',
+                            },
+                          }}
+                        >
+                          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                            {trace.responseContent.length > 300
+                              ? `${trace.responseContent.slice(0, 300)}...`
+                              : trace.responseContent}
+                          </Typography>
+                        </Box>
+                      )}
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => setSelectedTrace(sharedTraceToRecord(trace, idx))}
+                      >
+                        View Full
+                      </Button>
+                    </AccordionDetails>
+                  </Accordion>
+                );
+              })}
             </Box>
             {/* Token summary */}
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
@@ -707,6 +805,15 @@ function InsightsPanel({ message, traces, onClose }: InsightsPanelProps) {
             </Typography>
           </Box>
         </>
+      )}
+
+      {/* Trace Detail Dialog */}
+      {selectedTrace && (
+        <LlmTraceDialog
+          trace={selectedTrace}
+          open={!!selectedTrace}
+          onClose={() => setSelectedTrace(null)}
+        />
       )}
     </Box>
   );

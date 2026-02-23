@@ -530,10 +530,16 @@ export interface SharedLlmTrace {
   purpose: string;
   provider: string;
   model: string;
+  temperature: number | null;
   structuredOutput: boolean;
+  promptMessages: Array<{ role: string; content: string }>;
+  responseContent: string;
+  toolCalls: Array<{ name: string; args: Record<string, unknown> }> | null;
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  startedAt: string;
+  completedAt: string;
   durationMs: number;
   error: string | null;
 }
