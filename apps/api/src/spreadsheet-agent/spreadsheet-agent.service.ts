@@ -8,7 +8,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { SpreadsheetRunStatus } from '@prisma/client';
 import { createHash } from 'crypto';
-import { extname } from 'path';
+import { mkdirSync, writeFileSync } from 'fs';
+import { extname, join } from 'path';
 import { Readable } from 'stream';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -376,10 +377,12 @@ export class SpreadsheetAgentService {
     // Compute SHA-256 hash
     const fileHash = createHash('sha256').update(buffer).digest('hex');
 
-    // Derive a logical storage path
-    // Format: spreadsheet-agent/{projectId}/{fileHash}{ext}
-    // Using hash in path means re-uploads of the same file reuse the same path.
-    const storagePath = `${project.outputPrefix}/${fileHash}${ext}`;
+    // Write the buffer to disk so the agent ingest node can read it later.
+    // Path: /tmp/spreadsheet-agent/{projectId}/{fileHash}{ext}
+    const storageDir = join('/tmp', 'spreadsheet-agent', projectId);
+    mkdirSync(storageDir, { recursive: true });
+    const storagePath = join(storageDir, `${fileHash}${ext}`);
+    writeFileSync(storagePath, buffer);
 
     // Determine fileType from extension
     const fileType = ext.replace('.', '').toUpperCase();
