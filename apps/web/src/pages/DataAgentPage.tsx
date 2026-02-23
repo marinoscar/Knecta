@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Box, Alert, useTheme, Drawer, useMediaQuery, Snackbar } from '@mui/material';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ChatSidebar } from '../components/data-agent/ChatSidebar';
 import { ChatView } from '../components/data-agent/ChatView';
 import { ChatInput } from '../components/data-agent/ChatInput';
@@ -19,6 +19,7 @@ import { useUserSettings } from '../hooks/useUserSettings';
 export default function DataAgentPage() {
   const { chatId } = useParams<{ chatId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [newChatDialogOpen, setNewChatDialogOpen] = useState(false);
   const [insightsPanelOpen, setInsightsPanelOpen] = useState(false);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
@@ -81,6 +82,20 @@ export default function DataAgentPage() {
       loadChat(chatId);
     }
   }, [chatId, loadChat]);
+
+  // Auto-send initial question from home page hero
+  useEffect(() => {
+    const initialQuestion = (location.state as { initialQuestion?: string })?.initialQuestion;
+    if (!initialQuestion || !chatId || !chat || messages.length > 0) return;
+
+    const timer = setTimeout(() => {
+      sendMessage(initialQuestion);
+      // Clear navigation state to prevent re-sending
+      navigate(location.pathname, { replace: true });
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [chat, chatId, messages.length, location.state, sendMessage, navigate, location.pathname]);
 
   // Load preferences when chat's ontology is available
   useEffect(() => {

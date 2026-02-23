@@ -17,9 +17,11 @@ describe('App', () => {
     await waitFor(
       () => {
         // Should either show login page or home page depending on mock auth state
-        const welcomeText = screen.queryByText(/Welcome/i);
-        const homeText = screen.queryByText(/Home Page/i);
-        expect(welcomeText || homeText).toBeTruthy();
+        // The home page shows a notification banner while dashboard loads
+        const notificationText = screen.queryByText(/Enable notifications/i);
+        const loginText = screen.queryByText(/sign in/i);
+        const knectaText = screen.queryByText(/Knecta/i);
+        expect(notificationText || loginText || knectaText).toBeTruthy();
       },
       { timeout: 5000 }
     );
