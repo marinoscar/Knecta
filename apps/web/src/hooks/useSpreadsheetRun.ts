@@ -13,6 +13,8 @@ interface UseSpreadsheetRunResult {
   progress: SpreadsheetRunProgress | null;
   isStreaming: boolean;
   error: string | null;
+  tokensUsed: { prompt: number; completion: number; total: number };
+  streamStartTime: number | null;
   fetchRun: (runId: string) => Promise<void>;
   startStream: (runId: string) => void;
   stopStream: () => void;
@@ -26,6 +28,8 @@ export function useSpreadsheetRun(): UseSpreadsheetRunResult {
   const [progress, setProgress] = useState<SpreadsheetRunProgress | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tokensUsed, setTokensUsed] = useState<{ prompt: number; completion: number; total: number }>({ prompt: 0, completion: 0, total: 0 });
+  const [streamStartTime, setStreamStartTime] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const fetchRun = useCallback(async (runId: string) => {
@@ -60,6 +64,8 @@ export function useSpreadsheetRun(): UseSpreadsheetRunResult {
       setIsStreaming(true);
       setEvents([]);
       setError(null);
+      setTokensUsed({ prompt: 0, completion: 0, total: 0 });
+      setStreamStartTime(Date.now());
 
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
       const token = api.getAccessToken();
@@ -106,6 +112,12 @@ export function useSpreadsheetRun(): UseSpreadsheetRunResult {
 
                     if (event.type === 'progress' && event.progress) {
                       setProgress(event.progress);
+                    }
+                    if (event.type === 'token_update' && event.tokensUsed) {
+                      setTokensUsed(event.tokensUsed);
+                    }
+                    if (event.type === 'run_complete' && event.tokensUsed) {
+                      setTokensUsed(event.tokensUsed);
                     }
                     if (event.type === 'run_complete' || event.type === 'run_error') {
                       setIsStreaming(false);
@@ -183,6 +195,8 @@ export function useSpreadsheetRun(): UseSpreadsheetRunResult {
     progress,
     isStreaming,
     error,
+    tokensUsed,
+    streamStartTime,
     fetchRun,
     startStream,
     stopStream,
