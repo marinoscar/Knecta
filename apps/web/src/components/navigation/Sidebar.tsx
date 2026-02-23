@@ -20,6 +20,7 @@ import {
   AccountTree as AccountTreeIcon,
   Hub as HubIcon,
   SmartToy as SmartToyIcon,
+  TableView as TableViewIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -67,6 +68,12 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       icon: <SmartToyIcon />,
       path: '/agent',
       visible: hasPermission('data_agent:read'),
+    },
+    {
+      label: 'Spreadsheets',
+      icon: <TableViewIcon />,
+      path: '/spreadsheets',
+      visible: hasPermission('spreadsheet_agent:read'),
     },
     {
       label: 'User Settings',

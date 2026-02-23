@@ -355,6 +355,27 @@ cd apps/api && npm run prisma:migrate
 - `DELETE /api/data-agent/preferences/:id` - Delete preference
 - `DELETE /api/data-agent/preferences` - Clear all preferences
 
+### Spreadsheet Agent
+- `GET /api/spreadsheet-agent/projects` - List spreadsheet projects (paginated)
+- `POST /api/spreadsheet-agent/projects` - Create a new project
+- `GET /api/spreadsheet-agent/projects/:id` - Get project by ID
+- `PATCH /api/spreadsheet-agent/projects/:id` - Update project
+- `DELETE /api/spreadsheet-agent/projects/:id` - Delete project
+- `POST /api/spreadsheet-agent/projects/:id/files` - Upload files to project
+- `GET /api/spreadsheet-agent/projects/:id/files` - List project files
+- `GET /api/spreadsheet-agent/projects/:id/files/:fileId` - Get file by ID
+- `DELETE /api/spreadsheet-agent/projects/:id/files/:fileId` - Delete file
+- `GET /api/spreadsheet-agent/projects/:id/tables` - List project tables (paginated)
+- `GET /api/spreadsheet-agent/projects/:id/tables/:tableId` - Get table by ID
+- `GET /api/spreadsheet-agent/projects/:id/tables/:tableId/preview` - Preview table data
+- `GET /api/spreadsheet-agent/projects/:id/tables/:tableId/download` - Get download URL
+- `DELETE /api/spreadsheet-agent/projects/:id/tables/:tableId` - Delete table
+- `POST /api/spreadsheet-agent/runs` - Create agent run
+- `GET /api/spreadsheet-agent/runs/:runId` - Get run status
+- `POST /api/spreadsheet-agent/runs/:runId/cancel` - Cancel run
+- `POST /api/spreadsheet-agent/runs/:runId/approve` - Approve extraction plan
+- `POST /api/spreadsheet-agent/runs/:runId/stream` - SSE stream (run execution)
+
 ### Health
 - `GET /api/health/live` - Liveness check
 - `GET /api/health/ready` - Readiness check (includes DB)
@@ -362,9 +383,9 @@ cd apps/api && npm run prisma:migrate
 ## RBAC Model
 
 ### Roles
-- **Admin**: Full access, manage users and system settings
-- **Contributor**: Standard capabilities, manage own settings (default for new users)
-- **Viewer**: Least privilege, manage own settings
+- **Admin**: Full access, manage users and system settings; full access to all spreadsheet agent projects
+- **Contributor**: Standard capabilities, manage own settings (default for new users); full read/write/delete on own spreadsheet projects
+- **Viewer**: Least privilege, manage own settings; read-only access to spreadsheet agent projects
 
 ### Key Permissions
 - `system_settings:read/write` - System settings access
@@ -378,6 +399,7 @@ cd apps/api && npm run prisma:migrate
 - `semantic_models:read/write/delete/generate` - Semantic model management
 - `ontologies:read/write/delete` - Ontology management
 - `data_agent:read/write/delete` - Data Agent chat management
+- `spreadsheet_agent:read/write/delete` - Spreadsheet project management
 
 ## Database Tables
 
@@ -401,6 +423,10 @@ cd apps/api && npm run prisma:migrate
 - `data_chat_messages` - Chat messages with metadata (phase artifacts, clarification)
 - `data_agent_preferences` - Per-user agent preferences (global and ontology-scoped)
 - `data_chat_shares` - Public chat share links (token, expiry, view count, revocation)
+- `spreadsheet_projects` - Spreadsheet extraction project metadata (status, storage config)
+- `spreadsheet_files` - Source files uploaded to projects
+- `spreadsheet_tables` - Extracted output tables (Parquet)
+- `spreadsheet_runs` - Agent execution tracking (status, plan, progress)
 
 ## Access Control: Email Allowlist
 
