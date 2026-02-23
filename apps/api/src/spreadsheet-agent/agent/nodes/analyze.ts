@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { SpreadsheetAgentStateType } from '../state';
 import { FileInventory, SheetAnalysis, TokenUsage } from '../types';
 import { EmitFn } from '../graph';
+import { extractTokenUsage } from '../utils/token-tracker';
 
 const logger = new Logger('AnalyzeNode');
 
@@ -81,14 +82,12 @@ export function createAnalyzeNode(deps: AnalyzeNodeDeps) {
     const concurrency = config.concurrency || 5;
 
     // Process sheets with a concurrency limiter
-    const sheetAnalyses = await processSheetTasksWithConcurrency(
+    const { analyses: sheetAnalyses, totalTokens } = await processSheetTasksWithConcurrency(
       sheetTasks,
       concurrency,
       llm,
       emit,
     );
-
-    const totalTokens: TokenUsage = { prompt: 0, completion: 0, total: 0 };
 
     emit({
       type: 'progress',
@@ -119,7 +118,7 @@ async function processSheetTasksWithConcurrency(
   concurrency: number,
   llm: BaseChatModel,
   emit: EmitFn,
-): Promise<SheetAnalysis[]> {
+): Promise<{ analyses: SheetAnalysis[]; totalTokens: TokenUsage }> {
   let activeCount = 0;
   const queue: Array<() => void> = [];
   const analyses: SheetAnalysis[] = [];
@@ -134,11 +133,11 @@ async function processSheetTasksWithConcurrency(
 
   const promises = tasks.map(
     (task) =>
-      new Promise<SheetAnalysis>((resolve, reject) => {
+      new Promise<{ analysis: SheetAnalysis; tokens: TokenUsage }>((resolve, reject) => {
         const taskFn = async () => {
           try {
-            const analysis = await analyzeSheet(task, llm, emit);
-            resolve(analysis);
+            const result = await analyzeSheet(task, llm, emit);
+            resolve(result);
           } catch (err) {
             reject(err);
           } finally {
@@ -155,20 +154,24 @@ async function processSheetTasksWithConcurrency(
 
   const settledResults = await Promise.allSettled(promises);
 
+  const totalTokens: TokenUsage = { prompt: 0, completion: 0, total: 0 };
   for (const result of settledResults) {
     if (result.status === 'fulfilled') {
-      analyses.push(result.value);
+      analyses.push(result.value.analysis);
+      totalTokens.prompt += result.value.tokens.prompt;
+      totalTokens.completion += result.value.tokens.completion;
+      totalTokens.total += result.value.tokens.total;
     }
   }
 
-  return analyses;
+  return { analyses, totalTokens };
 }
 
 async function analyzeSheet(
   task: { fileId: string; fileName: string; sheet: FileInventory['sheets'][0] },
   llm: BaseChatModel,
   emit: EmitFn,
-): Promise<SheetAnalysis> {
+): Promise<{ analysis: SheetAnalysis; tokens: TokenUsage }> {
   const { fileId, fileName, sheet } = task;
 
   try {
@@ -183,13 +186,15 @@ async function analyzeSheet(
 
     const prompt = buildAnalyzerPrompt(fileName, sheet);
 
-    // withStructuredOutput has multiple overloads; use unknown cast to stay
-    // type-safe without fighting the overload resolution.
+    // includeRaw: true returns { parsed, raw } so we can extract token usage
+    // from the underlying AIMessage while still getting structured output.
     const structuredLlm = llm.withStructuredOutput(sheetAnalysisOutputSchema, {
       name: 'analyze_sheet',
+      includeRaw: true,
     });
-    const rawResult = await structuredLlm.invoke(prompt);
-    const parsed = rawResult as unknown as z.infer<typeof sheetAnalysisOutputSchema>;
+    const rawResult = await structuredLlm.invoke(prompt) as { parsed: unknown; raw: unknown };
+    const parsed = rawResult.parsed as z.infer<typeof sheetAnalysisOutputSchema>;
+    const tokens = extractTokenUsage(rawResult.raw);
 
     emit({
       type: 'sheet_analysis',
@@ -202,11 +207,14 @@ async function analyzeSheet(
     });
 
     return {
-      fileId,
-      fileName,
-      sheetName: sheet.name,
-      logicalTables: parsed.logicalTables,
-      crossFileHints: parsed.crossFileHints,
+      analysis: {
+        fileId,
+        fileName,
+        sheetName: sheet.name,
+        logicalTables: parsed.logicalTables,
+        crossFileHints: parsed.crossFileHints,
+      },
+      tokens,
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -223,11 +231,14 @@ async function analyzeSheet(
     // Return a minimal (empty) analysis rather than propagating the error so
     // that a single failed sheet does not abort the entire run.
     return {
-      fileId,
-      fileName,
-      sheetName: sheet.name,
-      logicalTables: [],
-      crossFileHints: [],
+      analysis: {
+        fileId,
+        fileName,
+        sheetName: sheet.name,
+        logicalTables: [],
+        crossFileHints: [],
+      },
+      tokens: { prompt: 0, completion: 0, total: 0 },
     };
   }
 }

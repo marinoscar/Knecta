@@ -2,8 +2,9 @@ import { Logger } from '@nestjs/common';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { z } from 'zod';
 import { SpreadsheetAgentStateType } from '../state';
-import { ExtractionPlan } from '../types';
+import { ExtractionPlan, TokenUsage } from '../types';
 import { EmitFn } from '../graph';
+import { extractTokenUsage } from '../utils/token-tracker';
 
 const logger = new Logger('DesignNode');
 
@@ -88,14 +89,16 @@ export function createDesignNode(deps: DesignNodeDeps) {
     const prompt = buildDesignerPrompt(sheetAnalyses, projectId, revisionContext);
 
     try {
-      // withStructuredOutput has multiple overloads; use unknown cast to stay
-      // type-safe without fighting the overload resolution.
+      // includeRaw: true returns { parsed, raw } so we can extract token usage
+      // from the underlying AIMessage while still getting structured output.
       const structuredLlm = llm.withStructuredOutput(extractionPlanSchema, {
         name: 'design_extraction_plan',
+        includeRaw: true,
       });
 
-      const rawResult = await structuredLlm.invoke(prompt);
-      const result = rawResult as unknown as z.infer<typeof extractionPlanSchema>;
+      const rawResult = await structuredLlm.invoke(prompt) as { parsed: unknown; raw: unknown };
+      const result = rawResult.parsed as z.infer<typeof extractionPlanSchema>;
+      const tokens: TokenUsage = extractTokenUsage(rawResult.raw);
 
       const extractionPlan: ExtractionPlan = {
         tables: result.tables,
@@ -131,11 +134,13 @@ export function createDesignNode(deps: DesignNodeDeps) {
         percentComplete: 50, // Phase 3 = 40-50%
       });
 
+      emit({ type: 'token_update', phase: 'design', tokensUsed: tokens });
       emit({ type: 'phase_complete', phase: 'design' });
 
       return {
         currentPhase: 'design',
         extractionPlan,
+        tokensUsed: tokens,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
