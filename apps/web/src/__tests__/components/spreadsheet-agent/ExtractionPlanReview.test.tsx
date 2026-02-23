@@ -458,4 +458,214 @@ describe('ExtractionPlanReview', () => {
       expect(screen.getByText(/approve plan.*1 tables/i)).toBeInTheDocument();
     });
   });
+
+  describe('cleanDescription — DuckDB/Parquet filtering (Issue 5)', () => {
+    it('does not render "DuckDB" in the project description', () => {
+      const planWithTechnicalTerms: SpreadsheetExtractionPlan = {
+        ...mockPlan,
+        catalogMetadata: {
+          projectDescription: 'Extract financial data into analytics-ready Parquet tables for DuckDB.',
+          domainNotes: 'Finance',
+          dataQualityNotes: [],
+        },
+      };
+
+      render(
+        <ExtractionPlanReview
+          plan={planWithTechnicalTerms}
+          onApprove={mockOnApprove}
+          onCancel={mockOnCancel}
+        />,
+      );
+
+      expect(screen.queryByText(/DuckDB/i)).not.toBeInTheDocument();
+    });
+
+    it('does not render "Parquet" in the project description', () => {
+      const planWithTechnicalTerms: SpreadsheetExtractionPlan = {
+        ...mockPlan,
+        catalogMetadata: {
+          projectDescription: 'Extract financial data into analytics-ready Parquet tables for DuckDB.',
+          domainNotes: 'Finance',
+          dataQualityNotes: [],
+        },
+      };
+
+      render(
+        <ExtractionPlanReview
+          plan={planWithTechnicalTerms}
+          onApprove={mockOnApprove}
+          onCancel={mockOnCancel}
+        />,
+      );
+
+      expect(screen.queryByText(/Parquet/i)).not.toBeInTheDocument();
+    });
+
+    it('does not render "DuckDB" in data quality notes', () => {
+      const planWithTechnicalNotes: SpreadsheetExtractionPlan = {
+        ...mockPlan,
+        catalogMetadata: {
+          projectDescription: 'Financial data',
+          domainNotes: 'Finance',
+          dataQualityNotes: ['DuckDB optimized for OLAP queries', 'Parquet files stored in S3'],
+        },
+      };
+
+      render(
+        <ExtractionPlanReview
+          plan={planWithTechnicalNotes}
+          onApprove={mockOnApprove}
+          onCancel={mockOnCancel}
+        />,
+      );
+
+      expect(screen.queryByText(/DuckDB/i)).not.toBeInTheDocument();
+    });
+
+    it('does not render "Parquet" in data quality notes', () => {
+      const planWithTechnicalNotes: SpreadsheetExtractionPlan = {
+        ...mockPlan,
+        catalogMetadata: {
+          projectDescription: 'Financial data',
+          domainNotes: 'Finance',
+          dataQualityNotes: ['DuckDB optimized for OLAP queries', 'Parquet files stored in S3'],
+        },
+      };
+
+      render(
+        <ExtractionPlanReview
+          plan={planWithTechnicalNotes}
+          onApprove={mockOnApprove}
+          onCancel={mockOnCancel}
+        />,
+      );
+
+      expect(screen.queryByText(/Parquet/i)).not.toBeInTheDocument();
+    });
+
+    it('removes "Parquet" from "analytics-ready Parquet tables" phrase, leaving clean text', () => {
+      // The cleanDescription function removes "Parquet" before the full-phrase substitution
+      // runs, so "analytics-ready Parquet tables" becomes "analytics-ready tables".
+      // Either way, the word "Parquet" must not appear in the output.
+      const planWithKnownPhrase: SpreadsheetExtractionPlan = {
+        ...mockPlan,
+        catalogMetadata: {
+          projectDescription: 'Extract financial data into analytics-ready Parquet tables for DuckDB.',
+          domainNotes: 'Finance',
+          dataQualityNotes: [],
+        },
+      };
+
+      render(
+        <ExtractionPlanReview
+          plan={planWithKnownPhrase}
+          onApprove={mockOnApprove}
+          onCancel={mockOnCancel}
+        />,
+      );
+
+      expect(screen.queryByText(/Parquet/i)).not.toBeInTheDocument();
+      // The non-technical portion of the description should still be visible
+      expect(screen.getByText(/analytics-ready/i)).toBeInTheDocument();
+    });
+
+    it('preserves non-technical description text after filtering', () => {
+      const planWithMixedText: SpreadsheetExtractionPlan = {
+        ...mockPlan,
+        catalogMetadata: {
+          projectDescription: 'Extract financial data into analytics-ready Parquet tables for DuckDB.',
+          domainNotes: 'Finance',
+          dataQualityNotes: [],
+        },
+      };
+
+      render(
+        <ExtractionPlanReview
+          plan={planWithMixedText}
+          onApprove={mockOnApprove}
+          onCancel={mockOnCancel}
+        />,
+      );
+
+      expect(screen.getByText(/Extract financial data/i)).toBeInTheDocument();
+    });
+
+    it('filters technical terms case-insensitively from description', () => {
+      const planWithMixedCase: SpreadsheetExtractionPlan = {
+        ...mockPlan,
+        catalogMetadata: {
+          projectDescription: 'Stored as parquet files, optimized for duckdb.',
+          domainNotes: 'Finance',
+          dataQualityNotes: [],
+        },
+      };
+
+      render(
+        <ExtractionPlanReview
+          plan={planWithMixedCase}
+          onApprove={mockOnApprove}
+          onCancel={mockOnCancel}
+        />,
+      );
+
+      expect(screen.queryByText(/parquet/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/duckdb/i)).not.toBeInTheDocument();
+    });
+
+    it('filters technical terms from each data quality note independently', () => {
+      const planWithMultipleNotes: SpreadsheetExtractionPlan = {
+        ...mockPlan,
+        catalogMetadata: {
+          projectDescription: 'Clean financial data',
+          domainNotes: 'Finance',
+          dataQualityNotes: [
+            'Some nulls in amount column',
+            'DuckDB optimized for OLAP queries',
+            'Parquet format used for storage',
+          ],
+        },
+      };
+
+      render(
+        <ExtractionPlanReview
+          plan={planWithMultipleNotes}
+          onApprove={mockOnApprove}
+          onCancel={mockOnCancel}
+        />,
+      );
+
+      // The clean note should still appear
+      expect(screen.getByText(/some nulls in amount column/i)).toBeInTheDocument();
+      // Technical terms should be gone from all notes
+      expect(screen.queryByText(/DuckDB/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Parquet/i)).not.toBeInTheDocument();
+    });
+
+    it('renders catalog metadata without technical terms alongside normal plan data', () => {
+      const planWithTechnicalTerms: SpreadsheetExtractionPlan = {
+        ...mockPlan,
+        catalogMetadata: {
+          projectDescription: 'Extract financial data into analytics-ready Parquet tables for DuckDB.',
+          domainNotes: 'Finance',
+          dataQualityNotes: ['DuckDB optimized for OLAP queries', 'Parquet files stored in S3'],
+        },
+      };
+
+      render(
+        <ExtractionPlanReview
+          plan={planWithTechnicalTerms}
+          onApprove={mockOnApprove}
+          onCancel={mockOnCancel}
+        />,
+      );
+
+      // Technical terms absent from the entire rendered output
+      expect(screen.queryByText(/DuckDB/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Parquet/i)).not.toBeInTheDocument();
+      // Table data from mockPlan still renders correctly
+      expect(screen.getByText('orders')).toBeInTheDocument();
+      expect(screen.getByText('products')).toBeInTheDocument();
+    });
+  });
 });
