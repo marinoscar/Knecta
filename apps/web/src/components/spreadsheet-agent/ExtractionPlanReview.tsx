@@ -20,6 +20,17 @@ import {
 } from '@mui/material';
 import type { SpreadsheetExtractionPlan, SpreadsheetPlanModification } from '../../types';
 
+/** Remove implementation-specific terms from user-facing descriptions. */
+function cleanDescription(text: string): string {
+  return text
+    .replace(/\bfor\s+DuckDB\b/gi, '')
+    .replace(/\bDuckDB\b/gi, '')
+    .replace(/\bParquet\b/gi, '')
+    .replace(/\binto\s+analytics-ready\s+Parquet\s+tables\b/gi, 'into clean tables')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 interface ExtractionPlanReviewProps {
   plan: SpreadsheetExtractionPlan;
   onApprove: (modifications: SpreadsheetPlanModification[]) => void;
@@ -84,11 +95,11 @@ export function ExtractionPlanReview({
       {plan.catalogMetadata && (
         <Box sx={{ mb: 3 }}>
           <Typography variant="subtitle2" color="text.secondary">
-            {plan.catalogMetadata.projectDescription}
+            {cleanDescription(plan.catalogMetadata.projectDescription)}
           </Typography>
           {plan.catalogMetadata.dataQualityNotes?.map((note, i) => (
             <Typography key={i} variant="caption" color="text.secondary" display="block">
-              {note}
+              {cleanDescription(note)}
             </Typography>
           ))}
         </Box>
