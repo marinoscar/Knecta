@@ -45,6 +45,7 @@ export interface ColumnDefinition {
  */
 export interface SheetConfig {
   sheetName: string;
+  tableName?: string;  // Optional user override for output table name
   range?: RangeConfig;
   hasHeader: boolean;
   columns?: ColumnDefinition[];

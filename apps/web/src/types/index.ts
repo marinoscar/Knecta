@@ -731,6 +731,7 @@ export interface ColumnOverride {
 
 export interface SheetConfig {
   sheetName: string;
+  tableName?: string;
   range?: { startRow: number; endRow?: number; startCol: number; endCol?: number };
   hasHeader?: boolean;
   columns?: ColumnOverride[];

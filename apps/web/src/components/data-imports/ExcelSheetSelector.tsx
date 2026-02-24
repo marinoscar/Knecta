@@ -189,6 +189,21 @@ export function ExcelSheetSelector({
             {selected && (
               <AccordionDetails>
                 <Box sx={{ mb: 2 }}>
+                  <TextField
+                    label="Table Name"
+                    type="text"
+                    size="small"
+                    fullWidth
+                    value={config.tableName ?? ''}
+                    onChange={(e) => {
+                      const raw = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+                      updateSheetConfig(sheet.name, { tableName: raw || undefined });
+                    }}
+                    placeholder={sheet.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').replace(/^_+|_+$/g, '').slice(0, 63)}
+                    helperText="Override the output table name (lowercase, letters/numbers/underscores). Leave blank to auto-derive from sheet name."
+                    inputProps={{ maxLength: 63 }}
+                    sx={{ mb: 2 }}
+                  />
                   <Typography variant="subtitle2" gutterBottom>
                     Range (optional — leave blank to use entire sheet)
                   </Typography>

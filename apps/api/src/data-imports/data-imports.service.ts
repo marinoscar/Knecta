@@ -517,7 +517,7 @@ export class DataImportsService {
           );
 
           const headerRow = result.columns.map((c) => c.name);
-          const safeName = this.toSafeIdentifier(sheetConfig.sheetName);
+          const safeName = sheetConfig.tableName || this.toSafeIdentifier(sheetConfig.sheetName);
 
           tables.push({
             tableName: safeName,

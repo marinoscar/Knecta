@@ -17,6 +17,7 @@ const rangeSchema = z.object({
 
 const sheetConfigSchema = z.object({
   sheetName: z.string().min(1).max(255),
+  tableName: z.string().min(1).max(63).regex(/^[a-z][a-z0-9_]*$/).optional(),
   range: rangeSchema.optional(),
   hasHeader: z.boolean().default(true),
   columns: z.array(csvColumnSchema).optional(),
