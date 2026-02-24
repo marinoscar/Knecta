@@ -8,7 +8,7 @@
 FROM node:20-alpine AS base
 WORKDIR /app
 # Install OpenSSL for Prisma compatibility
-RUN apk add --no-cache openssl openssl-dev python3 make g++
+RUN apk add --no-cache openssl openssl-dev python3 make g++ gcompat
 RUN corepack enable
 
 # -----------------------------------------------------------------------------
