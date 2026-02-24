@@ -88,7 +88,11 @@ const csvParseResult = {
   detectedDelimiter: ',',
   detectedEncoding: 'UTF-8',
   hasHeader: true,
-  columns: ['id', 'name', 'amount'],
+  columns: [
+    { name: 'id', detectedType: 'BIGINT' },
+    { name: 'name', detectedType: 'VARCHAR' },
+    { name: 'amount', detectedType: 'DECIMAL' },
+  ],
   sampleRows: [
     ['1', 'Alice', '100'],
     ['2', 'Bob', '200'],
@@ -273,6 +277,21 @@ describe('NewDataImportPage', () => {
       await waitFor(() => {
         expect(screen.getByText('CSV Configuration')).toBeInTheDocument();
       });
+    });
+
+    it('renders column names from object format in the Review step preview', async () => {
+      await advanceToReviewStep();
+
+      // ImportPreview renders column chips as "name: type" — verify .name is extracted
+      // and "[object Object]" is never shown
+      await waitFor(() => {
+        expect(screen.queryByText(/\[object Object\]/)).not.toBeInTheDocument();
+      });
+
+      // Column chips show "name: detectedType" format via ImportPreview
+      expect(screen.getByText('id: BIGINT')).toBeInTheDocument();
+      expect(screen.getByText('name: VARCHAR')).toBeInTheDocument();
+      expect(screen.getByText('amount: DECIMAL')).toBeInTheDocument();
     });
   });
 

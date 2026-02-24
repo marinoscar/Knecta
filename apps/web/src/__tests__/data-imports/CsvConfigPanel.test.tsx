@@ -10,7 +10,12 @@ const mockParseResult: CsvParseResult = {
   detectedDelimiter: ',',
   detectedEncoding: 'UTF-8',
   hasHeader: true,
-  columns: ['id', 'name', 'amount', 'date'],
+  columns: [
+    { name: 'id', detectedType: 'BIGINT' },
+    { name: 'name', detectedType: 'VARCHAR' },
+    { name: 'amount', detectedType: 'DECIMAL' },
+    { name: 'date', detectedType: 'DATE' },
+  ],
   sampleRows: [
     ['1', 'Alice', '100', '2026-01-01'],
     ['2', 'Bob', '200', '2026-01-02'],
@@ -86,6 +91,17 @@ describe('CsvConfigPanel', () => {
       expect(screen.getByRole('columnheader', { name: 'name' })).toBeInTheDocument();
       expect(screen.getByRole('columnheader', { name: 'amount' })).toBeInTheDocument();
       expect(screen.getByRole('columnheader', { name: 'date' })).toBeInTheDocument();
+    });
+
+    it('renders column names from object format in header cells', () => {
+      render(<CsvConfigPanel {...buildProps()} />);
+
+      // Each column header must show the .name string — not "[object Object]"
+      expect(screen.getByRole('columnheader', { name: 'id' })).toBeInTheDocument();
+      expect(screen.getByRole('columnheader', { name: 'name' })).toBeInTheDocument();
+      expect(screen.getByRole('columnheader', { name: 'amount' })).toBeInTheDocument();
+      expect(screen.getByRole('columnheader', { name: 'date' })).toBeInTheDocument();
+      expect(screen.queryByText('[object Object]')).not.toBeInTheDocument();
     });
 
     it('renders sample data rows in the preview table', () => {

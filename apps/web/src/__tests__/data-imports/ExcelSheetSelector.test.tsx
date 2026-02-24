@@ -17,16 +17,20 @@ const mockParseResult: ExcelParseResult = {
 };
 
 const mockSheetPreview: SheetPreviewResult = {
-  columns: ['id', 'name', 'amount'],
+  columns: [
+    { name: 'ID', detectedType: 'BIGINT' },
+    { name: 'Name', detectedType: 'VARCHAR' },
+    { name: 'Amount', detectedType: 'DECIMAL' },
+  ],
   rows: [
     ['1', 'Alice', '100'],
     ['2', 'Bob', '200'],
   ],
   totalRows: 1000,
   detectedTypes: [
-    { name: 'id', type: 'integer' },
-    { name: 'name', type: 'varchar' },
-    { name: 'amount', type: 'decimal' },
+    { name: 'ID', type: 'integer' },
+    { name: 'Name', type: 'varchar' },
+    { name: 'Amount', type: 'decimal' },
   ],
 };
 
@@ -273,6 +277,24 @@ describe('ExcelSheetSelector', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Alice')).toBeInTheDocument();
+      });
+    });
+
+    it('renders column names from object format in preview table', async () => {
+      render(
+        <ExcelSheetSelector
+          {...buildProps({
+            sheetConfigs: [{ sheetName: 'Sales', hasHeader: true }],
+          })}
+        />,
+      );
+
+      await waitFor(() => {
+        // Column headers must show name strings — not "[object Object]"
+        expect(screen.getByText('ID')).toBeInTheDocument();
+        expect(screen.getByText('Name')).toBeInTheDocument();
+        expect(screen.getByText('Amount')).toBeInTheDocument();
+        expect(screen.queryByText('[object Object]')).not.toBeInTheDocument();
       });
     });
 
