@@ -56,6 +56,7 @@ export class DataAgentService {
         ontologyId: data.ontologyId,
         ownerId: userId,
         llmProvider: data.llmProvider || null,
+        ...(data.webSearchEnabled !== undefined && { webSearchEnabled: data.webSearchEnabled }),
       },
     });
 
@@ -176,6 +177,10 @@ export class DataAgentService {
 
     if (data.llmProvider !== undefined) {
       updateData.llmProvider = data.llmProvider;
+    }
+
+    if (data.webSearchEnabled !== undefined) {
+      updateData.webSearchEnabled = data.webSearchEnabled;
     }
 
     // Update chat

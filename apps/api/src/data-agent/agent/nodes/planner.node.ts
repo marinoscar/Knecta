@@ -54,7 +54,12 @@ const PlanArtifactSchema = z.object({
   steps: z.array(PlanStepSchema).describe('Ordered sub-tasks to execute'),
 });
 
-export function createPlannerNode(llm: any, emit: EmitFn, tracer: DataAgentTracer) {
+export function createPlannerNode(
+  llm: any,
+  emit: EmitFn,
+  tracer: DataAgentTracer,
+  webSearchTool: Record<string, unknown> | null = null,
+) {
   return async (state: DataAgentStateType): Promise<Partial<DataAgentStateType>> => {
     emit({ type: 'phase_start', phase: 'planner', description: 'Analyzing question and creating execution plan' });
 
@@ -65,9 +70,13 @@ export function createPlannerNode(llm: any, emit: EmitFn, tracer: DataAgentTrace
         state.relevantDatasetDetails,
         state.userPreferences,
         state.clarificationRound,
+        !!webSearchTool,
       );
 
-      const structuredLlm = llm.withStructuredOutput(PlanArtifactSchema, {
+      // Bind web search (server-side) before withStructuredOutput so the provider
+      // can use it during plan generation without disrupting structured output.
+      const baseLlm = webSearchTool ? llm.bindTools([webSearchTool]) : llm;
+      const structuredLlm = baseLlm.withStructuredOutput(PlanArtifactSchema, {
         name: 'create_plan',
         includeRaw: true,
       });

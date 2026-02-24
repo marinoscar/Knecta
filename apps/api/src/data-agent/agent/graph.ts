@@ -26,6 +26,7 @@ export interface DataAgentGraphDeps {
   databaseType: string;
   emit: EmitFn;
   tracer: DataAgentTracer;
+  webSearchTool: Record<string, unknown> | null; // null = disabled
 }
 
 // ─── Conditional routing after planner ───
@@ -76,15 +77,15 @@ function routeAfterVerification(
 
 // ─── Graph builder ───
 export function buildDataAgentGraph(deps: DataAgentGraphDeps) {
-  const { llm, structuredLlm, neoOntologyService, discoveryService, sandboxService, ontologyId, connectionId, databaseName, databaseType, emit, tracer } = deps;
+  const { llm, structuredLlm, neoOntologyService, discoveryService, sandboxService, ontologyId, connectionId, databaseName, databaseType, emit, tracer, webSearchTool } = deps;
 
   const workflow = new StateGraph(DataAgentState)
-    .addNode('planner', createPlannerNode(structuredLlm, emit, tracer))
-    .addNode('navigator', createNavigatorNode(llm, neoOntologyService, ontologyId, emit, tracer))
-    .addNode('sql_builder', createSqlBuilderNode(structuredLlm, neoOntologyService, ontologyId, databaseType, emit, tracer))
-    .addNode('executor', createExecutorNode(llm, structuredLlm, discoveryService, sandboxService, connectionId, databaseName, emit, tracer))
-    .addNode('verifier', createVerifierNode(llm, sandboxService, emit, tracer))
-    .addNode('explainer', createExplainerNode(llm, sandboxService, emit, tracer))
+    .addNode('planner', createPlannerNode(structuredLlm, emit, tracer, webSearchTool))
+    .addNode('navigator', createNavigatorNode(llm, neoOntologyService, ontologyId, emit, tracer, webSearchTool))
+    .addNode('sql_builder', createSqlBuilderNode(structuredLlm, neoOntologyService, ontologyId, databaseType, emit, tracer, webSearchTool))
+    .addNode('executor', createExecutorNode(llm, structuredLlm, discoveryService, sandboxService, connectionId, databaseName, emit, tracer, webSearchTool))
+    .addNode('verifier', createVerifierNode(llm, sandboxService, emit, tracer, webSearchTool))
+    .addNode('explainer', createExplainerNode(llm, sandboxService, emit, tracer, webSearchTool))
     .addEdge(START, 'planner')
     .addConditionalEdges('planner', routeAfterPlanner, {
       navigator: 'navigator',

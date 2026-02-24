@@ -1,6 +1,6 @@
 import { PlanArtifact } from '../types';
 
-export function buildNavigatorPrompt(plan: PlanArtifact): string {
+export function buildNavigatorPrompt(plan: PlanArtifact, webSearchEnabled: boolean = false): string {
   const stepsSection = plan.steps
     .filter((s) => s.strategy !== 'python')
     .map((s) => `- Step ${s.id}: ${s.description} (datasets: ${s.datasets.join(', ') || 'unknown'})`)
@@ -43,5 +43,17 @@ You are FORBIDDEN from:
 - Assuming table structures not defined in the semantic model
 - Fabricating join conditions not in the ontology relationships
 - Using general SQL knowledge to fill gaps in the schema
-If the ontology does not contain what is needed to answer the question, report this explicitly in your findings — do not attempt workarounds.`;
+If the ontology does not contain what is needed to answer the question, report this explicitly in your findings — do not attempt workarounds.${webSearchEnabled ? `
+
+## Web Search
+You have access to real-time web search. Use it ONLY when:
+- You need to understand domain-specific terminology or acronyms that appear in dataset names or columns
+- The user's question references industry standards, benchmarks, or external concepts
+
+Do NOT use web search to:
+- Look up column names or table structures (use ontology tools instead)
+- Replace ontology-based schema discovery
+- Find database-specific SQL syntax
+
+Remember: the ontology is your source of truth for data schemas. Web search supplements understanding, it does not replace ontology tools.` : ''}`;
 }

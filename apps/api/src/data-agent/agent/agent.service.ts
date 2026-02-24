@@ -8,6 +8,7 @@ import { DiscoveryService } from '../../discovery/discovery.service';
 import { SandboxService } from '../../sandbox/sandbox.service';
 import { DataAgentService } from '../data-agent.service';
 import { buildDataAgentGraph } from './graph';
+import { createWebSearchTool } from './tools';
 import { DataAgentMessageMetadata, DiscoveryResult } from './types';
 import { DataAgentTracer } from './utils/data-agent-tracer';
 
@@ -43,6 +44,7 @@ export class DataAgentAgentService {
     onEvent: (event: AgentStreamEvent) => void,
     provider?: string,
     providerConfig?: LlmModelConfig,
+    webSearchEnabled: boolean = false,
   ): Promise<void> {
     // ── Step 1: Load the chat and related data ──
     const chat = await this.prisma.dataChat.findFirst({
@@ -200,6 +202,10 @@ export class DataAgentAgentService {
     const modelName = providerConfig?.model || '';
     const tracer = new DataAgentTracer(messageId, providerName, modelName, providerConfig?.temperature, onEvent);
 
+    // Create web search tool when enabled; resolve the effective provider name for tool config
+    const resolvedProvider = provider || this.llmService.getDefaultProvider();
+    const webSearchTool = webSearchEnabled ? createWebSearchTool(resolvedProvider) : null;
+
     const graph = buildDataAgentGraph({
       llm,
       structuredLlm,
@@ -212,6 +218,7 @@ export class DataAgentAgentService {
       databaseType,
       emit: onEvent,
       tracer,
+      webSearchTool,
     });
 
     try {

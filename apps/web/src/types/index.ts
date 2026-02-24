@@ -430,6 +430,7 @@ export interface DataChat {
   name: string;
   ontologyId: string;
   llmProvider?: string | null;
+  webSearchEnabled?: boolean | null;
   ontology?: {
     id: string;
     name: string;

@@ -61,7 +61,12 @@ export function createExecutorNode(
   databaseName: string,
   emit: EmitFn,
   tracer: DataAgentTracer,
+  webSearchTool: Record<string, unknown> | null = null,
 ) {
+  // Bind web search (server-side) once at node creation time so all invocations
+  // within this node share the same bound LLM instance.
+  const invoker = webSearchTool ? llm.bindTools([webSearchTool]) : llm;
+
   return async (state: DataAgentStateType): Promise<Partial<DataAgentStateType>> => {
     emit({ type: 'phase_start', phase: 'executor', description: 'Executing queries and analysis' });
 
@@ -125,7 +130,7 @@ export function createExecutorNode(
                 const { response: repairResponse } = await tracer.trace<any>(
                   { phase: 'executor', stepId: step.id, purpose: `sql_repair_step_${step.id}`, structuredOutput: false },
                   repairMessages,
-                  () => llm.invoke(repairMessages),
+                  () => invoker.invoke(repairMessages),
                 );
                 nodeTokens = mergeTokenUsage(nodeTokens, extractTokenUsage(repairResponse));
                 const repairedSql = extractTextContent(repairResponse.content).trim();
@@ -249,6 +254,7 @@ export function createExecutorNode(
               stepResult.sqlResult?.data || null,
               priorContext,
               datasetSchemas,
+              webSearchTool !== null,
             );
 
             const codeMessages = [
@@ -258,7 +264,7 @@ export function createExecutorNode(
             const { response: codeResponse } = await tracer.trace<any>(
               { phase: 'executor', stepId: step.id, purpose: `python_gen_step_${step.id}`, structuredOutput: false },
               codeMessages,
-              () => llm.invoke(codeMessages),
+              () => invoker.invoke(codeMessages),
             );
             nodeTokens = mergeTokenUsage(nodeTokens, extractTokenUsage(codeResponse));
 

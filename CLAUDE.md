@@ -401,9 +401,9 @@ cd apps/api && npm run prisma:migrate
 ## RBAC Model
 
 ### Roles
-- **Admin**: Full access, manage users and system settings; full access to all spreadsheet agent projects
-- **Contributor**: Standard capabilities, manage own settings (default for new users); full read/write/delete on own spreadsheet projects
-- **Viewer**: Least privilege, manage own settings; read-only access to spreadsheet agent projects
+- **Admin**: Full access, manage users and system settings
+- **Contributor**: Standard capabilities, manage own settings (default for new users)
+- **Viewer**: Least privilege, manage own settings
 
 ### Key Permissions
 - `system_settings:read/write` - System settings access

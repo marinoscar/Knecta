@@ -8,7 +8,16 @@ import { extractTokenUsage } from '../utils/token-tracker';
 import { DataAgentTracer } from '../utils/data-agent-tracer';
 import { extractTextContent } from '../utils/content-extractor';
 
-export function createVerifierNode(llm: any, sandboxService: SandboxService, emit: EmitFn, tracer: DataAgentTracer) {
+export function createVerifierNode(
+  llm: any,
+  sandboxService: SandboxService,
+  emit: EmitFn,
+  tracer: DataAgentTracer,
+  webSearchTool: Record<string, unknown> | null = null,
+) {
+  // Bind web search (server-side) once at node creation time.
+  const invoker = webSearchTool ? llm.bindTools([webSearchTool]) : llm;
+
   return async (state: DataAgentStateType): Promise<Partial<DataAgentStateType>> => {
     emit({ type: 'phase_start', phase: 'verifier', description: 'Verifying results' });
 
@@ -56,7 +65,7 @@ export function createVerifierNode(llm: any, sandboxService: SandboxService, emi
       }
 
       // Generate verification Python code
-      const prompt = buildVerifierPrompt(plan, stepResults);
+      const prompt = buildVerifierPrompt(plan, stepResults, webSearchTool !== null);
       const messages = [
         new SystemMessage('You are a Python code generator. Output ONLY executable Python code. No markdown fences. The code must print a JSON object as its last output line.'),
         new HumanMessage(prompt),
@@ -64,7 +73,7 @@ export function createVerifierNode(llm: any, sandboxService: SandboxService, emi
       const { response: codeResponse } = await tracer.trace<any>(
         { phase: 'verifier', purpose: 'verification_code', structuredOutput: false },
         messages,
-        () => llm.invoke(messages),
+        () => invoker.invoke(messages),
       );
       const nodeTokens = extractTokenUsage(codeResponse);
 

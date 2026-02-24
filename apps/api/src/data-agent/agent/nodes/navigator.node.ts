@@ -19,23 +19,28 @@ export function createNavigatorNode(
   ontologyId: string,
   emit: EmitFn,
   tracer: DataAgentTracer,
+  webSearchTool: Record<string, unknown> | null = null,
 ) {
   return async (state: DataAgentStateType): Promise<Partial<DataAgentStateType>> => {
     emit({ type: 'phase_start', phase: 'navigator', description: 'Exploring ontology to find datasets and join paths' });
 
     try {
       const plan = state.plan!;
-      const systemPrompt = buildNavigatorPrompt(plan);
+      const systemPrompt = buildNavigatorPrompt(plan, webSearchTool !== null);
 
-      // Create ontology exploration tools
+      // Create ontology exploration tools (client-side, executed in our loop)
       const tools = [
         createListDatasetsTool(neoOntologyService, ontologyId),
         createGetDatasetDetailsTool(neoOntologyService, ontologyId),
         createGetRelationshipsTool(neoOntologyService, ontologyId),
       ];
 
-      // Bind tools to LLM
-      const llmWithTools = llm.bindTools(tools);
+      // Add web search (server-side) if enabled — transparent to the tool loop
+      const allTools: any[] = [...tools];
+      if (webSearchTool) allTools.push(webSearchTool);
+
+      // Bind all tools to LLM; only client-side tools are executed in our loop
+      const llmWithTools = llm.bindTools(allTools);
       const toolsByName = Object.fromEntries(tools.map((t) => [t.name, t]));
 
       // Build initial messages

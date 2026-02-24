@@ -559,7 +559,7 @@ export async function getDataChat(id: string): Promise<DataChat> {
 
 export async function updateDataChat(
   id: string,
-  data: { name?: string; llmProvider?: string | null },
+  data: { name?: string; llmProvider?: string | null; webSearchEnabled?: boolean | null },
 ): Promise<DataChat> {
   return api.patch<DataChat>(`/data-agent/chats/${id}`, data);
 }

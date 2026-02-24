@@ -7,6 +7,7 @@ export function buildExplainerPrompt(
   verificationReport: VerificationReport | null,
   conversationContext: string,
   userPreferences?: Array<{ key: string; value: string }>,
+  webSearchEnabled: boolean = false,
 ): string {
   const resultsSection = stepResults.map((r) => {
     let detail = `### Step ${r.stepId}: ${r.description}`;
@@ -61,6 +62,7 @@ ${preferencesSection}
 6. Mention your methodology briefly.
 7. Include caveats if verification found issues or if assumptions were made.
 8. Be concise but thorough.
+${webSearchEnabled ? `\n## Web Search\nYou have web search access. Use it to enrich your explanations with relevant external context, industry benchmarks, or definitions that help the user understand the data better.` : ''}
 
 ## Previous Conversation
 ${conversationContext || 'This is the start of the conversation.'}`;
@@ -72,6 +74,7 @@ export function buildConversationalPrompt(
   conversationContext: string,
   datasetDetails?: Array<{ name: string; description: string; source: string; yaml: string }>,
   userPreferences?: Array<{ key: string; value: string }>,
+  webSearchEnabled: boolean = false,
 ): string {
   const datasetsSection = datasetDetails && datasetDetails.length > 0
     ? `\n## Available Datasets\n\n${datasetDetails.map((ds) => `- **${ds.name}**: ${ds.description} (source: \`${ds.source}\`)`).join('\n')}`
@@ -95,6 +98,7 @@ ${preferencesSection}
 
 ## Previous Conversation
 ${conversationContext || 'This is the start of the conversation.'}
+${webSearchEnabled ? `\n## Web Search\nYou have web search access. Use it to enrich your explanations with relevant external context, industry benchmarks, or definitions that help the user understand the data better.` : ''}
 
 Provide a clear, concise answer. Use markdown formatting where helpful.`;
 }

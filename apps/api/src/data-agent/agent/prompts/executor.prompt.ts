@@ -32,6 +32,7 @@ export function buildPythonGenerationPrompt(
   sqlData: string | null,
   priorContext: string,
   datasetSchemas?: string,
+  webSearchEnabled: boolean = false,
 ): string {
   const dataSection = sqlData
     ? `\n## Data from SQL Query\n\`\`\`\n${sqlData}\n\`\`\``
@@ -56,7 +57,7 @@ pandas, numpy, matplotlib, seaborn, scipy
 - Use print() for text output
 - Use matplotlib/seaborn for charts (they are auto-saved)
 - If working with SQL result data, parse it from the pipe-delimited format
-- Be concise — no unnecessary comments`;
+- Be concise — no unnecessary comments${webSearchEnabled ? `\n\nWeb search is available but AVOID using it during SQL execution or Python analysis. Focus on executing the provided queries.` : ''}`;
 }
 
 export function buildChartSpecPrompt(

@@ -119,13 +119,6 @@ export default () => {
     url: process.env.SANDBOX_URL || 'http://sandbox:8000',
   },
 
-  // Spreadsheet Agent
-  spreadsheetAgent: {
-    concurrency: Math.min(20, Math.max(1, parseInt(process.env.SPREADSHEET_AGENT_CONCURRENCY || '5', 10))) || 5,
-    maxFileSizeMb: parseInt(process.env.SPREADSHEET_MAX_FILE_SIZE_MB || '500', 10),
-    maxFilesPerProject: parseInt(process.env.SPREADSHEET_MAX_FILES_PER_PROJECT || '50', 10),
-  },
-
   logLevel: process.env.LOG_LEVEL || 'info',
   };
 };

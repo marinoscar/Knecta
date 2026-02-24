@@ -491,8 +491,9 @@ model DataChat {
   id          String   @id @default(uuid()) @db.Uuid
   name        String   @db.VarChar(255)
   ontologyId  String   @map("ontology_id") @db.Uuid
-  llmProvider String?  @map("llm_provider") @db.VarChar(50)
-  ownerId     String   @map("owner_id") @db.Uuid
+  llmProvider      String?  @map("llm_provider") @db.VarChar(50)
+  webSearchEnabled Boolean? @map("web_search_enabled")
+  ownerId          String   @map("owner_id") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
