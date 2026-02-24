@@ -861,6 +861,139 @@ export interface TablePreviewData {
   totalRows: number;
 }
 
+// ==========================================
+// Data Imports
+// ==========================================
+
+export type DataImportStatus = 'draft' | 'pending' | 'importing' | 'ready' | 'partial' | 'failed';
+export type DataImportRunStatus = 'pending' | 'parsing' | 'converting' | 'uploading' | 'connecting' | 'completed' | 'failed' | 'cancelled';
+
+export interface DataImport {
+  id: string;
+  name: string;
+  sourceFileName: string;
+  sourceFileType: string;
+  sourceFileSizeBytes: number;
+  sourceStoragePath: string;
+  status: DataImportStatus;
+  config: DataImportConfig | null;
+  parseResult: CsvParseResult | ExcelParseResult | null;
+  outputTables: OutputTableInfo[] | null;
+  totalRowCount: number | null;
+  totalSizeBytes: number | null;
+  errorMessage: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DataImportConfig {
+  delimiter?: string;
+  hasHeader?: boolean;
+  encoding?: string;
+  skipRows?: number;
+  columns?: ColumnOverride[];
+  sheets?: SheetConfig[];
+}
+
+export interface ColumnOverride {
+  sourceName: string;
+  outputName: string;
+  outputType: string;
+  include: boolean;
+}
+
+export interface SheetConfig {
+  sheetName: string;
+  range?: { startRow: number; endRow?: number; startCol: number; endCol?: number };
+  hasHeader?: boolean;
+  columns?: ColumnOverride[];
+}
+
+export interface CsvParseResult {
+  type: 'csv';
+  detectedDelimiter: string;
+  detectedEncoding: string;
+  hasHeader: boolean;
+  columns: string[];
+  sampleRows: unknown[][];
+  rowCountEstimate: number;
+}
+
+export interface ExcelParseResult {
+  type: 'excel';
+  sheets: ExcelSheetInfo[];
+}
+
+export interface ExcelSheetInfo {
+  name: string;
+  rowCount: number;
+  colCount: number;
+  hasMergedCells: boolean;
+}
+
+export interface SheetPreviewResult {
+  columns: string[];
+  rows: unknown[][];
+  totalRows: number;
+  detectedTypes: Array<{ name: string; type: string }>;
+}
+
+export interface OutputTableInfo {
+  tableName: string;
+  outputPath: string;
+  rowCount: number;
+  columnCount: number;
+  outputSizeBytes: number;
+  connectionId: string;
+  columns: Array<{ name: string; type: string }>;
+}
+
+export interface DataImportRun {
+  id: string;
+  importId: string;
+  status: DataImportRunStatus;
+  currentPhase: string | null;
+  progress: DataImportProgress | null;
+  config: DataImportConfig | null;
+  errorMessage: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DataImportProgress {
+  percentComplete: number;
+  currentTable?: string;
+  completedTables?: number;
+  totalTables?: number;
+  message?: string;
+}
+
+export interface DataImportStreamEvent {
+  type: 'run_start' | 'phase_start' | 'phase_complete' | 'table_start' | 'table_complete' | 'table_error' | 'progress' | 'run_complete' | 'run_error';
+  data: Record<string, unknown>;
+  timestamp: string;
+  [key: string]: unknown;
+}
+
+export interface DataImportsResponse {
+  items: DataImport[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface DataImportRunsResponse {
+  runs: DataImportRun[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export type SpreadsheetStreamEventType =
   | 'run_start'
   | 'phase_start'

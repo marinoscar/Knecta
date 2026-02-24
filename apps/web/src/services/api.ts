@@ -231,6 +231,11 @@ import type {
   SpreadsheetRun,
   SpreadsheetPlanModification,
   TablePreviewData,
+  DataImport,
+  DataImportRun,
+  DataImportsResponse,
+  DataImportRunsResponse,
+  SheetPreviewResult,
 } from '../types';
 
 // Allowlist API
@@ -801,4 +806,115 @@ export async function listProjectSpreadsheetRuns(
 
 export async function deleteSpreadsheetRun(runId: string): Promise<void> {
   await api.delete<void>(`/spreadsheet-agent/runs/${runId}`);
+}
+
+// ============================================================================
+// Data Imports API
+// ============================================================================
+
+export async function getDataImports(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}): Promise<DataImportsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set('page', String(params.page));
+  if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
+  if (params?.search) searchParams.set('search', params.search);
+  if (params?.status) searchParams.set('status', params.status);
+  if (params?.sortBy) searchParams.set('sortBy', params.sortBy);
+  if (params?.sortOrder) searchParams.set('sortOrder', params.sortOrder);
+  const query = searchParams.toString();
+  return api.get<DataImportsResponse>(`/data-imports${query ? `?${query}` : ''}`);
+}
+
+export async function getDataImport(id: string): Promise<DataImport> {
+  return api.get<DataImport>(`/data-imports/${id}`);
+}
+
+export async function uploadDataImportFile(file: File, name?: string): Promise<DataImport> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (name) formData.append('name', name);
+
+  const token = api.getAccessToken();
+  const response = await fetch(`${API_BASE_URL}/data-imports/upload`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: 'include',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error((error as { message?: string }).message || `Upload failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.data ?? data;
+}
+
+export async function getDataImportPreview(id: string): Promise<unknown> {
+  return api.get(`/data-imports/${id}/preview`);
+}
+
+export async function getExcelSheetPreview(
+  id: string,
+  body: { sheetName: string; range?: object; hasHeader?: boolean; limit?: number },
+): Promise<SheetPreviewResult> {
+  return api.post<SheetPreviewResult>(`/data-imports/${id}/preview`, body);
+}
+
+export async function updateDataImport(id: string, data: object): Promise<DataImport> {
+  return api.patch<DataImport>(`/data-imports/${id}`, data);
+}
+
+export async function deleteDataImport(id: string): Promise<void> {
+  await api.delete<void>(`/data-imports/${id}`);
+}
+
+export async function createDataImportRun(importId: string): Promise<DataImportRun> {
+  return api.post<DataImportRun>('/data-imports/runs', { importId });
+}
+
+export async function getDataImportRuns(
+  importId: string,
+  params?: { page?: number; pageSize?: number; status?: string },
+): Promise<DataImportRunsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set('page', String(params.page));
+  if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
+  if (params?.status) searchParams.set('status', params.status);
+  const query = searchParams.toString();
+  return api.get<DataImportRunsResponse>(`/data-imports/${importId}/runs${query ? `?${query}` : ''}`);
+}
+
+export async function listAllDataImportRuns(opts?: {
+  page?: number;
+  pageSize?: number;
+  status?: string;
+}): Promise<DataImportRunsResponse> {
+  const params = new URLSearchParams();
+  if (opts?.page) params.set('page', String(opts.page));
+  if (opts?.pageSize) params.set('pageSize', String(opts.pageSize));
+  if (opts?.status) params.set('status', opts.status);
+  const query = params.toString();
+  return api.get<DataImportRunsResponse>(`/data-imports/runs${query ? `?${query}` : ''}`);
+}
+
+export async function getDataImportRun(runId: string): Promise<DataImportRun> {
+  return api.get<DataImportRun>(`/data-imports/runs/${runId}`);
+}
+
+export async function cancelDataImportRun(runId: string): Promise<DataImportRun> {
+  return api.post<DataImportRun>(`/data-imports/runs/${runId}/cancel`);
+}
+
+export async function deleteDataImportRun(runId: string): Promise<void> {
+  await api.delete<void>(`/data-imports/runs/${runId}`);
 }
