@@ -263,6 +263,7 @@ export interface CreateRunPayload {
   selectedTables: string[];
   name: string;
   instructions?: string;
+  dataImportId?: string;
 }
 
 // ==========================================
@@ -708,6 +709,8 @@ export interface DataImport {
   totalRowCount: number | null;
   totalSizeBytes: number | null;
   errorMessage: string | null;
+  connectionId: string | null;
+  connection?: { id: string; name: string; dbType: string; options?: Record<string, unknown> } | null;
   createdByUserId: string | null;
   createdAt: string;
   updatedAt: string;
