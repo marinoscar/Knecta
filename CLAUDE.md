@@ -379,6 +379,21 @@ cd apps/api && npm run prisma:migrate
 - `POST /api/spreadsheet-agent/runs/:runId/approve` - Approve extraction plan
 - `POST /api/spreadsheet-agent/runs/:runId/stream` - SSE stream (run execution)
 
+### Data Imports
+- `POST /api/data-imports/upload` - Upload CSV/Excel file
+- `GET /api/data-imports` - List imports (paginated)
+- `GET /api/data-imports/:id` - Get import by ID
+- `GET /api/data-imports/:id/preview` - Get parse result
+- `POST /api/data-imports/:id/preview` - Excel sheet/range preview (no persist)
+- `PATCH /api/data-imports/:id` - Update import config
+- `DELETE /api/data-imports/:id` - Delete import
+- `POST /api/data-imports/runs` - Create import run
+- `GET /api/data-imports/:id/runs` - List runs for import
+- `GET /api/data-imports/runs/:runId` - Get run status
+- `POST /api/data-imports/runs/:runId/cancel` - Cancel run
+- `DELETE /api/data-imports/runs/:runId` - Delete run (failed/cancelled only)
+- `POST /api/data-imports/runs/:runId/stream` - SSE stream (execute import)
+
 ### Health
 - `GET /api/health/live` - Liveness check
 - `GET /api/health/ready` - Readiness check (includes DB)
@@ -403,6 +418,7 @@ cd apps/api && npm run prisma:migrate
 - `ontologies:read/write/delete` - Ontology management
 - `data_agent:read/write/delete` - Data Agent chat management
 - `spreadsheet_agent:read/write/delete` - Spreadsheet project management
+- `data_imports:read/write/delete` - Data import management
 
 ## Database Tables
 
@@ -430,6 +446,8 @@ cd apps/api && npm run prisma:migrate
 - `spreadsheet_files` - Source files uploaded to projects
 - `spreadsheet_tables` - Extracted output tables (Parquet)
 - `spreadsheet_runs` - Agent execution tracking (status, plan, progress)
+- `data_imports` - Data import metadata (source file, config, output tables, status)
+- `data_import_runs` - Import execution tracking (status, progress, phases)
 
 ## Access Control: Email Allowlist
 
