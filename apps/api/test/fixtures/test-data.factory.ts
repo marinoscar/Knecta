@@ -129,21 +129,6 @@ export const mockPermissions = {
     name: 'data_agent:delete',
     description: 'Delete data agent resources',
   },
-  spreadsheetAgentRead: {
-    id: randomUUID(),
-    name: 'spreadsheet_agent:read',
-    description: 'Read spreadsheet agent resources',
-  },
-  spreadsheetAgentWrite: {
-    id: randomUUID(),
-    name: 'spreadsheet_agent:write',
-    description: 'Write spreadsheet agent resources',
-  },
-  spreadsheetAgentDelete: {
-    id: randomUUID(),
-    name: 'spreadsheet_agent:delete',
-    description: 'Delete spreadsheet agent resources',
-  },
 };
 
 export const mockRoles = {
@@ -449,9 +434,6 @@ export const rolePermissionsMap = {
     mockPermissions.dataAgentRead,
     mockPermissions.dataAgentWrite,
     mockPermissions.dataAgentDelete,
-    mockPermissions.spreadsheetAgentRead,
-    mockPermissions.spreadsheetAgentWrite,
-    mockPermissions.spreadsheetAgentDelete,
   ],
   contributor: [
     mockPermissions.userSettingsRead,
@@ -470,16 +452,12 @@ export const rolePermissionsMap = {
     mockPermissions.dataAgentRead,
     mockPermissions.dataAgentWrite,
     mockPermissions.dataAgentDelete,
-    mockPermissions.spreadsheetAgentRead,
-    mockPermissions.spreadsheetAgentWrite,
-    mockPermissions.spreadsheetAgentDelete,
   ],
   viewer: [
     mockPermissions.userSettingsRead,
     mockPermissions.userSettingsWrite,
     mockPermissions.ontologiesRead,
     mockPermissions.dataAgentRead,
-    mockPermissions.spreadsheetAgentRead,
   ],
 };
 

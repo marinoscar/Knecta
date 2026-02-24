@@ -79,7 +79,6 @@
     "reflect-metadata": "^0.2.x",
     "rxjs": "^7.x",
     "snowflake-sdk": "^2.3.3",
-    "xlsx": "^0.18.5",
     "zod": "^3.25.76"
   },
   "devDependencies": {

@@ -28,7 +28,6 @@ import { DataAgentModule } from './data-agent/data-agent.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OAuthModule } from './oauth/oauth.module';
 import { McpModule } from './mcp/mcp.module';
-import { SpreadsheetAgentModule } from './spreadsheet-agent/spreadsheet-agent.module';
 
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -78,7 +77,6 @@ import configuration from './config/configuration';
     NotificationsModule,
     OAuthModule,
     McpModule,
-    SpreadsheetAgentModule,
 
     // Test modules (non-production only)
     ...(process.env.NODE_ENV !== 'production' ? [TestAuthModule] : []),
