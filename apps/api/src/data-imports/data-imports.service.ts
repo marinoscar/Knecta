@@ -102,7 +102,7 @@ export class DataImportsService {
     // Upload to S3
     const s3Key = `data-imports/${importId}/source/${filename}`;
     await this.storageProvider.upload(s3Key, Readable.from(buffer), {
-      contentType: mimetype,
+      mimeType: mimetype,
     });
 
     // Determine file type from extension
@@ -131,7 +131,7 @@ export class DataImportsService {
         name: autoName,
         sourceFileName: filename,
         sourceFileType: fileType,
-        sourceFileSizeBytes: buffer.length,
+        sourceFileSizeBytes: BigInt(buffer.length),
         sourceStoragePath: s3Key,
         status: DataImportStatus.draft,
         parseResult: parseResult as object,
@@ -639,7 +639,7 @@ export class DataImportsService {
         await this.storageProvider.upload(
           s3Key,
           Readable.from(parquetBuffer),
-          { contentType: 'application/octet-stream' },
+          { mimeType: 'application/octet-stream' },
         );
 
         uploadedTables.push({

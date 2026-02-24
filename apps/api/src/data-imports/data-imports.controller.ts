@@ -72,11 +72,13 @@ export class DataImportsController {
       throw new BadRequestException('No file provided in the request');
     }
 
-    // Read buffer from stream
+    // Buffer the stream
     const chunks: Buffer[] = [];
-    for await (const chunk of data.file) {
-      chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk as Buffer);
-    }
+    await new Promise<void>((resolve, reject) => {
+      data.file.on('data', (chunk: Buffer) => chunks.push(chunk));
+      data.file.on('end', resolve);
+      data.file.on('error', reject);
+    });
     const buffer = Buffer.concat(chunks);
 
     const result = await this.service.upload(
