@@ -223,14 +223,6 @@ import type {
   LlmTraceRecord,
   ChatShareInfo,
   SharedChatData,
-  SpreadsheetProjectsResponse,
-  SpreadsheetProject,
-  SpreadsheetFile,
-  SpreadsheetTable,
-  SpreadsheetTablesResponse,
-  SpreadsheetRun,
-  SpreadsheetPlanModification,
-  TablePreviewData,
 } from '../types';
 
 // Allowlist API
