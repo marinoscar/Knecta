@@ -59,6 +59,7 @@ export function createSqlBuilderNode(
         enrichedJoinPlan,
         dialectType,
         state.revisionDiagnosis,
+        !!webSearchTool,
       );
 
       // Bind web search (server-side) before withStructuredOutput so the provider

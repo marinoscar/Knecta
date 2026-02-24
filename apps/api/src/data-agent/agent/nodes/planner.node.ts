@@ -70,6 +70,7 @@ export function createPlannerNode(
         state.relevantDatasetDetails,
         state.userPreferences,
         state.clarificationRound,
+        !!webSearchTool,
       );
 
       // Bind web search (server-side) before withStructuredOutput so the provider

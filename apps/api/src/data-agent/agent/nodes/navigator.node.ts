@@ -26,7 +26,7 @@ export function createNavigatorNode(
 
     try {
       const plan = state.plan!;
-      const systemPrompt = buildNavigatorPrompt(plan);
+      const systemPrompt = buildNavigatorPrompt(plan, webSearchTool !== null);
 
       // Create ontology exploration tools (client-side, executed in our loop)
       const tools = [

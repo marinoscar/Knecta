@@ -53,6 +53,7 @@ export function createExplainerNode(
           state.conversationContext,
           state.relevantDatasetDetails,
           state.userPreferences,
+          webSearchTool !== null,
         );
         const messages = [
           new SystemMessage(conversationalPrompt),
@@ -94,6 +95,7 @@ export function createExplainerNode(
         verificationReport,
         state.conversationContext,
         state.userPreferences,
+        webSearchTool !== null,
       );
 
       // Get narrative from LLM

@@ -65,7 +65,7 @@ export function createVerifierNode(
       }
 
       // Generate verification Python code
-      const prompt = buildVerifierPrompt(plan, stepResults);
+      const prompt = buildVerifierPrompt(plan, stepResults, webSearchTool !== null);
       const messages = [
         new SystemMessage('You are a Python code generator. Output ONLY executable Python code. No markdown fences. The code must print a JSON object as its last output line.'),
         new HumanMessage(prompt),

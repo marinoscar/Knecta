@@ -3,6 +3,7 @@ import { PlanArtifact, StepResult } from '../types';
 export function buildVerifierPrompt(
   plan: PlanArtifact,
   stepResults: StepResult[],
+  webSearchEnabled: boolean = false,
 ): string {
   const checksSection = plan.acceptanceChecks.length > 0
     ? plan.acceptanceChecks.map((c, i) => `${i + 1}. ${c}`).join('\n')
@@ -38,5 +39,5 @@ Focus on:
 - **Reasonableness**: Are values within plausible ranges?
 - **Completeness**: Are all expected dimensions represented?
 
-Output ONLY executable Python code. No markdown fences. The code MUST print a JSON object as the last line of output.`;
+${webSearchEnabled ? `## Web Search\nWeb search is available. You may use it to check expected data ranges, industry benchmarks, or reasonableness of results.\n\n` : ''}Output ONLY executable Python code. No markdown fences. The code MUST print a JSON object as the last line of output.`;
 }

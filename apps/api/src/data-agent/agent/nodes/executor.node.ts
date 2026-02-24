@@ -254,6 +254,7 @@ export function createExecutorNode(
               stepResult.sqlResult?.data || null,
               priorContext,
               datasetSchemas,
+              webSearchTool !== null,
             );
 
             const codeMessages = [
