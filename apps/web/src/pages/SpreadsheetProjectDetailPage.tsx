@@ -10,6 +10,7 @@ import {
   Button,
   Chip,
   Alert,
+  AlertTitle,
   Snackbar,
   CircularProgress,
   Grid,
@@ -202,6 +203,13 @@ export default function SpreadsheetProjectDetailPage() {
     }
   }, [project?.status, fetchRuns]);
 
+  // Ensure runs are loaded when project is failed so error details can be shown
+  useEffect(() => {
+    if (project?.status === 'failed') {
+      fetchRuns();
+    }
+  }, [project?.status, fetchRuns]);
+
   // Auto-surface extraction plan review on page load for review_pending projects
   useEffect(() => {
     if (
@@ -389,7 +397,12 @@ export default function SpreadsheetProjectDetailPage() {
             color={STATUS_CONFIG[project.status]?.color || 'default'}
           />
           {canWrite && project.status !== 'processing' && project.status !== 'review_pending' && (
-            <Button variant="contained" startIcon={<RunIcon />} onClick={handleStartRun} disabled={runHook.isStreaming}>
+            <Button
+              variant="contained"
+              startIcon={<RunIcon />}
+              onClick={handleStartRun}
+              disabled={runHook.isStreaming || project.status === 'failed'}
+            >
               Start Run
             </Button>
           )}
@@ -446,6 +459,15 @@ export default function SpreadsheetProjectDetailPage() {
               startTime={runHook.streamStartTime}
             />
           </Paper>
+        )}
+
+        {/* Error details when project has failed */}
+        {project.status === 'failed' && !runHook.isStreaming && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            <AlertTitle>Run Failed</AlertTitle>
+            {runs.find((r) => r.status === 'failed')?.errorMessage ||
+              'The extraction pipeline failed. Check the Runs tab for details.'}
+          </Alert>
         )}
 
         {/* Review plan (if a run is in review_pending) */}

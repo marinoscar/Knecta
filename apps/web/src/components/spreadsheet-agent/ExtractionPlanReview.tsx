@@ -87,10 +87,24 @@ export function ExtractionPlanReview({
 
   return (
     <Box>
-      <Alert severity="info" sx={{ mb: 3 }}>
+      <Alert severity="info" sx={{ mb: 2 }}>
         Review the extraction plan below. You can include/skip tables and optionally rename them
         before proceeding.
       </Alert>
+
+      {/* Top action buttons — duplicated for convenience on long plans */}
+      <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mb: 3 }}>
+        <Button onClick={onCancel} disabled={isSubmitting}>
+          Cancel
+        </Button>
+        <Button
+          variant="contained"
+          onClick={handleApprove}
+          disabled={isSubmitting || includedCount === 0}
+        >
+          {isSubmitting ? 'Approving...' : `Approve Plan (${includedCount} tables)`}
+        </Button>
+      </Box>
 
       {plan.catalogMetadata && (
         <Box sx={{ mb: 3 }}>

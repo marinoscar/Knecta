@@ -146,6 +146,11 @@ export function AgentProgressView({ events, progress, isStreaming, tokensUsed, s
     }
   };
 
+  const hasCompletionErrors =
+    !isStreaming &&
+    events.some((e) => e.type === 'run_complete') &&
+    events.some((e) => e.type === 'table_error' || e.type === 'file_error');
+
   return (
     <Box>
       {/* Phase progress bar */}
@@ -241,8 +246,8 @@ export function AgentProgressView({ events, progress, isStreaming, tokensUsed, s
 
       {/* Completion alert */}
       {!isStreaming && events.some((e) => e.type === 'run_complete') && (
-        <Alert severity="success" sx={{ mt: 2 }}>
-          Agent completed successfully
+        <Alert severity={hasCompletionErrors ? 'warning' : 'success'} sx={{ mt: 2 }}>
+          {hasCompletionErrors ? 'Agent completed with errors' : 'Agent completed successfully'}
           {startTime && (
             <> in {Math.floor((Date.now() - startTime) / 1000)} seconds</>
           )}

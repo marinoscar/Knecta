@@ -8,7 +8,7 @@
 FROM node:20-alpine AS base
 WORKDIR /app
 # Install OpenSSL for Prisma compatibility
-RUN apk add --no-cache openssl openssl-dev
+RUN apk add --no-cache openssl openssl-dev python3 make g++
 RUN corepack enable
 
 # -----------------------------------------------------------------------------
@@ -21,6 +21,7 @@ COPY scripts ./scripts/
 # Using npm install since this is a workspace package without its own lock file
 # Set dummy DATABASE_URL for Prisma generate (actual connection not needed at build time)
 RUN npm install --ignore-scripts && \
+    npm rebuild duckdb && \
     DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" npx prisma generate
 
 # -----------------------------------------------------------------------------
