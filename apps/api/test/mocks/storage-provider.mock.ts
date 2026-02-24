@@ -55,4 +55,6 @@ export const createMockStorageProvider = (): jest.Mocked<StorageProvider> => ({
   exists: jest.fn().mockResolvedValue(true),
 
   getBucket: jest.fn().mockReturnValue('test-bucket'),
+
+  deleteByPrefix: jest.fn().mockResolvedValue(0),
 });

@@ -75,6 +75,7 @@ describe('buildDataAgentGraph', () => {
         mockStructuredLlm,
         mockEmit,
         mockTracer,
+        null,
       );
     });
 
@@ -101,6 +102,7 @@ describe('buildDataAgentGraph', () => {
         'postgresql',
         mockEmit,
         mockTracer,
+        null,
       );
     });
 
@@ -126,6 +128,7 @@ describe('buildDataAgentGraph', () => {
         'ontology-123',
         mockEmit,
         mockTracer,
+        null,
       );
     });
 
@@ -154,6 +157,7 @@ describe('buildDataAgentGraph', () => {
         'testdb',
         mockEmit,
         mockTracer,
+        null,
       );
     });
 
@@ -178,6 +182,7 @@ describe('buildDataAgentGraph', () => {
         mockSandboxService,
         mockEmit,
         mockTracer,
+        null,
       );
     });
 
@@ -202,6 +207,7 @@ describe('buildDataAgentGraph', () => {
         mockSandboxService,
         mockEmit,
         mockTracer,
+        null,
       );
     });
   });

@@ -19,7 +19,7 @@ import {
   StorageProvider,
 } from '../storage/providers/storage-provider.interface';
 import { encrypt, getEncryptionKey } from '../common/utils/encryption.util';
-import { writeParquet } from '../spreadsheet-agent/agent/utils/duckdb-writer';
+import { writeParquet } from '../common/utils/duckdb-writer';
 import { DataImportsParser } from './data-imports.parser';
 import { UpdateImportDto } from './dto/update-import.dto';
 import { ImportQueryDto } from './dto/import-query.dto';

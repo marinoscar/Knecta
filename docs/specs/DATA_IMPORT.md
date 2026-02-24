@@ -22,7 +22,7 @@
 
 ## Feature Overview
 
-The Data Import feature provides a user-driven, deterministic pipeline for importing CSV and Excel files into the platform as queryable Parquet datasets. Unlike the Spreadsheet Agent, Data Import uses **no LLM** — the user directly configures parsing options (delimiter, header row, sheet selection, cell ranges) and sees a live preview before executing the run. The pipeline reads the configured source file, converts it to Parquet via DuckDB, uploads the Parquet file to S3, and automatically creates a Data Connection so the resulting table is immediately available in the Data Agent.
+The Data Import feature provides a user-driven, deterministic pipeline for importing CSV and Excel files into the platform as queryable Parquet datasets. It uses **no LLM** — the user directly configures parsing options (delimiter, header row, sheet selection, cell ranges) and sees a live preview before executing the run. The pipeline reads the configured source file, converts it to Parquet via DuckDB, uploads the Parquet file to S3, and automatically creates a Data Connection so the resulting table is immediately available in the Data Agent.
 
 ### Core Capabilities
 
@@ -34,17 +34,6 @@ The Data Import feature provides a user-driven, deterministic pipeline for impor
 - **S3 Output**: Parquet files stored in configurable S3 bucket; path includes import ID for namespace isolation
 - **Auto Connection Creation**: A Data Connection (type: S3 Parquet) is automatically created for each output table so it is immediately available in the Data Agent
 - **Run Tracking**: Each execution produces a run record with phase-by-phase progress and SSE streaming
-
-### Distinction from Spreadsheet Agent
-
-| Aspect | Data Import | Spreadsheet Agent |
-|--------|-------------|-------------------|
-| LLM involvement | None | LLM analyzes structure and designs schema |
-| Configuration | User-driven | AI-driven with optional review gate |
-| File formats | CSV, Excel only | CSV, Excel, JSON, Parquet, ORC, Arrow |
-| Schema design | Preserved from source headers | Normalized and renamed by LLM |
-| Use case | Direct, predictable conversion | Complex sheets with mixed layouts |
-| Output | One Parquet per selected sheet | Multiple logical tables per sheet possible |
 
 ### Use Cases
 

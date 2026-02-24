@@ -27,9 +27,6 @@ const DataAgentPage = lazy(() => import('./pages/DataAgentPage'));
 const SystemSettingsPage = lazy(() => import('./pages/SystemSettingsPage'));
 const UserManagementPage = lazy(() => import('./pages/UserManagementPage'));
 const SharedChatPage = lazy(() => import('./pages/SharedChatPage'));
-const SpreadsheetAgentPage = lazy(() => import('./pages/SpreadsheetAgentPage'));
-const NewSpreadsheetProjectPage = lazy(() => import('./pages/NewSpreadsheetProjectPage'));
-const SpreadsheetProjectDetailPage = lazy(() => import('./pages/SpreadsheetProjectDetailPage'));
 const DataImportsPage = lazy(() => import('./pages/DataImportsPage'));
 const NewDataImportPage = lazy(() => import('./pages/NewDataImportPage'));
 const DataImportDetailPage = lazy(() => import('./pages/DataImportDetailPage'));
@@ -74,9 +71,6 @@ function AppRoutes() {
                 <Route path="/ontologies/:id" element={<OntologyDetailPage />} />
                 <Route path="/agent" element={<DataAgentPage />} />
                 <Route path="/agent/:chatId" element={<DataAgentPage />} />
-                <Route path="/spreadsheets" element={<SpreadsheetAgentPage />} />
-                <Route path="/spreadsheets/new" element={<NewSpreadsheetProjectPage />} />
-                <Route path="/spreadsheets/:id" element={<SpreadsheetProjectDetailPage />} />
                 <Route path="/data-imports" element={<DataImportsPage />} />
                 <Route path="/data-imports/new" element={<NewDataImportPage />} />
                 <Route path="/data-imports/:id" element={<DataImportDetailPage />} />
