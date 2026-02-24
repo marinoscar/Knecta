@@ -1,6 +1,19 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
+import { createRequire } from 'module';
+
+// Use createRequire to obtain a CJS-compatible require() in this ESM context.
+// resolvePackage() locates packages dynamically so that the config works
+// correctly regardless of directory depth — both in the main checkout
+// (apps/web is 2 levels deep) and in git worktrees (4 levels deep).
+const require = createRequire(import.meta.url);
+const reactDir = resolve(require.resolve('react/package.json'), '..');
+const reactDomDir = resolve(require.resolve('react-dom/package.json'), '..');
+const testingLibReactDir = resolve(
+  require.resolve('@testing-library/react/package.json'),
+  '..',
+);
 
 export default defineConfig({
   plugins: [react()],
@@ -37,15 +50,12 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, './src'),
       // Force single React instance in the monorepo test environment.
-      // The worktree has a separate node_modules tree which causes duplicate
-      // React instances. Pin all imports to the root monorepo's single copy
-      // so that @testing-library/react and application code share the same React.
-      'react': resolve(__dirname, '../../../../node_modules/react'),
-      'react-dom': resolve(__dirname, '../../../../node_modules/react-dom'),
-      '@testing-library/react': resolve(
-        __dirname,
-        '../../../../node_modules/@testing-library/react',
-      ),
+      // Pinning all imports to the resolved package location ensures that
+      // @testing-library/react and application code share the same React,
+      // regardless of whether running from the main checkout or a worktree.
+      'react': reactDir,
+      'react-dom': reactDomDir,
+      '@testing-library/react': testingLibReactDir,
     },
     dedupe: ['react', 'react-dom', '@testing-library/react'],
   },
