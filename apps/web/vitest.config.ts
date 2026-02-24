@@ -36,6 +36,17 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
+      // Force single React instance in the monorepo test environment.
+      // The worktree has a separate node_modules tree which causes duplicate
+      // React instances. Pin all imports to the root monorepo's single copy
+      // so that @testing-library/react and application code share the same React.
+      'react': resolve(__dirname, '../../../../node_modules/react'),
+      'react-dom': resolve(__dirname, '../../../../node_modules/react-dom'),
+      '@testing-library/react': resolve(
+        __dirname,
+        '../../../../node_modules/@testing-library/react',
+      ),
     },
+    dedupe: ['react', 'react-dom', '@testing-library/react'],
   },
 });

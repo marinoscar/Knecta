@@ -223,6 +223,19 @@ import type {
   LlmTraceRecord,
   ChatShareInfo,
   SharedChatData,
+  SpreadsheetProjectsResponse,
+  SpreadsheetProject,
+  SpreadsheetFile,
+  SpreadsheetTable,
+  SpreadsheetTablesResponse,
+  SpreadsheetRun,
+  SpreadsheetPlanModification,
+  TablePreviewData,
+  DataImport,
+  DataImportRun,
+  DataImportsResponse,
+  DataImportRunsResponse,
+  SheetPreviewResult,
 } from '../types';
 
 // Allowlist API
@@ -645,4 +658,263 @@ export async function revokeChatShare(chatId: string): Promise<void> {
 
 export async function getSharedChat(shareToken: string): Promise<SharedChatData> {
   return api.get<SharedChatData>(`/data-agent/share/${shareToken}`, { skipAuth: true });
+}
+
+// ============================================================================
+// Spreadsheet Agent API
+// ============================================================================
+
+export async function getSpreadsheetProjects(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}): Promise<SpreadsheetProjectsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set('page', String(params.page));
+  if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
+  if (params?.search) searchParams.set('search', params.search);
+  if (params?.status) searchParams.set('status', params.status);
+  if (params?.sortBy) searchParams.set('sortBy', params.sortBy);
+  if (params?.sortOrder) searchParams.set('sortOrder', params.sortOrder);
+  const query = searchParams.toString();
+  return api.get<SpreadsheetProjectsResponse>(`/spreadsheet-agent/projects${query ? `?${query}` : ''}`);
+}
+
+export async function getSpreadsheetProject(id: string): Promise<SpreadsheetProject> {
+  return api.get<SpreadsheetProject>(`/spreadsheet-agent/projects/${id}`);
+}
+
+export async function createSpreadsheetProject(data: {
+  name: string;
+  description?: string;
+  storageProvider?: string;
+  reviewMode?: 'auto' | 'review';
+}): Promise<SpreadsheetProject> {
+  return api.post<SpreadsheetProject>('/spreadsheet-agent/projects', data);
+}
+
+export async function updateSpreadsheetProject(
+  id: string,
+  data: { name?: string; description?: string; reviewMode?: 'auto' | 'review' },
+): Promise<SpreadsheetProject> {
+  return api.patch<SpreadsheetProject>(`/spreadsheet-agent/projects/${id}`, data);
+}
+
+export async function deleteSpreadsheetProject(id: string): Promise<void> {
+  await api.delete<void>(`/spreadsheet-agent/projects/${id}`);
+}
+
+export async function getSpreadsheetFiles(projectId: string): Promise<SpreadsheetFile[]> {
+  const result = await api.get<{ items: SpreadsheetFile[]; total: number }>(`/spreadsheet-agent/projects/${projectId}/files`);
+  return result.items;
+}
+
+export async function getSpreadsheetFile(projectId: string, fileId: string): Promise<SpreadsheetFile> {
+  return api.get<SpreadsheetFile>(`/spreadsheet-agent/projects/${projectId}/files/${fileId}`);
+}
+
+export async function deleteSpreadsheetFile(projectId: string, fileId: string): Promise<void> {
+  await api.delete<void>(`/spreadsheet-agent/projects/${projectId}/files/${fileId}`);
+}
+
+export async function getSpreadsheetTables(
+  projectId: string,
+  params?: { page?: number; pageSize?: number; fileId?: string; status?: string },
+): Promise<SpreadsheetTablesResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set('page', String(params.page));
+  if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
+  if (params?.fileId) searchParams.set('fileId', params.fileId);
+  if (params?.status) searchParams.set('status', params.status);
+  const query = searchParams.toString();
+  return api.get<SpreadsheetTablesResponse>(`/spreadsheet-agent/projects/${projectId}/tables${query ? `?${query}` : ''}`);
+}
+
+export async function getSpreadsheetTable(projectId: string, tableId: string): Promise<SpreadsheetTable> {
+  return api.get<SpreadsheetTable>(`/spreadsheet-agent/projects/${projectId}/tables/${tableId}`);
+}
+
+export async function getSpreadsheetTablePreview(
+  projectId: string,
+  tableId: string,
+  limit?: number,
+): Promise<TablePreviewData> {
+  const params = limit ? `?limit=${limit}` : '';
+  return api.get<TablePreviewData>(`/spreadsheet-agent/projects/${projectId}/tables/${tableId}/preview${params}`);
+}
+
+export async function getSpreadsheetTableDownloadUrl(
+  projectId: string,
+  tableId: string,
+): Promise<{ url: string; expiresIn: number }> {
+  return api.get<{ url: string; expiresIn: number }>(`/spreadsheet-agent/projects/${projectId}/tables/${tableId}/download`);
+}
+
+export async function deleteSpreadsheetTable(projectId: string, tableId: string): Promise<void> {
+  await api.delete<void>(`/spreadsheet-agent/projects/${projectId}/tables/${tableId}`);
+}
+
+export async function createSpreadsheetRun(data: {
+  projectId: string;
+  config?: { reviewMode?: 'auto' | 'review'; concurrency?: number };
+}): Promise<SpreadsheetRun> {
+  return api.post<SpreadsheetRun>('/spreadsheet-agent/runs', data);
+}
+
+export async function getSpreadsheetRun(runId: string): Promise<SpreadsheetRun> {
+  return api.get<SpreadsheetRun>(`/spreadsheet-agent/runs/${runId}`);
+}
+
+export async function cancelSpreadsheetRun(runId: string): Promise<SpreadsheetRun> {
+  return api.post<SpreadsheetRun>(`/spreadsheet-agent/runs/${runId}/cancel`);
+}
+
+export async function approveSpreadsheetPlan(
+  runId: string,
+  modifications?: SpreadsheetPlanModification[],
+): Promise<SpreadsheetRun> {
+  return api.post<SpreadsheetRun>(`/spreadsheet-agent/runs/${runId}/approve`, { modifications });
+}
+
+export async function listAllSpreadsheetRuns(opts?: {
+  page?: number;
+  pageSize?: number;
+  status?: string;
+}): Promise<{ runs: SpreadsheetRun[]; total: number; page: number; pageSize: number }> {
+  const params = new URLSearchParams();
+  if (opts?.page) params.set('page', String(opts.page));
+  if (opts?.pageSize) params.set('pageSize', String(opts.pageSize));
+  if (opts?.status) params.set('status', opts.status);
+  const query = params.toString();
+  return api.get(`/spreadsheet-agent/runs${query ? `?${query}` : ''}`);
+}
+
+export async function listProjectSpreadsheetRuns(
+  projectId: string,
+  opts?: { page?: number; pageSize?: number; status?: string },
+): Promise<{ runs: SpreadsheetRun[]; total: number; page: number; pageSize: number }> {
+  const params = new URLSearchParams();
+  if (opts?.page) params.set('page', String(opts.page));
+  if (opts?.pageSize) params.set('pageSize', String(opts.pageSize));
+  if (opts?.status) params.set('status', opts.status);
+  const query = params.toString();
+  return api.get(`/spreadsheet-agent/projects/${projectId}/runs${query ? `?${query}` : ''}`);
+}
+
+export async function deleteSpreadsheetRun(runId: string): Promise<void> {
+  await api.delete<void>(`/spreadsheet-agent/runs/${runId}`);
+}
+
+// ============================================================================
+// Data Imports API
+// ============================================================================
+
+export async function getDataImports(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}): Promise<DataImportsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set('page', String(params.page));
+  if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
+  if (params?.search) searchParams.set('search', params.search);
+  if (params?.status) searchParams.set('status', params.status);
+  if (params?.sortBy) searchParams.set('sortBy', params.sortBy);
+  if (params?.sortOrder) searchParams.set('sortOrder', params.sortOrder);
+  const query = searchParams.toString();
+  return api.get<DataImportsResponse>(`/data-imports${query ? `?${query}` : ''}`);
+}
+
+export async function getDataImport(id: string): Promise<DataImport> {
+  return api.get<DataImport>(`/data-imports/${id}`);
+}
+
+export async function uploadDataImportFile(file: File, name?: string): Promise<DataImport> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (name) formData.append('name', name);
+
+  const token = api.getAccessToken();
+  const response = await fetch(`${API_BASE_URL}/data-imports/upload`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: 'include',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error((error as { message?: string }).message || `Upload failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.data ?? data;
+}
+
+export async function getDataImportPreview(id: string): Promise<unknown> {
+  return api.get(`/data-imports/${id}/preview`);
+}
+
+export async function getExcelSheetPreview(
+  id: string,
+  body: { sheetName: string; range?: object; hasHeader?: boolean; limit?: number },
+): Promise<SheetPreviewResult> {
+  return api.post<SheetPreviewResult>(`/data-imports/${id}/preview`, body);
+}
+
+export async function updateDataImport(id: string, data: object): Promise<DataImport> {
+  return api.patch<DataImport>(`/data-imports/${id}`, data);
+}
+
+export async function deleteDataImport(id: string): Promise<void> {
+  await api.delete<void>(`/data-imports/${id}`);
+}
+
+export async function createDataImportRun(importId: string): Promise<DataImportRun> {
+  return api.post<DataImportRun>('/data-imports/runs', { importId });
+}
+
+export async function getDataImportRuns(
+  importId: string,
+  params?: { page?: number; pageSize?: number; status?: string },
+): Promise<DataImportRunsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set('page', String(params.page));
+  if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
+  if (params?.status) searchParams.set('status', params.status);
+  const query = searchParams.toString();
+  return api.get<DataImportRunsResponse>(`/data-imports/${importId}/runs${query ? `?${query}` : ''}`);
+}
+
+export async function listAllDataImportRuns(opts?: {
+  page?: number;
+  pageSize?: number;
+  status?: string;
+}): Promise<DataImportRunsResponse> {
+  const params = new URLSearchParams();
+  if (opts?.page) params.set('page', String(opts.page));
+  if (opts?.pageSize) params.set('pageSize', String(opts.pageSize));
+  if (opts?.status) params.set('status', opts.status);
+  const query = params.toString();
+  return api.get<DataImportRunsResponse>(`/data-imports/runs${query ? `?${query}` : ''}`);
+}
+
+export async function getDataImportRun(runId: string): Promise<DataImportRun> {
+  return api.get<DataImportRun>(`/data-imports/runs/${runId}`);
+}
+
+export async function cancelDataImportRun(runId: string): Promise<DataImportRun> {
+  return api.post<DataImportRun>(`/data-imports/runs/${runId}/cancel`);
+}
+
+export async function deleteDataImportRun(runId: string): Promise<void> {
+  await api.delete<void>(`/data-imports/runs/${runId}`);
 }

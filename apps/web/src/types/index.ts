@@ -686,3 +686,345 @@ export interface AppNotification {
   clickUrl?: string;
   timestamp: number;
 }
+
+// ==========================================
+// Spreadsheet Agent
+// ==========================================
+
+export type SpreadsheetProjectStatus = 'draft' | 'processing' | 'review_pending' | 'ready' | 'failed' | 'partial';
+export type SpreadsheetFileStatus = 'pending' | 'analyzing' | 'analyzed' | 'extracting' | 'ready' | 'failed';
+export type SpreadsheetTableStatus = 'pending' | 'extracting' | 'ready' | 'failed';
+export type SpreadsheetRunStatus =
+  | 'pending'
+  | 'ingesting'
+  | 'analyzing'
+  | 'designing'
+  | 'review_pending'
+  | 'extracting'
+  | 'validating'
+  | 'persisting'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export interface SpreadsheetProject {
+  id: string;
+  name: string;
+  description: string | null;
+  storageProvider: string;
+  outputBucket: string;
+  outputPrefix: string;
+  reviewMode: 'auto' | 'review';
+  status: SpreadsheetProjectStatus;
+  fileCount: number;
+  tableCount: number;
+  totalRows: number;
+  totalSizeBytes: number;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SpreadsheetFile {
+  id: string;
+  projectId: string;
+  originalName: string;
+  fileType: string;
+  fileSizeBytes: number;
+  storageObjectId: string | null;
+  storagePath: string | null;
+  fileHash: string | null;
+  sheetCount: number;
+  status: SpreadsheetFileStatus;
+  errorMessage: string | null;
+  uploadedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SpreadsheetTable {
+  id: string;
+  projectId: string;
+  fileId: string;
+  tableName: string;
+  description: string | null;
+  sourceSheetName: string;
+  outputPath: string | null;
+  outputStorageObjectId: string | null;
+  outputFormat: string;
+  rowCount: number;
+  columnCount: number;
+  outputSizeBytes: number;
+  columns: Record<string, unknown> | null;
+  status: SpreadsheetTableStatus;
+  extractionNotes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SpreadsheetRun {
+  id: string;
+  projectId: string;
+  status: SpreadsheetRunStatus;
+  config: Record<string, unknown> | null;
+  extractionPlan: Record<string, unknown> | null;
+  extractionPlanModified: Record<string, unknown> | null;
+  validationReport: Record<string, unknown> | null;
+  progress: SpreadsheetRunProgress | null;
+  errorMessage: string | null;
+  tokensUsed: { prompt: number; completion: number; total: number };
+  startedAt: string | null;
+  completedAt: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  project?: { id: string; name: string };
+}
+
+export interface SpreadsheetRunProgress {
+  phase: string;
+  percentComplete: number;
+  message: string;
+  fileStatus?: Record<string, string>;
+  tableStatus?: Record<string, string>;
+}
+
+export interface SpreadsheetProjectsResponse {
+  items: SpreadsheetProject[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface SpreadsheetTablesResponse {
+  items: SpreadsheetTable[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface SpreadsheetExtractionPlan {
+  tables: Array<{
+    tableName: string;
+    description: string;
+    sourceFileId: string;
+    sourceFileName: string;
+    sourceSheetName: string;
+    headerRow: number;
+    dataStartRow: number;
+    dataEndRow: number | null;
+    columns: Array<{
+      sourceName: string;
+      outputName: string;
+      outputType: string;
+      nullable: boolean;
+      transformation: string | null;
+      description: string;
+    }>;
+    skipRows: number[];
+    needsTranspose: boolean;
+    estimatedRows: number;
+    outputPath: string;
+    notes: string;
+  }>;
+  relationships: Array<{
+    fromTable: string;
+    fromColumn: string;
+    toTable: string;
+    toColumn: string;
+    confidence: 'high' | 'medium' | 'low';
+    notes: string;
+  }>;
+  catalogMetadata: {
+    projectDescription: string;
+    domainNotes: string;
+    dataQualityNotes: string[];
+  };
+}
+
+export interface SpreadsheetPlanModification {
+  tableName: string;
+  action: 'include' | 'skip';
+  overrides?: {
+    tableName?: string;
+    columns?: Array<{
+      outputName: string;
+      outputType: string;
+    }>;
+  };
+}
+
+export interface TablePreviewData {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  totalRows: number;
+}
+
+// ==========================================
+// Data Imports
+// ==========================================
+
+export type DataImportStatus = 'draft' | 'pending' | 'importing' | 'ready' | 'partial' | 'failed';
+export type DataImportRunStatus = 'pending' | 'parsing' | 'converting' | 'uploading' | 'connecting' | 'completed' | 'failed' | 'cancelled';
+
+export interface DataImport {
+  id: string;
+  name: string;
+  sourceFileName: string;
+  sourceFileType: string;
+  sourceFileSizeBytes: number;
+  sourceStoragePath: string;
+  status: DataImportStatus;
+  config: DataImportConfig | null;
+  parseResult: CsvParseResult | ExcelParseResult | null;
+  outputTables: OutputTableInfo[] | null;
+  totalRowCount: number | null;
+  totalSizeBytes: number | null;
+  errorMessage: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DataImportConfig {
+  delimiter?: string;
+  hasHeader?: boolean;
+  encoding?: string;
+  skipRows?: number;
+  columns?: ColumnOverride[];
+  sheets?: SheetConfig[];
+}
+
+export interface ColumnOverride {
+  sourceName: string;
+  outputName: string;
+  outputType: string;
+  include: boolean;
+}
+
+export interface SheetConfig {
+  sheetName: string;
+  range?: { startRow: number; endRow?: number; startCol: number; endCol?: number };
+  hasHeader?: boolean;
+  columns?: ColumnOverride[];
+}
+
+export interface CsvParseResult {
+  type: 'csv';
+  detectedDelimiter: string;
+  detectedEncoding: string;
+  hasHeader: boolean;
+  columns: string[];
+  sampleRows: unknown[][];
+  rowCountEstimate: number;
+}
+
+export interface ExcelParseResult {
+  type: 'excel';
+  sheets: ExcelSheetInfo[];
+}
+
+export interface ExcelSheetInfo {
+  name: string;
+  rowCount: number;
+  colCount: number;
+  hasMergedCells: boolean;
+}
+
+export interface SheetPreviewResult {
+  columns: string[];
+  rows: unknown[][];
+  totalRows: number;
+  detectedTypes: Array<{ name: string; type: string }>;
+}
+
+export interface OutputTableInfo {
+  tableName: string;
+  outputPath: string;
+  rowCount: number;
+  columnCount: number;
+  outputSizeBytes: number;
+  connectionId: string;
+  columns: Array<{ name: string; type: string }>;
+}
+
+export interface DataImportRun {
+  id: string;
+  importId: string;
+  status: DataImportRunStatus;
+  currentPhase: string | null;
+  progress: DataImportProgress | null;
+  config: DataImportConfig | null;
+  errorMessage: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DataImportProgress {
+  percentComplete: number;
+  currentTable?: string;
+  completedTables?: number;
+  totalTables?: number;
+  message?: string;
+}
+
+export interface DataImportStreamEvent {
+  type: 'run_start' | 'phase_start' | 'phase_complete' | 'table_start' | 'table_complete' | 'table_error' | 'progress' | 'run_complete' | 'run_error';
+  data: Record<string, unknown>;
+  timestamp: string;
+  [key: string]: unknown;
+}
+
+export interface DataImportsResponse {
+  items: DataImport[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface DataImportRunsResponse {
+  runs: DataImportRun[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export type SpreadsheetStreamEventType =
+  | 'run_start'
+  | 'phase_start'
+  | 'phase_complete'
+  | 'file_start'
+  | 'file_complete'
+  | 'file_error'
+  | 'sheet_analysis'
+  | 'progress'
+  | 'extraction_plan'
+  | 'review_ready'
+  | 'table_start'
+  | 'table_complete'
+  | 'table_error'
+  | 'validation_result'
+  | 'token_update'
+  | 'text'
+  | 'run_complete'
+  | 'run_error';
+
+export interface SpreadsheetStreamEvent {
+  type: SpreadsheetStreamEventType;
+  phase?: string;
+  message?: string;
+  fileId?: string;
+  fileName?: string;
+  tableName?: string;
+  plan?: SpreadsheetExtractionPlan;
+  progress?: SpreadsheetRunProgress;
+  error?: string;
+  tokensUsed?: { prompt: number; completion: number; total: number };
+  [key: string]: unknown;
+}

@@ -68,6 +68,15 @@ const PERMISSIONS = [
   { name: 'data_agent:write', description: 'Create chats and send messages to data agent' },
   { name: 'data_agent:delete', description: 'Delete data agent chats' },
 
+  // Spreadsheet agent management
+  { name: 'spreadsheet_agent:read', description: 'View spreadsheet agent projects and results' },
+  { name: 'spreadsheet_agent:write', description: 'Create projects and run spreadsheet agent' },
+  { name: 'spreadsheet_agent:delete', description: 'Delete spreadsheet agent projects' },
+
+  // Data import management
+  { name: 'data_imports:read', description: 'View data imports' },
+  { name: 'data_imports:write', description: 'Create and manage data imports' },
+  { name: 'data_imports:delete', description: 'Delete data imports' },
 ] as const;
 
 // Role to permissions mapping
@@ -99,6 +108,12 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'data_agent:read',
     'data_agent:write',
     'data_agent:delete',
+    'spreadsheet_agent:read',
+    'spreadsheet_agent:write',
+    'spreadsheet_agent:delete',
+    'data_imports:read',
+    'data_imports:write',
+    'data_imports:delete',
   ],
   contributor: [
     'user_settings:read',
@@ -119,6 +134,12 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'data_agent:read',
     'data_agent:write',
     'data_agent:delete',
+    'spreadsheet_agent:read',
+    'spreadsheet_agent:write',
+    'spreadsheet_agent:delete',
+    'data_imports:read',
+    'data_imports:write',
+    'data_imports:delete',
   ],
   viewer: [
     'user_settings:read',
@@ -128,6 +149,8 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'semantic_models:read',
     'ontologies:read',
     'data_agent:read',
+    'spreadsheet_agent:read',
+    'data_imports:read',
   ],
 };
 
