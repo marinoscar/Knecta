@@ -3,12 +3,14 @@
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Base stage
+# Base stage — Debian slim (DuckDB requires full glibc; Alpine/musl segfaults)
 # -----------------------------------------------------------------------------
-FROM node:20-alpine AS base
+FROM node:20-slim AS base
 WORKDIR /app
-# Install OpenSSL for Prisma compatibility
-RUN apk add --no-cache openssl openssl-dev python3 make g++ gcompat
+# Install OpenSSL for Prisma and build tools for native modules
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends openssl python3 make g++ && \
+    rm -rf /var/lib/apt/lists/*
 RUN corepack enable
 
 # -----------------------------------------------------------------------------
