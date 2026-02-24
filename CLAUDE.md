@@ -355,6 +355,45 @@ cd apps/api && npm run prisma:migrate
 - `DELETE /api/data-agent/preferences/:id` - Delete preference
 - `DELETE /api/data-agent/preferences` - Clear all preferences
 
+### Spreadsheet Agent
+- `GET /api/spreadsheet-agent/projects` - List spreadsheet projects (paginated)
+- `POST /api/spreadsheet-agent/projects` - Create a new project
+- `GET /api/spreadsheet-agent/projects/:id` - Get project by ID
+- `PATCH /api/spreadsheet-agent/projects/:id` - Update project
+- `DELETE /api/spreadsheet-agent/projects/:id` - Delete project
+- `POST /api/spreadsheet-agent/projects/:id/files` - Upload files to project
+- `GET /api/spreadsheet-agent/projects/:id/files` - List project files
+- `GET /api/spreadsheet-agent/projects/:id/files/:fileId` - Get file by ID
+- `DELETE /api/spreadsheet-agent/projects/:id/files/:fileId` - Delete file
+- `GET /api/spreadsheet-agent/projects/:id/tables` - List project tables (paginated)
+- `GET /api/spreadsheet-agent/projects/:id/tables/:tableId` - Get table by ID
+- `GET /api/spreadsheet-agent/projects/:id/tables/:tableId/preview` - Preview table data
+- `GET /api/spreadsheet-agent/projects/:id/tables/:tableId/download` - Get download URL
+- `DELETE /api/spreadsheet-agent/projects/:id/tables/:tableId` - Delete table
+- `GET /api/spreadsheet-agent/projects/:id/runs` - List project runs (paginated)
+- `GET /api/spreadsheet-agent/runs` - List all runs (paginated)
+- `POST /api/spreadsheet-agent/runs` - Create agent run
+- `GET /api/spreadsheet-agent/runs/:runId` - Get run status
+- `DELETE /api/spreadsheet-agent/runs/:runId` - Delete run (failed/cancelled only)
+- `POST /api/spreadsheet-agent/runs/:runId/cancel` - Cancel run
+- `POST /api/spreadsheet-agent/runs/:runId/approve` - Approve extraction plan
+- `POST /api/spreadsheet-agent/runs/:runId/stream` - SSE stream (run execution)
+
+### Data Imports
+- `POST /api/data-imports/upload` - Upload CSV/Excel file
+- `GET /api/data-imports` - List imports (paginated)
+- `GET /api/data-imports/:id` - Get import by ID
+- `GET /api/data-imports/:id/preview` - Get parse result
+- `POST /api/data-imports/:id/preview` - Excel sheet/range preview (no persist)
+- `PATCH /api/data-imports/:id` - Update import config
+- `DELETE /api/data-imports/:id` - Delete import
+- `POST /api/data-imports/runs` - Create import run
+- `GET /api/data-imports/:id/runs` - List runs for import
+- `GET /api/data-imports/runs/:runId` - Get run status
+- `POST /api/data-imports/runs/:runId/cancel` - Cancel run
+- `DELETE /api/data-imports/runs/:runId` - Delete run (failed/cancelled only)
+- `POST /api/data-imports/runs/:runId/stream` - SSE stream (execute import)
+
 ### Health
 - `GET /api/health/live` - Liveness check
 - `GET /api/health/ready` - Readiness check (includes DB)
@@ -378,6 +417,8 @@ cd apps/api && npm run prisma:migrate
 - `semantic_models:read/write/delete/generate` - Semantic model management
 - `ontologies:read/write/delete` - Ontology management
 - `data_agent:read/write/delete` - Data Agent chat management
+- `spreadsheet_agent:read/write/delete` - Spreadsheet project management
+- `data_imports:read/write/delete` - Data import management
 
 ## Database Tables
 
@@ -401,6 +442,12 @@ cd apps/api && npm run prisma:migrate
 - `data_chat_messages` - Chat messages with metadata (phase artifacts, clarification)
 - `data_agent_preferences` - Per-user agent preferences (global and ontology-scoped)
 - `data_chat_shares` - Public chat share links (token, expiry, view count, revocation)
+- `spreadsheet_projects` - Spreadsheet extraction project metadata (status, storage config)
+- `spreadsheet_files` - Source files uploaded to projects
+- `spreadsheet_tables` - Extracted output tables (Parquet)
+- `spreadsheet_runs` - Agent execution tracking (status, plan, progress)
+- `data_imports` - Data import metadata (source file, config, output tables, status)
+- `data_import_runs` - Import execution tracking (status, progress, phases)
 
 ## Access Control: Email Allowlist
 
