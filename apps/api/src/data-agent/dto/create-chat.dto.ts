@@ -5,6 +5,7 @@ export const createChatSchema = z.object({
   name: z.string().min(1).max(255),
   ontologyId: z.string().uuid(),
   llmProvider: z.string().max(50).optional(),
+  webSearchEnabled: z.boolean().optional(),
 });
 
 export class CreateChatDto extends createZodDto(createChatSchema) {}

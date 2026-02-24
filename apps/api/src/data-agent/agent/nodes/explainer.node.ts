@@ -8,7 +8,16 @@ import { extractTokenUsage } from '../utils/token-tracker';
 import { DataAgentTracer } from '../utils/data-agent-tracer';
 import { extractTextContent } from '../utils/content-extractor';
 
-export function createExplainerNode(llm: any, sandboxService: SandboxService, emit: EmitFn, tracer: DataAgentTracer) {
+export function createExplainerNode(
+  llm: any,
+  sandboxService: SandboxService,
+  emit: EmitFn,
+  tracer: DataAgentTracer,
+  webSearchTool: Record<string, unknown> | null = null,
+) {
+  // Bind web search (server-side) once at node creation time.
+  const invoker = webSearchTool ? llm.bindTools([webSearchTool]) : llm;
+
   return async (state: DataAgentStateType): Promise<Partial<DataAgentStateType>> => {
     emit({ type: 'phase_start', phase: 'explainer', description: 'Synthesizing answer' });
 
@@ -44,6 +53,7 @@ export function createExplainerNode(llm: any, sandboxService: SandboxService, em
           state.conversationContext,
           state.relevantDatasetDetails,
           state.userPreferences,
+          webSearchTool !== null,
         );
         const messages = [
           new SystemMessage(conversationalPrompt),
@@ -52,7 +62,7 @@ export function createExplainerNode(llm: any, sandboxService: SandboxService, em
         const { response } = await tracer.trace<any>(
           { phase: 'explainer', purpose: 'conversational_narrative', structuredOutput: false },
           messages,
-          () => llm.invoke(messages),
+          () => invoker.invoke(messages),
         );
         const nodeTokens = extractTokenUsage(response);
         const narrative = extractTextContent(response.content);
@@ -85,6 +95,7 @@ export function createExplainerNode(llm: any, sandboxService: SandboxService, em
         verificationReport,
         state.conversationContext,
         state.userPreferences,
+        webSearchTool !== null,
       );
 
       // Get narrative from LLM
@@ -95,7 +106,7 @@ export function createExplainerNode(llm: any, sandboxService: SandboxService, em
       const { response } = await tracer.trace<any>(
         { phase: 'explainer', purpose: 'narrative', structuredOutput: false },
         messages,
-        () => llm.invoke(messages),
+        () => invoker.invoke(messages),
       );
       const nodeTokens = extractTokenUsage(response);
 

@@ -68,6 +68,7 @@ describe('buildDataAgentGraph', () => {
         databaseType: 'postgresql',
         emit: mockEmit,
         tracer: mockTracer,
+        webSearchTool: null,
       });
 
       expect(createPlannerNode).toHaveBeenCalledWith(
@@ -90,6 +91,7 @@ describe('buildDataAgentGraph', () => {
         databaseType: 'postgresql',
         emit: mockEmit,
         tracer: mockTracer,
+        webSearchTool: null,
       });
 
       expect(createSqlBuilderNode).toHaveBeenCalledWith(
@@ -115,6 +117,7 @@ describe('buildDataAgentGraph', () => {
         databaseType: 'postgresql',
         emit: mockEmit,
         tracer: mockTracer,
+        webSearchTool: null,
       });
 
       expect(createNavigatorNode).toHaveBeenCalledWith(
@@ -139,6 +142,7 @@ describe('buildDataAgentGraph', () => {
         databaseType: 'postgresql',
         emit: mockEmit,
         tracer: mockTracer,
+        webSearchTool: null,
       });
 
       expect(createExecutorNode).toHaveBeenCalledWith(
@@ -166,6 +170,7 @@ describe('buildDataAgentGraph', () => {
         databaseType: 'postgresql',
         emit: mockEmit,
         tracer: mockTracer,
+        webSearchTool: null,
       });
 
       expect(createVerifierNode).toHaveBeenCalledWith(
@@ -189,6 +194,7 @@ describe('buildDataAgentGraph', () => {
         databaseType: 'postgresql',
         emit: mockEmit,
         tracer: mockTracer,
+        webSearchTool: null,
       });
 
       expect(createExplainerNode).toHaveBeenCalledWith(
@@ -215,6 +221,7 @@ describe('buildDataAgentGraph', () => {
         databaseType: 'postgresql',
         emit: mockEmit,
         tracer: mockTracer,
+        webSearchTool: null,
       };
 
       expect(() => buildDataAgentGraph(deps)).not.toThrow();
@@ -233,6 +240,7 @@ describe('buildDataAgentGraph', () => {
         databaseType: 'postgresql',
         emit: mockEmit,
         tracer: mockTracer,
+        webSearchTool: null,
       });
 
       // Verify planner uses structuredLlm
@@ -273,6 +281,7 @@ describe('buildDataAgentGraph', () => {
         databaseType: 'postgresql',
         emit: mockEmit,
         tracer: mockTracer,
+        webSearchTool: null,
       });
 
       expect(createPlannerNode).toHaveBeenCalledTimes(1);

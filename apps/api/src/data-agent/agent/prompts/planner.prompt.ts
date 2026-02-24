@@ -4,6 +4,7 @@ export function buildPlannerPrompt(
   relevantDatasetDetails?: Array<{ name: string; description: string; source: string; yaml: string }>,
   userPreferences?: Array<{ key: string; value: string }>,
   clarificationRound?: number,
+  webSearchEnabled: boolean = false,
 ): string {
   let datasetsSection: string;
   if (relevantDatasetDetails && relevantDatasetDetails.length > 0) {
@@ -136,7 +137,7 @@ When proceeding with assumptions, document each assumption in the \`ambiguities\
 
 When \`shouldClarify\` is false, set \`clarificationQuestions\` to an empty array.
 When \`shouldClarify\` is true, provide 1-3 focused, specific questions. Each must have a \`question\` (what to ask) and an \`assumption\` (what you will use if they do not answer). Prioritize questions by impact — ask about the most result-changing ambiguity first.
-${preferencesSection}
+${preferencesSection}${webSearchEnabled ? `\n## Web Search\nYou have web search access. Use it only if the user's question contains ambiguous terms, acronyms, or references to external standards that you need to understand to decompose the question correctly.\n` : ''}
 ## Available Datasets
 
 ${datasetsSection}

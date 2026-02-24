@@ -31,6 +31,7 @@
 27. [File Inventory](#file-inventory)
 28. [Testing](#testing)
 29. [Packages](#packages)
+30. [Web Search](#web-search)
 
 ---
 
@@ -4000,6 +4001,66 @@ describe('useElapsedTimer', () => {
 ### Frontend Dependencies
 
 No new dependencies (PhaseIndicator uses existing MUI components).
+
+---
+
+## Web Search
+
+The Data Agent supports real-time web search via provider-specific server-side tools. When enabled, the LLM can autonomously decide to search the web during any phase of execution.
+
+### Provider Support
+
+| Provider | Tool | API |
+|----------|------|-----|
+| OpenAI | `tools.webSearch()` → `{ type: "web_search" }` | Responses API (auto-routed) |
+| Anthropic | `tools.webSearch_20250305()` → `{ type: "web_search_20250305" }` | Server-side tool |
+| Azure OpenAI | Same as OpenAI | Responses API |
+
+Server-side tools are transparent to the agent's execution loop — results are embedded in `response.content`, not in `response.tool_calls`. No client-side tool execution is needed.
+
+### Configuration
+
+**Global toggle**: `features.webSearchEnabled` in system settings (admin-only). Acts as a master kill switch.
+
+**Per-chat toggle**: `data_chats.web_search_enabled` column (nullable boolean). Users toggle via the globe icon on the chat input bar.
+
+**Resolution logic**:
+- Global OFF → web search always disabled (regardless of per-chat setting)
+- Global ON + per-chat null → web search enabled (default when global is on)
+- Global ON + per-chat true → web search enabled (explicit)
+- Global ON + per-chat false → web search disabled (user opted out)
+
+### Phase Integration
+
+| Phase | Web Search Use | Guidance |
+|-------|---------------|----------|
+| Planner | Resolve ambiguous terms, acronyms, external standards | Keep decomposition focused on ontology data |
+| Navigator | Domain terminology, industry context | MUST NOT replace ontology tools for schema discovery |
+| SQL Builder | Domain-specific calculations/formulas only | WARNING: MUST NOT look up columns/tables via web |
+| Executor | Avoid | Focus on executing provided queries |
+| Verifier | Expected data ranges, industry benchmarks | Enhance reasonableness checks |
+| Explainer | External context, definitions, benchmarks | Enrich explanations for user understanding |
+
+### Cost Implications
+
+Web search incurs additional per-search charges from the LLM provider:
+- Anthropic: ~$10 per 1,000 searches + token costs for search content
+- OpenAI: Per-search pricing (varies by model)
+
+The `maxUses: 5` limit on Anthropic prevents runaway search costs per request.
+
+### Key Files
+
+- `apps/api/src/data-agent/agent/tools/web-search.tool.ts` — Provider-specific tool factory
+- `apps/api/src/data-agent/agent/graph.ts` — `webSearchTool` in graph dependencies
+- `apps/api/src/data-agent/agent-stream.controller.ts` — Toggle resolution logic
+- `apps/web/src/components/data-agent/ChatInput.tsx` — Globe toggle on input bar
+- `apps/web/src/components/admin/FeatureFlagsList.tsx` — Admin toggle
+
+### UI
+
+- **Chat input**: Globe icon (MUI `Language`) to the left of the text field. Primary color when ON, grey when OFF. Only visible when global flag is enabled.
+- **System settings**: "Web Search" toggle in the Feature Flags / Built-in Features section.
 
 ---
 

@@ -22,6 +22,7 @@ interface UseDataChatResult {
   loadChat: (id: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   changeProvider: (provider: string) => Promise<void>;
+  toggleWebSearch: () => Promise<void>;
   cancelStream: () => void;
   clearError: () => void;
   clearPreferenceSuggestions: () => void;
@@ -271,6 +272,17 @@ export function useDataChat(): UseDataChatResult {
     [chat],
   );
 
+  const toggleWebSearch = useCallback(async () => {
+    if (!chat) return;
+    const newValue = chat.webSearchEnabled === true ? false : true;
+    try {
+      await updateDataChat(chat.id, { webSearchEnabled: newValue });
+      setChat((prev) => prev ? { ...prev, webSearchEnabled: newValue } : prev);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update web search setting');
+    }
+  }, [chat]);
+
   const cancelStream = useCallback(() => {
     abortControllerRef.current?.abort();
     setIsStreaming(false);
@@ -294,6 +306,7 @@ export function useDataChat(): UseDataChatResult {
     loadChat,
     sendMessage,
     changeProvider,
+    toggleWebSearch,
     cancelStream,
     clearError,
     clearPreferenceSuggestions,

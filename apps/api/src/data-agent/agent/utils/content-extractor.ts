@@ -1,11 +1,12 @@
 /**
- * Extract text content from an LLM response that may use Anthropic's content blocks format.
+ * Extract text content from an LLM response that may use various content block formats.
  *
- * When Anthropic thinking mode is enabled, response.content is an array of content blocks:
- *   [{type: 'thinking', thinking: '...'}, {type: 'text', text: '...'}]
- * instead of a plain string.
+ * Handles the following formats:
+ * - Plain string (standard response)
+ * - Anthropic thinking mode: [{type: 'thinking', thinking: '...'}, {type: 'text', text: '...'}]
+ * - OpenAI Responses API: [{type: 'output_text', text: '...'}]
  *
- * This utility handles both formats safely.
+ * This utility handles all formats safely.
  */
 export function extractTextContent(content: unknown): string {
   if (typeof content === 'string') {
@@ -13,7 +14,7 @@ export function extractTextContent(content: unknown): string {
   }
   if (Array.isArray(content)) {
     return content
-      .filter((block: any) => block.type === 'text')
+      .filter((block: any) => block.type === 'text' || block.type === 'output_text')
       .map((block: any) => block.text || '')
       .join('');
   }
