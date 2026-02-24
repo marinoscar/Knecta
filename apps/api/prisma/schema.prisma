@@ -47,6 +47,8 @@ model User {
   oauthCodes                OAuthAuthorizationCode[] @relation("UserOAuthCodes")
   spreadsheetProjects       SpreadsheetProject[]     @relation("UserSpreadsheetProjects")
   spreadsheetRuns           SpreadsheetRun[]         @relation("UserSpreadsheetRuns")
+  dataImports               DataImport[]             @relation("UserDataImports")
+  dataImportRuns            DataImportRun[]          @relation("UserDataImportRuns")
 
   @@map("users")
 }
@@ -750,4 +752,79 @@ model SpreadsheetRun {
   @@index([status])
   @@index([createdByUserId])
   @@map("spreadsheet_runs")
+}
+
+// =============================================================================
+// Data Import
+// =============================================================================
+
+enum DataImportStatus {
+  draft
+  pending
+  importing
+  ready
+  partial
+  failed
+}
+
+enum DataImportRunStatus {
+  pending
+  parsing
+  converting
+  uploading
+  connecting
+  completed
+  failed
+  cancelled
+}
+
+model DataImport {
+  id                  String           @id @default(uuid()) @db.Uuid
+  name                String           @db.VarChar(255)
+  sourceFileName      String           @map("source_file_name") @db.VarChar(255)
+  sourceFileType      String           @map("source_file_type") @db.VarChar(10)
+  sourceFileSizeBytes BigInt           @map("source_file_size_bytes")
+  sourceStoragePath   String           @map("source_storage_path") @db.VarChar(1000)
+  status              DataImportStatus @default(draft)
+  config              Json?
+  parseResult         Json?            @map("parse_result")
+  outputTables        Json?            @map("output_tables")
+  totalRowCount       BigInt?          @map("total_row_count")
+  totalSizeBytes      BigInt?          @map("total_size_bytes")
+  errorMessage        String?          @map("error_message") @db.Text
+  createdByUserId     String?          @map("created_by_user_id") @db.Uuid
+  createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  createdByUser User?           @relation("UserDataImports", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  runs          DataImportRun[]
+
+  @@index([createdByUserId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("data_imports")
+}
+
+model DataImportRun {
+  id              String              @id @default(uuid()) @db.Uuid
+  importId        String              @map("import_id") @db.Uuid
+  status          DataImportRunStatus @default(pending)
+  currentPhase    String?             @map("current_phase") @db.VarChar(50)
+  progress        Json?
+  config          Json?
+  errorMessage    String?             @map("error_message") @db.Text
+  startedAt       DateTime?           @map("started_at") @db.Timestamptz
+  completedAt     DateTime?           @map("completed_at") @db.Timestamptz
+  createdByUserId String?             @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  import        DataImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+  createdByUser User?      @relation("UserDataImportRuns", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([importId])
+  @@index([status])
+  @@map("data_import_runs")
 }
