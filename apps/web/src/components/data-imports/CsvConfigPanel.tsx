@@ -46,7 +46,9 @@ export function CsvConfigPanel({
   onHasHeaderChange,
   onEncodingChange,
 }: CsvConfigPanelProps) {
-  const displayColumns = hasHeader ? parseResult.columns : parseResult.columns.map((_, i) => `Column ${i + 1}`);
+  const displayColumns = hasHeader
+    ? parseResult.columns.map((c) => (typeof c === 'string' ? c : c.name))
+    : parseResult.columns.map((_, i) => `Column ${i + 1}`);
   const displayRows = parseResult.sampleRows.slice(0, 50);
 
   return (

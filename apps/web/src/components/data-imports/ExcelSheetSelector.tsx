@@ -324,7 +324,7 @@ export function ExcelSheetSelector({
                           <TableRow>
                             {preview.data.columns.map((col, i) => (
                               <TableCell key={i} sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>
-                                {col}
+                                {typeof col === 'string' ? col : col.name}
                               </TableCell>
                             ))}
                           </TableRow>

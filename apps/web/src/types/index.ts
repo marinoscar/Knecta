@@ -741,7 +741,7 @@ export interface CsvParseResult {
   detectedDelimiter: string;
   detectedEncoding: string;
   hasHeader: boolean;
-  columns: string[];
+  columns: Array<{ name: string; detectedType: string }>;
   sampleRows: unknown[][];
   rowCountEstimate: number;
 }
@@ -759,7 +759,7 @@ export interface ExcelSheetInfo {
 }
 
 export interface SheetPreviewResult {
-  columns: string[];
+  columns: Array<{ name: string; detectedType: string }>;
   rows: unknown[][];
   totalRows: number;
   detectedTypes: Array<{ name: string; type: string }>;

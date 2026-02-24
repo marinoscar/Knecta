@@ -47,7 +47,10 @@ function buildCsvTablePreview(
   parseResult: CsvParseResult,
 ): TablePreviewEntry {
   // Create column types as generic string unless we have detected types
-  const columns = parseResult.columns.map((col) => ({ name: col, type: 'varchar' }));
+  const columns = parseResult.columns.map((col) => ({
+    name: typeof col === 'string' ? col : col.name,
+    type: typeof col === 'string' ? 'varchar' : col.detectedType,
+  }));
   return {
     tableName: name,
     columns,
