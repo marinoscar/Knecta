@@ -387,13 +387,28 @@ export class SpreadsheetAgentService {
     // Path: /tmp/spreadsheet-agent/{projectId}/{fileHash}{ext}
     const storageDir = join('/tmp', 'spreadsheet-agent', projectId);
     mkdirSync(storageDir, { recursive: true });
-    const storagePath = join(storageDir, `${fileHash}${ext}`);
-    writeFileSync(storagePath, buffer);
+    const localPath = join(storageDir, `${fileHash}${ext}`);
+    writeFileSync(localPath, buffer);
+
+    // Upload to S3 for durability
+    const s3Key = `spreadsheet-agent/${projectId}/source/${fileHash}${ext}`;
+    try {
+      await this.storageProvider.upload(s3Key, Readable.from(buffer), {
+        mimeType: mimetype,
+        metadata: { projectId, fileName: filename, fileHash },
+      });
+      this.logger.debug(`Source file uploaded to S3: ${s3Key}`);
+    } catch (err) {
+      this.logger.error(`Failed to upload source file to S3: ${(err as Error).message}`);
+      // Non-fatal: local file still exists for immediate use
+    }
 
     // Determine fileType from extension
     const fileType = ext.replace('.', '').toUpperCase();
 
     // Persist the file record and increment the project's fileCount atomically
+    // storagePath stores the S3 key for durable retrieval; the local /tmp copy
+    // is used by the ingest node on the same machine for immediate access.
     const [file] = await this.prisma.$transaction([
       this.prisma.spreadsheetFile.create({
         data: {
@@ -402,7 +417,7 @@ export class SpreadsheetAgentService {
           fileType,
           fileSizeBytes: BigInt(totalBytes),
           fileHash,
-          storagePath,
+          storagePath: s3Key,
           status: 'pending',
           storageObjectId: null,
         },

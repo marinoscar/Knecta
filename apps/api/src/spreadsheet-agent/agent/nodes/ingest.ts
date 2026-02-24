@@ -1,4 +1,6 @@
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { tmpdir } from 'os';
+import { join, extname } from 'path';
 import { Logger } from '@nestjs/common';
 import * as XLSX from 'xlsx';
 import { SpreadsheetAgentStateType } from '../state';
@@ -8,8 +10,7 @@ import { StorageProvider } from '../../../storage/providers/storage-provider.int
 
 const logger = new Logger('IngestNode');
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function createIngestNode(emit: EmitFn, _storageProvider: StorageProvider) {
+export function createIngestNode(emit: EmitFn, storageProvider: StorageProvider) {
   return async (state: SpreadsheetAgentStateType): Promise<Partial<SpreadsheetAgentStateType>> => {
     emit({ type: 'phase_start', phase: 'ingest', label: 'Ingesting files' });
 
@@ -17,7 +18,7 @@ export function createIngestNode(emit: EmitFn, _storageProvider: StorageProvider
     const concurrency = config.concurrency || 5;
     const fileInventory: FileInventory[] = [];
 
-    const results = await processFilesWithConcurrency(files, concurrency, emit);
+    const results = await processFilesWithConcurrency(files, concurrency, emit, storageProvider);
 
     for (const result of results) {
       if (result.status === 'fulfilled') {
@@ -50,6 +51,7 @@ async function processFilesWithConcurrency(
   files: SpreadsheetAgentStateType['files'],
   concurrency: number,
   emit: EmitFn,
+  storageProvider: StorageProvider,
 ): Promise<PromiseSettledResult<FileInventory>[]> {
   // Simple concurrency limiter using a queue
   let activeCount = 0;
@@ -76,11 +78,9 @@ async function processFilesWithConcurrency(
             });
 
             // Create inventory from file metadata.
-            // In the full implementation this will:
-            // 1. Download the file from storage
-            // 2. Run openpyxl (Excel) or DuckDB sniff_csv / read_json_auto (CSV/JSON) in a sandbox
-            // 3. Extract sheet structure, sample grids, merged cells, formulas, etc.
-            const inventory = await inventoryFile(file);
+            // 1. Ensure the file is available locally (from /tmp cache or S3 download)
+            // 2. Parse with XLSX to extract sheet structure, sample grids, merged cells, etc.
+            const inventory = await inventoryFile(file, storageProvider);
 
             emit({
               type: 'file_complete',
@@ -117,8 +117,10 @@ async function processFilesWithConcurrency(
 
 async function inventoryFile(
   file: SpreadsheetAgentStateType['files'][0],
+  storageProvider: StorageProvider,
 ): Promise<FileInventory> {
-  const buffer = readFileSync(file.storagePath);
+  const localPath = await ensureLocalFile(file, storageProvider);
+  const buffer = readFileSync(localPath);
   const workbook = XLSX.read(buffer, { type: 'buffer' });
 
   logger.debug(
@@ -214,4 +216,49 @@ async function inventoryFile(
     fileHash: file.fileHash,
     sheets,
   };
+}
+
+/**
+ * Ensure the file is available as a local path.
+ *
+ * Priority:
+ * 1. storagePath is already a local file that exists — use it directly (backward compat).
+ * 2. storagePath is an S3 key — check /tmp cache first, then download from S3.
+ */
+async function ensureLocalFile(
+  file: { storagePath: string; fileHash: string; fileName: string },
+  storageProvider: StorageProvider,
+): Promise<string> {
+  // Unix absolute path
+  if (file.storagePath.startsWith('/') && existsSync(file.storagePath)) {
+    return file.storagePath;
+  }
+  // Windows absolute path (e.g. C:\...)
+  if (/^[A-Za-z]:/.test(file.storagePath) && existsSync(file.storagePath)) {
+    return file.storagePath;
+  }
+
+  // storagePath is an S3 key — resolve via local cache
+  const ext = extname(file.fileName);
+  const cacheDir = join(tmpdir(), 'spreadsheet-agent', 'cache');
+  mkdirSync(cacheDir, { recursive: true });
+  const localPath = join(cacheDir, `${file.fileHash}${ext}`);
+
+  // Reuse existing cache entry if present
+  if (existsSync(localPath)) {
+    logger.debug(`Using cached file: ${localPath}`);
+    return localPath;
+  }
+
+  // Download from S3 and write to cache
+  logger.log(`Downloading file from S3: ${file.storagePath}`);
+  const stream = await storageProvider.download(file.storagePath);
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.from(chunk));
+  }
+  writeFileSync(localPath, Buffer.concat(chunks));
+  logger.debug(`File downloaded and cached at: ${localPath}`);
+
+  return localPath;
 }
