@@ -144,6 +144,21 @@ export const mockPermissions = {
     name: 'spreadsheet_agent:delete',
     description: 'Delete spreadsheet agent resources',
   },
+  dataImportsRead: {
+    id: randomUUID(),
+    name: 'data_imports:read',
+    description: 'View data imports',
+  },
+  dataImportsWrite: {
+    id: randomUUID(),
+    name: 'data_imports:write',
+    description: 'Create and manage data imports',
+  },
+  dataImportsDelete: {
+    id: randomUUID(),
+    name: 'data_imports:delete',
+    description: 'Delete data imports',
+  },
 };
 
 export const mockRoles = {
@@ -452,6 +467,9 @@ export const rolePermissionsMap = {
     mockPermissions.spreadsheetAgentRead,
     mockPermissions.spreadsheetAgentWrite,
     mockPermissions.spreadsheetAgentDelete,
+    mockPermissions.dataImportsRead,
+    mockPermissions.dataImportsWrite,
+    mockPermissions.dataImportsDelete,
   ],
   contributor: [
     mockPermissions.userSettingsRead,
@@ -473,6 +491,9 @@ export const rolePermissionsMap = {
     mockPermissions.spreadsheetAgentRead,
     mockPermissions.spreadsheetAgentWrite,
     mockPermissions.spreadsheetAgentDelete,
+    mockPermissions.dataImportsRead,
+    mockPermissions.dataImportsWrite,
+    mockPermissions.dataImportsDelete,
   ],
   viewer: [
     mockPermissions.userSettingsRead,
@@ -480,6 +501,7 @@ export const rolePermissionsMap = {
     mockPermissions.ontologiesRead,
     mockPermissions.dataAgentRead,
     mockPermissions.spreadsheetAgentRead,
+    mockPermissions.dataImportsRead,
   ],
 };
 
