@@ -7,7 +7,7 @@ import {
   ExcelParseResult,
   ExcelSheetInfo,
 } from './data-imports.types';
-import { WriterColumn } from '../spreadsheet-agent/agent/utils/duckdb-writer';
+import { WriterColumn } from '../common/utils/duckdb-writer';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
