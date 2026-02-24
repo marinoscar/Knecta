@@ -140,7 +140,7 @@ export class DataImportsService {
     });
 
     this.logger.log(`Import ${importId} created from file '${filename}'`);
-    return dataImport;
+    return this.serializeImport(dataImport);
   }
 
   // ─── Retrieval ────────────────────────────────────────────────────────────
@@ -155,7 +155,7 @@ export class DataImportsService {
       throw new NotFoundException(`DataImport '${id}' not found`);
     }
 
-    return item;
+    return this.serializeImport(item);
   }
 
   async list(query: ImportQueryDto) {
@@ -187,7 +187,7 @@ export class DataImportsService {
     ]);
 
     return {
-      items,
+      items: items.map((item) => this.serializeImport(item)),
       total,
       page,
       pageSize,
@@ -247,7 +247,7 @@ export class DataImportsService {
       data: updateData,
     });
 
-    return updated;
+    return this.serializeImport(updated);
   }
 
   // ─── Delete ───────────────────────────────────────────────────────────────
@@ -824,6 +824,20 @@ export class DataImportsService {
 
       return buffer;
     }
+  }
+
+  /**
+   * Convert BigInt fields to Number for JSON serialization.
+   * Prisma returns BigInt for sourceFileSizeBytes, totalRowCount, totalSizeBytes,
+   * but JSON.stringify cannot handle BigInt.
+   */
+  private serializeImport(record: any): any {
+    return {
+      ...record,
+      sourceFileSizeBytes: record.sourceFileSizeBytes != null ? Number(record.sourceFileSizeBytes) : null,
+      totalRowCount: record.totalRowCount != null ? Number(record.totalRowCount) : null,
+      totalSizeBytes: record.totalSizeBytes != null ? Number(record.totalSizeBytes) : null,
+    };
   }
 
   private getExtension(filename: string): string {
