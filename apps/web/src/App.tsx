@@ -30,6 +30,9 @@ const SharedChatPage = lazy(() => import('./pages/SharedChatPage'));
 const SpreadsheetAgentPage = lazy(() => import('./pages/SpreadsheetAgentPage'));
 const NewSpreadsheetProjectPage = lazy(() => import('./pages/NewSpreadsheetProjectPage'));
 const SpreadsheetProjectDetailPage = lazy(() => import('./pages/SpreadsheetProjectDetailPage'));
+const DataImportsPage = lazy(() => import('./pages/DataImportsPage'));
+const NewDataImportPage = lazy(() => import('./pages/NewDataImportPage'));
+const DataImportDetailPage = lazy(() => import('./pages/DataImportDetailPage'));
 
 // Test login page (development only)
 const TestLoginPage = import.meta.env.PROD
@@ -74,6 +77,9 @@ function AppRoutes() {
                 <Route path="/spreadsheets" element={<SpreadsheetAgentPage />} />
                 <Route path="/spreadsheets/new" element={<NewSpreadsheetProjectPage />} />
                 <Route path="/spreadsheets/:id" element={<SpreadsheetProjectDetailPage />} />
+                <Route path="/data-imports" element={<DataImportsPage />} />
+                <Route path="/data-imports/new" element={<NewDataImportPage />} />
+                <Route path="/data-imports/:id" element={<DataImportDetailPage />} />
                 <Route path="/admin/users" element={<UserManagementPage />} />
                 <Route path="/admin/settings" element={<SystemSettingsPage />} />
               </Route>
