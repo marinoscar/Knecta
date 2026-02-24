@@ -26,6 +26,7 @@ export function createSqlBuilderNode(
   databaseType: string,
   emit: EmitFn,
   tracer: DataAgentTracer,
+  webSearchTool: Record<string, unknown> | null = null,
 ) {
   return async (state: DataAgentStateType): Promise<Partial<DataAgentStateType>> => {
     emit({ type: 'phase_start', phase: 'sql_builder', description: 'Generating SQL queries for each step' });
@@ -60,7 +61,10 @@ export function createSqlBuilderNode(
         state.revisionDiagnosis,
       );
 
-      const structuredLlm = llm.withStructuredOutput(QuerySpecSchema, {
+      // Bind web search (server-side) before withStructuredOutput so the provider
+      // can look up dialect-specific syntax during query generation.
+      const baseLlm = webSearchTool ? llm.bindTools([webSearchTool]) : llm;
+      const structuredLlm = baseLlm.withStructuredOutput(QuerySpecSchema, {
         name: 'generate_queries',
         includeRaw: true,
       });
