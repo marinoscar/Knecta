@@ -112,6 +112,15 @@ export interface StorageProvider {
   delete(key: string): Promise<void>;
 
   /**
+   * Delete all files matching a key prefix.
+   * Returns the number of objects deleted.
+   *
+   * @param prefix - Key prefix to match (e.g. 'spreadsheet-agent/project-id/')
+   * @returns Number of objects deleted
+   */
+  deleteByPrefix(prefix: string): Promise<number>;
+
+  /**
    * Get file metadata
    *
    * @param key - Unique identifier for the file in storage

@@ -35,6 +35,17 @@ export function createExtractNode(emit: EmitFn, storageProvider: StorageProvider
 
     const concurrency = config.concurrency || 5;
 
+    // Clear existing Parquet files for this project before uploading new ones
+    const s3Prefix = `spreadsheet-agent/${state.projectId}/`;
+    try {
+      const deleted = await storageProvider.deleteByPrefix(s3Prefix);
+      if (deleted > 0) {
+        logger.log(`Cleared ${deleted} existing files under ${s3Prefix}`);
+      }
+    } catch (err) {
+      logger.warn(`Failed to clear S3 prefix ${s3Prefix}: ${(err as Error).message}`);
+    }
+
     // Apply plan modifications (skip/include/override)
     const tablesToExtract = applyModifications(extractionPlan.tables, planModifications);
 
