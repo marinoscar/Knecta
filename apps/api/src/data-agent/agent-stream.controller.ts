@@ -120,13 +120,17 @@ export class AgentStreamController {
       // Resolve the provider: chat-level > system default
       const chatProvider = chat.llmProvider || null;
 
-      // Fetch system settings for provider config
-      let providerConfig: LlmModelConfig | undefined;
-      if (chatProvider) {
-        const systemSettings = await this.systemSettingsService.getSettings();
-        const providerKey = chatProvider as 'openai' | 'anthropic' | 'azure';
-        providerConfig = systemSettings.dataAgent?.[providerKey] || undefined;
-      }
+      // Always fetch system settings — needed for provider config and web search flag
+      const systemSettings = await this.systemSettingsService.getSettings();
+      const providerKey = chatProvider as 'openai' | 'anthropic' | 'azure';
+      const providerConfig: LlmModelConfig | undefined = chatProvider
+        ? (systemSettings.dataAgent?.[providerKey] || undefined)
+        : undefined;
+
+      // Resolve web search enablement: global flag must be ON, then chat can opt out
+      const globalWebSearch = systemSettings.features?.['webSearchEnabled'] ?? false;
+      const chatWebSearch = (chat as any).webSearchEnabled as boolean | null;
+      const webSearchEnabled = globalWebSearch && (chatWebSearch !== false);
 
       // Execute the agent with streaming
       await this.agentService.executeAgent(
@@ -137,6 +141,7 @@ export class AgentStreamController {
         emit,
         chatProvider || undefined,
         providerConfig,
+        webSearchEnabled,
       );
 
     } catch (error) {
