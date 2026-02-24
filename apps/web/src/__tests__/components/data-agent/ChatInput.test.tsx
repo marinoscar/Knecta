@@ -207,4 +207,165 @@ describe('ChatInput', () => {
     });
   });
 
+  describe('Web Search Toggle', () => {
+    it('does not render the web search toggle when globalWebSearchEnabled is false', () => {
+      render(
+        <ChatInput
+          onSend={mockOnSend}
+          isStreaming={false}
+          globalWebSearchEnabled={false}
+        />
+      );
+
+      expect(
+        screen.queryByRole('button', { name: /web search/i })
+      ).not.toBeInTheDocument();
+    });
+
+    it('does not render the web search toggle when globalWebSearchEnabled is not provided', () => {
+      render(
+        <ChatInput onSend={mockOnSend} isStreaming={false} />
+      );
+
+      expect(
+        screen.queryByRole('button', { name: /web search/i })
+      ).not.toBeInTheDocument();
+    });
+
+    it('renders the web search toggle when globalWebSearchEnabled is true', () => {
+      render(
+        <ChatInput
+          onSend={mockOnSend}
+          isStreaming={false}
+          globalWebSearchEnabled={true}
+        />
+      );
+
+      expect(
+        screen.getByRole('button', { name: /web search/i })
+      ).toBeInTheDocument();
+    });
+
+    it('toggle has aria-label "Enable web search" when webSearchEnabled is false', () => {
+      render(
+        <ChatInput
+          onSend={mockOnSend}
+          isStreaming={false}
+          globalWebSearchEnabled={true}
+          webSearchEnabled={false}
+        />
+      );
+
+      expect(
+        screen.getByRole('button', { name: 'Enable web search' })
+      ).toBeInTheDocument();
+    });
+
+    it('toggle has aria-label "Disable web search" when webSearchEnabled is true', () => {
+      render(
+        <ChatInput
+          onSend={mockOnSend}
+          isStreaming={false}
+          globalWebSearchEnabled={true}
+          webSearchEnabled={true}
+        />
+      );
+
+      expect(
+        screen.getByRole('button', { name: 'Disable web search' })
+      ).toBeInTheDocument();
+    });
+
+    it('calls onToggleWebSearch when the toggle button is clicked', async () => {
+      const user = userEvent.setup();
+      const mockOnToggle = vi.fn();
+
+      render(
+        <ChatInput
+          onSend={mockOnSend}
+          isStreaming={false}
+          globalWebSearchEnabled={true}
+          webSearchEnabled={false}
+          onToggleWebSearch={mockOnToggle}
+        />
+      );
+
+      const toggleButton = screen.getByRole('button', { name: 'Enable web search' });
+      await user.click(toggleButton);
+
+      expect(mockOnToggle).toHaveBeenCalledTimes(1);
+    });
+
+    it('web search toggle is disabled and onToggleWebSearch is not called when chat is disabled', async () => {
+      const mockOnToggle = vi.fn();
+
+      render(
+        <ChatInput
+          onSend={mockOnSend}
+          isStreaming={false}
+          globalWebSearchEnabled={true}
+          webSearchEnabled={false}
+          onToggleWebSearch={mockOnToggle}
+          disabled={true}
+        />
+      );
+
+      const toggleButton = screen.getByRole('button', { name: 'Enable web search' });
+      // Button must be disabled - a disabled MUI IconButton also sets pointer-events: none
+      expect(toggleButton).toBeDisabled();
+      // onToggleWebSearch is never called because the button is disabled
+      expect(mockOnToggle).not.toHaveBeenCalled();
+    });
+
+    it('disables the web search toggle when isStreaming is true', () => {
+      render(
+        <ChatInput
+          onSend={mockOnSend}
+          isStreaming={true}
+          globalWebSearchEnabled={true}
+          webSearchEnabled={false}
+        />
+      );
+
+      const toggleButton = screen.getByRole('button', { name: 'Enable web search' });
+      expect(toggleButton).toBeDisabled();
+    });
+
+    it('shows tooltip "Web search enabled" when webSearchEnabled is true', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ChatInput
+          onSend={mockOnSend}
+          isStreaming={false}
+          globalWebSearchEnabled={true}
+          webSearchEnabled={true}
+        />
+      );
+
+      const toggleButton = screen.getByRole('button', { name: 'Disable web search' });
+      await user.hover(toggleButton);
+
+      expect(await screen.findByText('Web search enabled')).toBeInTheDocument();
+    });
+
+    it('shows tooltip "Web search" when webSearchEnabled is false', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ChatInput
+          onSend={mockOnSend}
+          isStreaming={false}
+          globalWebSearchEnabled={true}
+          webSearchEnabled={false}
+        />
+      );
+
+      const toggleButton = screen.getByRole('button', { name: 'Enable web search' });
+      await user.hover(toggleButton);
+
+      expect(await screen.findByText('Web search')).toBeInTheDocument();
+    });
+  });
+
 });

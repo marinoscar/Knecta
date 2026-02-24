@@ -1057,6 +1057,257 @@ describe('FeatureFlagsList', () => {
     });
   });
 
+  describe('Web Search Built-in Feature', () => {
+    it('renders the "Built-in Features" section heading when webSearchEnabled is present', () => {
+      render(
+        <FeatureFlagsList
+          flags={{ webSearchEnabled: false }}
+          onSave={mockOnSave}
+        />,
+        { wrapperOptions: { user: mockAdminUser } }
+      );
+
+      expect(screen.getByText('Built-in Features')).toBeInTheDocument();
+    });
+
+    it('renders the "Web Search" label in the built-in features section', () => {
+      render(
+        <FeatureFlagsList
+          flags={{ webSearchEnabled: false }}
+          onSave={mockOnSave}
+        />,
+        { wrapperOptions: { user: mockAdminUser } }
+      );
+
+      expect(screen.getByText('Web Search')).toBeInTheDocument();
+    });
+
+    it('renders the web search description text', () => {
+      render(
+        <FeatureFlagsList
+          flags={{ webSearchEnabled: false }}
+          onSave={mockOnSave}
+        />,
+        { wrapperOptions: { user: mockAdminUser } }
+      );
+
+      expect(
+        screen.getByText('Allow the Data Agent to search the web for additional context')
+      ).toBeInTheDocument();
+    });
+
+    it('shows "Built-in Features" section even when webSearchEnabled flag is absent from flags prop', () => {
+      render(
+        <FeatureFlagsList flags={{}} onSave={mockOnSave} />,
+        { wrapperOptions: { user: mockAdminUser } }
+      );
+
+      // The section still renders because KNOWN_FLAGS are always shown (unadded list)
+      expect(screen.getByText('Built-in Features')).toBeInTheDocument();
+      expect(screen.getByText('Web Search')).toBeInTheDocument();
+    });
+
+    it('renders the web search toggle switch in the built-in features section', () => {
+      render(
+        <FeatureFlagsList
+          flags={{ webSearchEnabled: false }}
+          onSave={mockOnSave}
+        />,
+        { wrapperOptions: { user: mockAdminUser } }
+      );
+
+      const switches = screen.getAllByRole('checkbox') as HTMLInputElement[];
+      // With only webSearchEnabled present, there is exactly one switch
+      expect(switches).toHaveLength(1);
+    });
+
+    it('shows the web search switch as unchecked when webSearchEnabled is false', () => {
+      render(
+        <FeatureFlagsList
+          flags={{ webSearchEnabled: false }}
+          onSave={mockOnSave}
+        />,
+        { wrapperOptions: { user: mockAdminUser } }
+      );
+
+      const switches = screen.getAllByRole('checkbox') as HTMLInputElement[];
+      expect(switches[0].checked).toBe(false);
+    });
+
+    it('shows the web search switch as checked when webSearchEnabled is true', () => {
+      render(
+        <FeatureFlagsList
+          flags={{ webSearchEnabled: true }}
+          onSave={mockOnSave}
+        />,
+        { wrapperOptions: { user: mockAdminUser } }
+      );
+
+      const switches = screen.getAllByRole('checkbox') as HTMLInputElement[];
+      expect(switches[0].checked).toBe(true);
+    });
+
+    it('toggling the web search switch updates the label to Enabled', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <FeatureFlagsList
+          flags={{ webSearchEnabled: false }}
+          onSave={mockOnSave}
+        />,
+        { wrapperOptions: { user: mockAdminUser } }
+      );
+
+      const webSearchSwitch = screen.getByRole('checkbox') as HTMLInputElement;
+      expect(webSearchSwitch.checked).toBe(false);
+
+      await user.click(webSearchSwitch);
+
+      await waitFor(() => {
+        expect(webSearchSwitch.checked).toBe(true);
+      });
+    });
+
+    it('toggling the web search switch enables the Save Changes button', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <FeatureFlagsList
+          flags={{ webSearchEnabled: false }}
+          onSave={mockOnSave}
+        />,
+        { wrapperOptions: { user: mockAdminUser } }
+      );
+
+      const saveButton = screen.getByRole('button', { name: /save changes/i });
+      expect(saveButton).toBeDisabled();
+
+      const webSearchSwitch = screen.getByRole('checkbox');
+      await user.click(webSearchSwitch);
+
+      await waitFor(() => {
+        expect(saveButton).not.toBeDisabled();
+      });
+    });
+
+    it('calls onSave with webSearchEnabled set to true when toggled on and saved', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <FeatureFlagsList
+          flags={{ webSearchEnabled: false }}
+          onSave={mockOnSave}
+        />,
+        { wrapperOptions: { user: mockAdminUser } }
+      );
+
+      const webSearchSwitch = screen.getByRole('checkbox');
+      await user.click(webSearchSwitch);
+
+      const saveButton = screen.getByRole('button', { name: /save changes/i });
+      await user.click(saveButton);
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith({ webSearchEnabled: true });
+      });
+    });
+
+    it('calls onSave with webSearchEnabled added as true when flag was absent and switch is clicked', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <FeatureFlagsList flags={{}} onSave={mockOnSave} />,
+        { wrapperOptions: { user: mockAdminUser } }
+      );
+
+      // When the flag is absent, clicking the switch adds it as true
+      const webSearchSwitch = screen.getByRole('checkbox');
+      await user.click(webSearchSwitch);
+
+      const saveButton = screen.getByRole('button', { name: /save changes/i });
+      await user.click(saveButton);
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith({ webSearchEnabled: true });
+      });
+    });
+
+    it('calls onSave with webSearchEnabled set to false when toggled off and saved', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <FeatureFlagsList
+          flags={{ webSearchEnabled: true }}
+          onSave={mockOnSave}
+        />,
+        { wrapperOptions: { user: mockAdminUser } }
+      );
+
+      const webSearchSwitch = screen.getByRole('checkbox');
+      await user.click(webSearchSwitch);
+
+      const saveButton = screen.getByRole('button', { name: /save changes/i });
+      await user.click(saveButton);
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith({ webSearchEnabled: false });
+      });
+    });
+
+    it('does not show a delete button for the web search built-in feature', () => {
+      render(
+        <FeatureFlagsList
+          flags={{ webSearchEnabled: true }}
+          onSave={mockOnSave}
+        />,
+        { wrapperOptions: { user: mockAdminUser } }
+      );
+
+      const deleteButtons = screen.queryAllByRole('button', { name: '' }).filter((btn) =>
+        btn.querySelector('svg[data-testid="DeleteIcon"]')
+      );
+      expect(deleteButtons).toHaveLength(0);
+    });
+
+    it('shows "Enabled" label next to web search switch when webSearchEnabled is true', () => {
+      render(
+        <FeatureFlagsList
+          flags={{ webSearchEnabled: true }}
+          onSave={mockOnSave}
+        />,
+        { wrapperOptions: { user: mockAdminUser } }
+      );
+
+      expect(screen.getByText('Enabled')).toBeInTheDocument();
+    });
+
+    it('shows "Disabled" label next to web search switch when webSearchEnabled is false', () => {
+      render(
+        <FeatureFlagsList
+          flags={{ webSearchEnabled: false }}
+          onSave={mockOnSave}
+        />,
+        { wrapperOptions: { user: mockAdminUser } }
+      );
+
+      expect(screen.getByText('Disabled')).toBeInTheDocument();
+    });
+
+    it('web search switch is disabled when the disabled prop is true', () => {
+      render(
+        <FeatureFlagsList
+          flags={{ webSearchEnabled: false }}
+          onSave={mockOnSave}
+          disabled={true}
+        />,
+        { wrapperOptions: { user: mockAdminUser } }
+      );
+
+      const webSearchSwitch = screen.getByRole('checkbox');
+      expect(webSearchSwitch).toBeDisabled();
+    });
+  });
+
   describe('Edge Cases', () => {
     it('should handle flags with empty string key', () => {
       const flagsWithEmpty = { '': true, normal_flag: false };
