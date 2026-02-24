@@ -266,20 +266,40 @@ export class DataImportsService {
       this.logger.warn(`Failed to delete S3 objects for import ${id}: ${String(err)}`);
     }
 
-    // Delete auto-created connections (derived from outputTables)
+    // Delete auto-created connections (derived from outputTables, legacy per-table pattern)
     const outputTables = item.outputTables as OutputTable[] | null;
     if (outputTables && outputTables.length > 0) {
       const connectionIds = outputTables
         .map((t) => t.connectionId)
-        .filter((cid): cid is string => !!cid);
+        .filter((cid): cid is string => !!cid && cid !== (item as any).connectionId);
 
       for (const connectionId of connectionIds) {
         try {
           await this.prisma.dataConnection.delete({ where: { id: connectionId } });
-          this.logger.log(`Deleted connection ${connectionId} for import ${id}`);
+          this.logger.log(`Deleted legacy per-table connection ${connectionId} for import ${id}`);
         } catch (err) {
-          this.logger.warn(`Failed to delete connection ${connectionId}: ${String(err)}`);
+          this.logger.warn(`Failed to delete legacy connection ${connectionId}: ${String(err)}`);
         }
+      }
+    }
+
+    // Delete import-level connection (if not referenced by semantic models)
+    const importConnectionId = (item as any).connectionId as string | null | undefined;
+    if (importConnectionId) {
+      const smCount = await this.prisma.semanticModel.count({
+        where: { connectionId: importConnectionId },
+      });
+      if (smCount === 0) {
+        try {
+          await this.prisma.dataConnection.delete({ where: { id: importConnectionId } });
+          this.logger.log(`Deleted import connection ${importConnectionId} for import ${id}`);
+        } catch (err) {
+          this.logger.warn(`Failed to delete import connection ${importConnectionId}: ${String(err)}`);
+        }
+      } else {
+        this.logger.log(
+          `Keeping connection ${importConnectionId} — referenced by ${smCount} semantic model(s)`,
+        );
       }
     }
 
@@ -296,6 +316,8 @@ export class DataImportsService {
       DataImportStatus.draft,
       DataImportStatus.pending,
       DataImportStatus.failed,
+      DataImportStatus.ready,
+      DataImportStatus.partial,
     ];
 
     if (!allowedStatuses.includes(item.status)) {
@@ -303,6 +325,9 @@ export class DataImportsService {
         `Import '${dto.importId}' is in status '${item.status}' and cannot be re-run`,
       );
     }
+
+    // Clean up artifacts from any previous run before creating a new one
+    await this.cleanupPreviousRun(item);
 
     const run = await this.prisma.dataImportRun.create({
       data: {
@@ -788,6 +813,86 @@ export class DataImportsService {
   }
 
   // ─── Private helpers ──────────────────────────────────────────────────────
+
+  /**
+   * Clean up previous run artifacts before creating a new one.
+   * Deletes old runs, connections (unless referenced by semantic models),
+   * S3 parquet files, and resets import state.
+   */
+  private async cleanupPreviousRun(dataImport: any): Promise<void> {
+    // 1. Delete all existing run records for this import
+    const deletedRuns = await this.prisma.dataImportRun.deleteMany({
+      where: { importId: dataImport.id },
+    });
+    if (deletedRuns.count > 0) {
+      this.logger.log(`Deleted ${deletedRuns.count} previous run(s) for import ${dataImport.id}`);
+    }
+
+    // 2. Delete import-level connection (if not referenced by semantic models)
+    if (dataImport.connectionId) {
+      const smCount = await this.prisma.semanticModel.count({
+        where: { connectionId: dataImport.connectionId },
+      });
+      if (smCount > 0) {
+        this.logger.log(
+          `Connection ${dataImport.connectionId} is used by ${smCount} semantic model(s), keeping it`,
+        );
+      } else {
+        try {
+          await this.prisma.dataConnection.delete({ where: { id: dataImport.connectionId } });
+          this.logger.log(`Deleted import connection ${dataImport.connectionId}`);
+        } catch (err) {
+          this.logger.warn(
+            `Failed to delete import connection ${dataImport.connectionId}: ${String(err)}`,
+          );
+        }
+      }
+    }
+
+    // 3. Delete per-table connections from outputTables (legacy imports)
+    const outputTables = dataImport.outputTables as any[] | null;
+    if (outputTables && outputTables.length > 0) {
+      const connectionIds = [
+        ...new Set(
+          outputTables
+            .map((t: any) => t.connectionId)
+            .filter(
+              (cid: any): cid is string => !!cid && cid !== dataImport.connectionId,
+            ),
+        ),
+      ];
+      for (const connectionId of connectionIds) {
+        try {
+          await this.prisma.dataConnection.delete({ where: { id: connectionId } });
+        } catch (err) {
+          this.logger.warn(`Failed to delete legacy connection ${connectionId}: ${String(err)}`);
+        }
+      }
+    }
+
+    // 4. Delete S3 parquet files (keep source file)
+    try {
+      const deleted = await this.storageProvider.deleteByPrefix(
+        `data-imports/${dataImport.id}/tables/`,
+      );
+      this.logger.log(`Deleted ${deleted} S3 table files for import ${dataImport.id}`);
+    } catch (err) {
+      this.logger.warn(`Failed to delete S3 table files: ${String(err)}`);
+    }
+
+    // 5. Reset import state
+    await this.prisma.dataImport.update({
+      where: { id: dataImport.id },
+      data: {
+        outputTables: null as any,
+        totalRowCount: null,
+        totalSizeBytes: null,
+        connectionId: null,
+        status: DataImportStatus.pending,
+        errorMessage: null,
+      },
+    });
+  }
 
   /**
    * Read the source file from local cache; fall back to downloading from S3.
