@@ -1,5 +1,7 @@
 import { Logger } from '@nestjs/common';
+import { Readable } from 'stream';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { StorageProvider } from '../../../storage/providers/storage-provider.interface';
 import { SpreadsheetAgentStateType } from '../state';
 import { EmitFn } from '../graph';
 
@@ -8,10 +10,11 @@ const logger = new Logger('PersistNode');
 export interface PersistNodeDeps {
   prisma: PrismaService;
   emit: EmitFn;
+  storageProvider: StorageProvider;
 }
 
 export function createPersistNode(deps: PersistNodeDeps) {
-  const { prisma, emit } = deps;
+  const { prisma, emit, storageProvider } = deps;
 
   return async (state: SpreadsheetAgentStateType): Promise<Partial<SpreadsheetAgentStateType>> => {
     emit({ type: 'phase_start', phase: 'persist', label: 'Persisting results' });
@@ -20,6 +23,30 @@ export function createPersistNode(deps: PersistNodeDeps) {
 
     try {
       const successfulResults = extractionResults.filter((r) => r.status === 'success');
+
+      // 0. Clean up tables from previous runs
+      const existingTables = await prisma.spreadsheetTable.findMany({
+        where: { projectId },
+        select: { id: true, outputPath: true },
+      });
+
+      if (existingTables.length > 0) {
+        // Delete old Parquet files from S3
+        for (const oldTable of existingTables) {
+          if (oldTable.outputPath) {
+            try {
+              await storageProvider.delete(oldTable.outputPath);
+            } catch (err) {
+              logger.warn(
+                `Failed to delete old Parquet file ${oldTable.outputPath}: ${(err as Error).message}`,
+              );
+            }
+          }
+        }
+
+        await prisma.spreadsheetTable.deleteMany({ where: { projectId } });
+        logger.log(`Deleted ${existingTables.length} existing tables for project ${projectId}`);
+      }
 
       // 1. Create SpreadsheetTable records for each successful extraction
       for (const result of successfulResults) {
@@ -67,7 +94,7 @@ export function createPersistNode(deps: PersistNodeDeps) {
         },
       });
 
-      // 3. Generate catalog.json (as JSON — actual cloud upload is TODO)
+      // 3. Generate catalog.json and upload to S3
       const catalog = {
         projectId,
         generatedAt: new Date().toISOString(),
@@ -95,10 +122,19 @@ export function createPersistNode(deps: PersistNodeDeps) {
         tokensUsed: state.tokensUsed,
       };
 
-      // TODO: Upload catalog.json to cloud storage at <outputPrefix>/catalog.json
-      logger.log(
-        `Catalog generated for project ${projectId}: ${JSON.stringify(catalog).length} bytes`,
-      );
+      // Upload catalog.json to S3
+      const catalogKey = `spreadsheet-agent/${projectId}/catalog.json`;
+      const catalogBuffer = Buffer.from(JSON.stringify(catalog, null, 2));
+      try {
+        await storageProvider.upload(catalogKey, Readable.from(catalogBuffer), {
+          mimeType: 'application/json',
+          metadata: { projectId },
+        });
+        logger.log(`Catalog uploaded to S3: ${catalogKey}`);
+      } catch (err) {
+        logger.error(`Failed to upload catalog to S3: ${(err as Error).message}`);
+        // Non-fatal — table records are already persisted
+      }
 
       emit({
         type: 'progress',

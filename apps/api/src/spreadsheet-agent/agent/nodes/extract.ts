@@ -1,13 +1,21 @@
+import { readFileSync, statSync, createReadStream, unlinkSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { Logger } from '@nestjs/common';
+import * as XLSX from 'xlsx';
 import { SpreadsheetAgentStateType } from '../state';
 import { ExtractionPlan, ExtractionResult, PlanModification } from '../types';
 import { EmitFn } from '../graph';
+import { StorageProvider } from '../../../storage/providers/storage-provider.interface';
+import { applyColumnTransformations } from '../utils/type-coercion';
+import { writeParquet } from '../utils/duckdb-writer';
+import { ensureLocalFile } from '../utils/ensure-local-file';
 
 const logger = new Logger('ExtractNode');
 
 // ─── Node factory ───
 
-export function createExtractNode(emit: EmitFn) {
+export function createExtractNode(emit: EmitFn, storageProvider: StorageProvider) {
   return async (
     state: SpreadsheetAgentStateType,
   ): Promise<Partial<SpreadsheetAgentStateType>> => {
@@ -40,6 +48,7 @@ export function createExtractNode(emit: EmitFn) {
       concurrency,
       state,
       emit,
+      storageProvider,
       (count: number) => {
         completedTables = count;
       },
@@ -72,6 +81,7 @@ async function processTablesWithConcurrency(
   concurrency: number,
   state: SpreadsheetAgentStateType,
   emit: EmitFn,
+  storageProvider: StorageProvider,
   onProgress: (completedCount: number) => void,
   totalTables: number,
 ): Promise<PromiseSettledResult<ExtractionResult>[]> {
@@ -92,7 +102,7 @@ async function processTablesWithConcurrency(
       new Promise<ExtractionResult>((resolve, reject) => {
         const task = async () => {
           try {
-            const result = await extractTable(table, state, emit);
+            const result = await extractTable(table, state, emit, storageProvider);
             completedCount++;
             onProgress(completedCount);
 
@@ -131,30 +141,66 @@ async function extractTable(
   table: ExtractionPlan['tables'][0],
   state: SpreadsheetAgentStateType,
   emit: EmitFn,
+  storageProvider: StorageProvider,
 ): Promise<ExtractionResult> {
   emit({ type: 'table_start', tableId: table.tableName, tableName: table.tableName });
-
   const startTime = Date.now();
 
   try {
-    // TODO: Real implementation will:
-    // 1. Build DuckDB SQL from the table's column definitions + transformations
-    // 2. Execute in Python sandbox (read source → transform → COPY TO Parquet at /tmp)
-    // 3. Retrieve Parquet file from sandbox response
-    // 4. Upload to cloud storage via StorageProvider
-    // 5. Return row count, size, column null counts
+    // 1. Find the source file
+    const file = state.files.find((f) => f.fileId === table.sourceFileId);
+    if (!file) {
+      throw new Error(
+        `Source file ${table.sourceFileId} not found for table ${table.tableName}`,
+      );
+    }
 
-    // Placeholder extraction result
+    // 2. Ensure file is available locally (download from S3 if needed)
+    const localPath = await ensureLocalFile(file, storageProvider);
+
+    // 3. Read data from the specific sheet region
+    const rawRows = readSheetData(localPath, table);
+
+    // 4. Apply column transformations and type coercions
+    const { transformedRows, nullCounts } = applyColumnTransformations(rawRows, table.columns);
+
+    // 5. Write to local Parquet via DuckDB
+    const parquetDir = join(tmpdir(), 'spreadsheet-agent', 'parquet', state.projectId);
+    const localParquetPath = join(parquetDir, `${table.tableName}.parquet`);
+    await writeParquet(transformedRows, table.columns, localParquetPath);
+
+    // 6. Upload Parquet to S3
+    const s3Key = `spreadsheet-agent/${state.projectId}/${table.tableName}.parquet`;
+    const fileStream = createReadStream(localParquetPath);
+    await storageProvider.upload(s3Key, fileStream, {
+      mimeType: 'application/octet-stream',
+      metadata: {
+        projectId: state.projectId,
+        tableName: table.tableName,
+        rowCount: String(transformedRows.length),
+      },
+    });
+
+    // 7. Get real file size
+    const fileStat = statSync(localParquetPath);
+
+    // 8. Clean up local Parquet file
+    try {
+      unlinkSync(localParquetPath);
+    } catch {
+      // ignore cleanup errors
+    }
+
     const result: ExtractionResult = {
       tableId: table.tableName,
       tableName: table.tableName,
-      outputPath: table.outputPath,
-      rowCount: table.estimatedRows,
-      sizeBytes: 0,
+      outputPath: s3Key,
+      rowCount: transformedRows.length,
+      sizeBytes: Number(fileStat.size),
       columns: table.columns.map((c) => ({
         name: c.outputName,
         type: c.outputType,
-        nullCount: 0,
+        nullCount: nullCounts.get(c.outputName) ?? 0,
       })),
       status: 'success',
       durationMs: Date.now() - startTime,
@@ -192,6 +238,92 @@ async function extractTable(
       durationMs: Date.now() - startTime,
     };
   }
+}
+
+// ─── Sheet data reader ───
+
+/**
+ * Read data from a specific sheet region based on the extraction plan's coordinates.
+ * Returns raw rows keyed by source column name.
+ */
+function readSheetData(
+  localPath: string,
+  table: ExtractionPlan['tables'][0],
+): Record<string, unknown>[] {
+  const buffer = readFileSync(localPath);
+  const workbook = XLSX.read(buffer, { type: 'buffer' });
+  const sheet = workbook.Sheets[table.sourceSheetName];
+
+  if (!sheet) {
+    throw new Error(`Sheet "${table.sourceSheetName}" not found in file`);
+  }
+
+  const ref = sheet['!ref'];
+  if (!ref) {
+    logger.warn(`Sheet "${table.sourceSheetName}" has no data range`);
+    return [];
+  }
+
+  const fullRange = XLSX.utils.decode_range(ref);
+
+  // Get headers from the header row
+  const headerRowData = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+    header: 1,
+    range: {
+      s: { r: table.headerRow, c: fullRange.s.c },
+      e: { r: table.headerRow, c: fullRange.e.c },
+    },
+    defval: '',
+  }) as unknown[][];
+
+  if (!headerRowData.length || !headerRowData[0]) {
+    throw new Error(
+      `No headers found at row ${table.headerRow} in sheet "${table.sourceSheetName}"`,
+    );
+  }
+
+  const headers = (headerRowData[0] as unknown[]).map((h) => String(h ?? '').trim());
+
+  // Build column index map: source column name → column index
+  const sourceColumns = new Set(table.columns.map((c) => c.sourceName));
+  const colIndexMap = new Map<string, number>();
+  headers.forEach((h, idx) => {
+    if (sourceColumns.has(h)) {
+      colIndexMap.set(h, idx);
+    }
+  });
+
+  // Read data rows
+  const dataEndRow = table.dataEndRow ?? fullRange.e.r;
+  const dataRange = {
+    s: { r: table.dataStartRow, c: fullRange.s.c },
+    e: { r: dataEndRow, c: fullRange.e.c },
+  };
+
+  const rawGrid = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+    header: 1,
+    range: dataRange,
+    defval: null,
+    blankrows: false,
+  }) as unknown[][];
+
+  // Build skip rows set (adjust relative to dataStartRow)
+  const skipSet = new Set((table.skipRows ?? []).map((r) => r - table.dataStartRow));
+
+  // Map to row objects keyed by source column name
+  return rawGrid
+    .filter((_, idx) => !skipSet.has(idx))
+    .map((row) => {
+      const obj: Record<string, unknown> = {};
+      for (const col of table.columns) {
+        const idx = colIndexMap.get(col.sourceName);
+        obj[col.sourceName] =
+          idx !== undefined && idx < (row as unknown[]).length
+            ? (row as unknown[])[idx]
+            : null;
+      }
+      return obj;
+    });
 }
 
 // ─── Plan modification helpers ───

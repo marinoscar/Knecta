@@ -30,11 +30,11 @@ const FILE_STATUS_CONFIG: Record<
   { label: string; color: 'default' | 'info' | 'success' | 'error' | 'warning' }
 > = {
   pending: { label: 'Pending', color: 'default' },
-  uploading: { label: 'Uploading', color: 'info' },
-  uploaded: { label: 'Uploaded', color: 'success' },
-  ingested: { label: 'Ingested', color: 'success' },
+  analyzing: { label: 'Analyzing', color: 'info' },
+  analyzed: { label: 'Analyzed', color: 'success' },
+  extracting: { label: 'Extracting', color: 'info' },
+  ready: { label: 'Ready', color: 'success' },
   failed: { label: 'Failed', color: 'error' },
-  deleted: { label: 'Deleted', color: 'warning' },
 };
 
 const formatFileSize = (bytes: number): string => {

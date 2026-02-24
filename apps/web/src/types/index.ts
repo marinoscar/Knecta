@@ -691,7 +691,7 @@ export interface AppNotification {
 // ==========================================
 
 export type SpreadsheetProjectStatus = 'draft' | 'processing' | 'review_pending' | 'ready' | 'failed' | 'partial';
-export type SpreadsheetFileStatus = 'pending' | 'uploading' | 'uploaded' | 'ingested' | 'failed' | 'deleted';
+export type SpreadsheetFileStatus = 'pending' | 'analyzing' | 'analyzed' | 'extracting' | 'ready' | 'failed';
 export type SpreadsheetTableStatus = 'pending' | 'extracting' | 'ready' | 'failed';
 export type SpreadsheetRunStatus =
   | 'pending'

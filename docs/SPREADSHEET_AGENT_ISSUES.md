@@ -444,12 +444,52 @@ The `spreadsheet_files.storagePath` field stores this /tmp path. If the containe
 | 7 | Project status stuck at processing | High | Data | ✅ Fixed (PR #58) |
 | 8 | claimRun overwrites startedAt | Medium | Logic | ✅ Fixed (PR #58) |
 | 9 | Timer resets on resume | Low | UX | ✅ Fixed (PR #58) |
-| **10** | **Extract node is a stub** | **BLOCKER** | **Core Feature** | ❌ Not built |
-| **11** | **No S3 upload pipeline** | **BLOCKER** | **Core Feature** | ❌ Not built |
-| **12** | **Table preview not implemented** | **High** | **Feature** | ❌ Not built |
-| **13** | **Table download not implemented** | **High** | **Feature** | ❌ Not built |
-| **14** | File status never set to "extracted" | Medium | Data | ❌ Open |
-| **15** | Sample1.xls produced 0 tables | Medium | Quality | ❌ Needs investigation |
-| **16** | Duplicate tables across runs | Medium | Data | ❌ Open |
-| **17** | Validation meaningless on stub data | Low | Tech Debt | ⏳ Deferred until extract is real |
-| **18** | Source files lost on container restart | High | Production | ❌ Open (part of Issue 11) |
+| **10** | **Extract node is a stub** | **BLOCKER** | **Core Feature** | ✅ Fixed — Real XLSX→DuckDB→Parquet→S3 pipeline |
+| **11** | **No S3 upload pipeline** | **BLOCKER** | **Core Feature** | ✅ Fixed — StorageProvider wired into agent; source files, Parquet, and catalog uploaded to S3 |
+| **12** | **Table preview not implemented** | **High** | **Feature** | ✅ Fixed — DuckDB read_parquet() from S3 with limit |
+| **13** | **Table download not implemented** | **High** | **Feature** | ✅ Fixed — Signed S3 URL via StorageProvider |
+| **14** | File status never set to "extracted" | Medium | Data | ✅ Fixed — File status → ready on extract phase completion |
+| **15** | Sample1.xls produced 0 tables | Medium | Quality | ❌ Open — Investigation deferred |
+| **16** | Duplicate tables across runs | Medium | Data | ✅ Fixed — Old tables + S3 files deleted before persisting new ones |
+| **17** | Validation meaningless on stub data | Low | Tech Debt | ⏳ Deferred — Now validates real data; thresholds to be tuned |
+| **18** | Source files lost on container restart | High | Production | ✅ Fixed — Source files uploaded to S3 during upload step; ingest downloads from S3 with local cache |
+
+---
+
+## Part 7: Resolution Notes (feat/extract-pipeline branch)
+
+**Date**: 2026-02-23
+**Branch**: `feat/extract-pipeline`
+
+### Architecture
+
+The extract pipeline uses a 3-layer approach:
+1. **XLSX library** reads raw cell data from the source spreadsheet's specific sheet region
+2. **Type coercion utility** applies transformations (TRIM, UPPER, CAST, etc.) and type conversions
+3. **DuckDB in-memory** writes typed data to Parquet format via `COPY TO`
+
+S3 integration reuses the existing `StorageProvider` abstraction (S3StorageProvider) already used by the Storage Objects module. No new AWS SDK dependencies were added.
+
+### Key Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `apps/api/src/spreadsheet-agent/agent/nodes/extract.ts` | Real extract pipeline: XLSX read → transform → DuckDB Parquet → S3 upload |
+| `apps/api/src/spreadsheet-agent/agent/utils/type-coercion.ts` | SQL-like transformation parser + type coercion (VARCHAR, INTEGER, DOUBLE, DATE, etc.) |
+| `apps/api/src/spreadsheet-agent/agent/utils/duckdb-writer.ts` | In-memory DuckDB Parquet writer with batch INSERT |
+| `apps/api/src/spreadsheet-agent/agent/utils/ensure-local-file.ts` | S3 download fallback with local disk cache |
+| `apps/api/src/spreadsheet-agent/agent/nodes/persist.ts` | Table dedup + catalog.json S3 upload |
+| `apps/api/src/spreadsheet-agent/spreadsheet-agent.service.ts` | S3 file upload, DuckDB table preview, signed URL download |
+
+### Tests
+
+| Test File | Coverage |
+|-----------|----------|
+| `apps/api/test/spreadsheet-agent/type-coercion.spec.ts` | 82 tests: all type branches, transformations, edge cases |
+| `apps/api/test/spreadsheet-agent/duckdb-writer.spec.ts` | 9 tests: Parquet write/readback, empty rows, large batches |
+| `apps/api/test/spreadsheet-agent/service-preview-download.spec.ts` | 20 tests: preview + download with mocked dependencies |
+
+### Remaining
+
+- **Issue 15** (Sample1.xls): Needs investigation — may be a file format or LLM analysis issue
+- **Issue 17** (Validation tuning): Validation now runs on real data. Thresholds (row count 0.1x-2.0x, NULL ratio 0.8) should be reviewed after observing production runs
