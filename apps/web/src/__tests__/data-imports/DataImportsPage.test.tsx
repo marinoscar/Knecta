@@ -5,7 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../mocks/server';
 import { render } from '../utils/test-utils';
 import DataImportsPage from '../../pages/DataImportsPage';
-import type { DataImport, DataImportRun } from '../../types';
+import type { DataImport } from '../../types';
 
 // Mock useNavigate so navigation calls can be asserted
 const mockNavigate = vi.fn();
@@ -63,37 +63,12 @@ function buildImport(overrides: Partial<DataImport> = {}): DataImport {
   };
 }
 
-function buildRun(overrides: Partial<DataImportRun> = {}): DataImportRun {
-  return {
-    id: 'run-1',
-    importId: 'import-1',
-    status: 'completed',
-    currentPhase: null,
-    progress: null,
-    config: null,
-    errorMessage: null,
-    startedAt: '2026-02-01T10:00:00Z',
-    completedAt: '2026-02-01T10:01:30Z',
-    createdByUserId: 'user-1',
-    createdAt: '2026-02-01T09:59:00Z',
-    updatedAt: '2026-02-01T10:01:30Z',
-    ...overrides,
-  };
-}
-
 const emptyImportsResponse = {
   items: [],
   total: 0,
   page: 1,
   pageSize: 20,
   totalPages: 0,
-};
-
-const emptyRunsResponse = {
-  runs: [],
-  total: 0,
-  page: 1,
-  pageSize: 20,
 };
 
 describe('DataImportsPage', () => {
@@ -103,9 +78,6 @@ describe('DataImportsPage', () => {
     server.use(
       http.get('*/api/data-imports', () =>
         HttpResponse.json({ data: emptyImportsResponse }),
-      ),
-      http.get('*/api/data-imports/runs', () =>
-        HttpResponse.json(emptyRunsResponse),
       ),
     );
   });
@@ -129,23 +101,12 @@ describe('DataImportsPage', () => {
       });
     });
 
-    it('renders Imports and Runs tabs', async () => {
+    it('does not render any tab navigation (no Imports/Runs tabs)', async () => {
       render(<DataImportsPage />);
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Imports' })).toBeInTheDocument();
-        expect(screen.getByRole('tab', { name: 'Runs' })).toBeInTheDocument();
-      });
-    });
-
-    it('Imports tab is selected by default', async () => {
-      render(<DataImportsPage />);
-
-      await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Imports' })).toHaveAttribute(
-          'aria-selected',
-          'true',
-        );
+        // The simplified DataImportsPage has no tab bar — only a flat list view
+        expect(screen.queryByRole('tab')).not.toBeInTheDocument();
       });
     });
 
@@ -477,88 +438,27 @@ describe('DataImportsPage', () => {
     });
   });
 
-  describe('Runs tab', () => {
-    it('switches to Runs tab and triggers data fetch', async () => {
-      const user = userEvent.setup();
-      let runsFetched = false;
-
-      server.use(
-        http.get('*/api/data-imports/runs', () => {
-          runsFetched = true;
-          return HttpResponse.json(emptyRunsResponse);
-        }),
-      );
-
+  describe('No Runs tab', () => {
+    it('does not show any Runs-related tab or runs table', async () => {
       render(<DataImportsPage />);
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Runs' })).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByRole('tab', { name: 'Runs' }));
-
-      await waitFor(() => {
-        expect(runsFetched).toBe(true);
+        // The simplified page shows only the flat import list with no Runs tab
+        expect(screen.queryByRole('tab', { name: /runs/i })).not.toBeInTheDocument();
       });
     });
 
-    it('shows empty state when there are no runs', async () => {
-      const user = userEvent.setup();
-
-      render(<DataImportsPage />);
-
-      await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Runs' })).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByRole('tab', { name: 'Runs' }));
-
-      await waitFor(() => {
-        expect(screen.getByText('No runs found')).toBeInTheDocument();
-      });
-    });
-
-    it('renders runs table with correct column headers', async () => {
-      const user = userEvent.setup();
-      const run = buildRun();
-
+    it('does not render a runs-specific column header', async () => {
       server.use(
-        http.get('*/api/data-imports/runs', () =>
-          HttpResponse.json({ runs: [run], total: 1, page: 1, pageSize: 20 }),
-        ),
-      );
-
-      render(<DataImportsPage />);
-
-      await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Runs' })).toBeInTheDocument();
-      });
-
-      await user.click(screen.getByRole('tab', { name: 'Runs' }));
-
-      await waitFor(() => {
-        expect(
-          screen.getByRole('columnheader', { name: 'Import' }),
-        ).toBeInTheDocument();
-        expect(
-          screen.getByRole('columnheader', { name: 'Status' }),
-        ).toBeInTheDocument();
-        expect(
-          screen.getByRole('columnheader', { name: 'Duration' }),
-        ).toBeInTheDocument();
-      });
-    });
-
-    it('renders run status chip', async () => {
-      const user = userEvent.setup();
-
-      server.use(
-        http.get('*/api/data-imports/runs', () =>
+        http.get('*/api/data-imports', () =>
           HttpResponse.json({
-            runs: [buildRun({ status: 'completed' })],
-            total: 1,
-            page: 1,
-            pageSize: 20,
+            data: {
+              items: [buildImport()],
+              total: 1,
+              page: 1,
+              pageSize: 20,
+              totalPages: 1,
+            },
           }),
         ),
       );
@@ -566,91 +466,11 @@ describe('DataImportsPage', () => {
       render(<DataImportsPage />);
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'Runs' })).toBeInTheDocument();
+        expect(screen.getByText('Sales Data')).toBeInTheDocument();
       });
 
-      await user.click(screen.getByRole('tab', { name: 'Runs' }));
-
-      await waitFor(() => {
-        expect(screen.getByText('Completed')).toBeInTheDocument();
-      });
-    });
-
-    it('renders formatted duration for completed runs', async () => {
-      const user = userEvent.setup();
-
-      server.use(
-        http.get('*/api/data-imports/runs', () =>
-          HttpResponse.json({
-            runs: [
-              buildRun({
-                startedAt: '2026-02-01T10:00:00Z',
-                completedAt: '2026-02-01T10:01:30Z',
-              }),
-            ],
-            total: 1,
-            page: 1,
-            pageSize: 20,
-          }),
-        ),
-      );
-
-      render(<DataImportsPage />);
-
-      await user.click(screen.getByRole('tab', { name: 'Runs' }));
-
-      await waitFor(() => {
-        expect(screen.getByText('1:30')).toBeInTheDocument();
-      });
-    });
-
-    it('opens delete run confirmation dialog', async () => {
-      const user = userEvent.setup();
-      const run = buildRun({ id: 'run-del', status: 'failed' });
-
-      server.use(
-        http.get('*/api/data-imports/runs', () =>
-          HttpResponse.json({
-            runs: [run],
-            total: 1,
-            page: 1,
-            pageSize: 20,
-          }),
-        ),
-      );
-
-      render(<DataImportsPage />);
-
-      await user.click(screen.getByRole('tab', { name: 'Runs' }));
-
-      await waitFor(() => {
-        expect(screen.getByText('Failed')).toBeInTheDocument();
-      });
-
-      // Find the delete button in the runs table row
-      const row = screen.getByText('import-1').closest('tr')!;
-      const buttons = within(row).getAllByRole('button');
-      await user.click(buttons[buttons.length - 1]);
-
-      await waitFor(() => {
-        expect(screen.getByText('Delete Run')).toBeInTheDocument();
-        expect(
-          screen.getByText(/are you sure you want to delete this run/i),
-        ).toBeInTheDocument();
-      });
-    });
-
-    it('shows runs status filter', async () => {
-      const user = userEvent.setup();
-
-      render(<DataImportsPage />);
-
-      await user.click(screen.getByRole('tab', { name: 'Runs' }));
-
-      await waitFor(() => {
-        const comboboxes = screen.getAllByRole('combobox');
-        expect(comboboxes.length).toBeGreaterThanOrEqual(1);
-      });
+      // Runs tables typically have "Duration" or "Import" column headers — neither should exist here
+      expect(screen.queryByRole('columnheader', { name: 'Duration' })).not.toBeInTheDocument();
     });
   });
 });
