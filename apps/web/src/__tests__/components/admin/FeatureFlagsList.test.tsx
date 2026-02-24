@@ -71,7 +71,8 @@ describe('FeatureFlagsList', () => {
 
       const flagNames = screen
         .getAllByRole('listitem')
-        .map((item) => item.textContent?.match(/^[a-z_]+/)?.[0]);
+        .map((item) => item.textContent?.match(/^[a-z_]+/)?.[0])
+        .filter(Boolean);
 
       expect(flagNames).toEqual([
         'allow_beta_access',
@@ -97,7 +98,7 @@ describe('FeatureFlagsList', () => {
       );
 
       const disabledFlags = screen.getAllByText('Disabled');
-      expect(disabledFlags).toHaveLength(2);
+      expect(disabledFlags).toHaveLength(3);
     });
 
     it('should render switch for each flag', () => {
@@ -107,7 +108,7 @@ describe('FeatureFlagsList', () => {
       );
 
       const switches = screen.getAllByRole('checkbox');
-      expect(switches).toHaveLength(3);
+      expect(switches).toHaveLength(4);
     });
 
     it('should render delete button for each flag', () => {
@@ -131,31 +132,29 @@ describe('FeatureFlagsList', () => {
 
       const switches = screen.getAllByRole('checkbox') as HTMLInputElement[];
 
-      // Sorted order: allow_beta_access (false), enable_new_feature (true), maintenance_mode (false)
-      expect(switches[0].checked).toBe(false); // allow_beta_access
-      expect(switches[1].checked).toBe(true);  // enable_new_feature
-      expect(switches[2].checked).toBe(false); // maintenance_mode
+      // New order: webSearchEnabled (false), allow_beta_access (false), enable_new_feature (true), maintenance_mode (false)
+      expect(switches[0].checked).toBe(false); // webSearchEnabled (not in flags → false)
+      expect(switches[1].checked).toBe(false); // allow_beta_access
+      expect(switches[2].checked).toBe(true);  // enable_new_feature
+      expect(switches[3].checked).toBe(false); // maintenance_mode
     });
   });
 
   describe('Empty State', () => {
-    it('should show empty state message when no flags exist', () => {
+    it('should show built-in features section when no custom flags exist', () => {
       render(<FeatureFlagsList flags={{}} onSave={mockOnSave} />, {
         wrapperOptions: { user: mockAdminUser },
       });
-
-      expect(
-        screen.getByText('No feature flags configured')
-      ).toBeInTheDocument();
+      expect(screen.getByText('Built-in Features')).toBeInTheDocument();
+      expect(screen.getByText('Web Search')).toBeInTheDocument();
     });
 
-    it('should not render list when no flags exist', () => {
+    it('should render built-in features list when no custom flags exist', () => {
       render(<FeatureFlagsList flags={{}} onSave={mockOnSave} />, {
         wrapperOptions: { user: mockAdminUser },
       });
-
-      const list = screen.queryByRole('list');
-      expect(list).not.toBeInTheDocument();
+      const list = screen.getByRole('list');
+      expect(list).toBeInTheDocument();
     });
 
     it('should still show Add Flag button in empty state', () => {
@@ -240,13 +239,13 @@ describe('FeatureFlagsList', () => {
       );
 
       const switches = screen.getAllByRole('checkbox') as HTMLInputElement[];
-      const firstSwitch = switches[0]; // allow_beta_access - initially disabled
+      const firstSwitch = switches[0]; // webSearchEnabled - initially disabled
 
       await user.click(firstSwitch);
 
       await waitFor(() => {
         expect(screen.getAllByText('Enabled')).toHaveLength(2);
-        expect(screen.getAllByText('Disabled')).toHaveLength(1);
+        expect(screen.getAllByText('Disabled')).toHaveLength(2);
       });
     });
 
@@ -504,9 +503,9 @@ describe('FeatureFlagsList', () => {
         { wrapperOptions: { user: mockAdminUser } }
       );
 
-      // Initial count
+      // Initial count (1 built-in + 3 custom)
       const initialSwitches = screen.getAllByRole('checkbox');
-      expect(initialSwitches).toHaveLength(3);
+      expect(initialSwitches).toHaveLength(4);
 
       const addButton = screen.getByRole('button', { name: /add flag/i });
       await user.click(addButton);
@@ -530,9 +529,9 @@ describe('FeatureFlagsList', () => {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       });
 
-      // Should still only have 3 flags
+      // Should still only have 4 flags (1 built-in + 3 custom)
       const finalSwitches = screen.getAllByRole('checkbox');
-      expect(finalSwitches).toHaveLength(3);
+      expect(finalSwitches).toHaveLength(4);
     });
 
     it('should clear input field after adding flag', async () => {
@@ -632,11 +631,11 @@ describe('FeatureFlagsList', () => {
 
       await waitFor(() => {
         const switches = screen.getAllByRole('checkbox');
-        expect(switches).toHaveLength(2);
+        expect(switches).toHaveLength(3);
       });
     });
 
-    it('should show empty state when all flags are deleted', async () => {
+    it('should hide custom flags section when all custom flags are deleted', async () => {
       const user = userEvent.setup();
 
       render(
@@ -652,9 +651,10 @@ describe('FeatureFlagsList', () => {
       await user.click(deleteIconButton!);
 
       await waitFor(() => {
-        expect(
-          screen.getByText('No feature flags configured')
-        ).toBeInTheDocument();
+        // Custom Flags section header should disappear
+        expect(screen.queryByText('Custom Flags')).not.toBeInTheDocument();
+        // Built-in Features section remains
+        expect(screen.getByText('Built-in Features')).toBeInTheDocument();
       });
     });
   });
@@ -681,7 +681,7 @@ describe('FeatureFlagsList', () => {
       );
 
       const switches = screen.getAllByRole('checkbox');
-      await user.click(switches[0]); // Toggle allow_beta_access
+      await user.click(switches[1]); // Toggle allow_beta_access (switches[0] is webSearch)
 
       const saveButton = screen.getByRole('button', {
         name: /save changes/i,
@@ -1362,11 +1362,11 @@ describe('FeatureFlagsList', () => {
         });
       }
 
-      // Verify alphabetical order
+      // Verify alphabetical order (filter out built-in items that don't match snake_case pattern)
       const listItems = screen.getAllByRole('listitem');
-      const displayedNames = listItems.map(
-        (item) => item.textContent?.match(/^[a-z_]+/)?.[0]
-      );
+      const displayedNames = listItems
+        .map((item) => item.textContent?.match(/^[a-z_]+/)?.[0])
+        .filter(Boolean);
 
       expect(displayedNames).toEqual(['alpha_flag', 'middle_flag', 'zebra_flag']);
     });
