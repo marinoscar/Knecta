@@ -382,6 +382,7 @@ model DataConnection {
   createdByUser     User?              @relation("UserDataConnections", fields: [createdByUserId], references: [id], onDelete: SetNull)
   semanticModels    SemanticModel[]    @relation("ConnectionSemanticModels")
   semanticModelRuns SemanticModelRun[] @relation("ConnectionSemanticModelRuns")
+  dataImports       DataImport[]       @relation("ImportConnection")
 
   @@index([createdByUserId])
   @@index([dbType])
@@ -642,14 +643,17 @@ model DataImport {
   totalSizeBytes      BigInt?          @map("total_size_bytes")
   errorMessage        String?          @map("error_message") @db.Text
   createdByUserId     String?          @map("created_by_user_id") @db.Uuid
+  connectionId        String?          @map("connection_id") @db.Uuid
   createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt           DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
   // Relations
   createdByUser User?           @relation("UserDataImports", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  connection    DataConnection? @relation("ImportConnection", fields: [connectionId], references: [id], onDelete: SetNull)
   runs          DataImportRun[]
 
   @@index([createdByUserId])
+  @@index([connectionId])
   @@index([status])
   @@index([createdAt])
   @@map("data_imports")
