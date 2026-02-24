@@ -37,6 +37,11 @@ function routeFromStart(
 function routeAfterDesign(
   state: SpreadsheetAgentStateType,
 ): 'extract' | typeof END {
+  // During validation revision loops, skip review and go straight to extract.
+  // The user already approved the plan once; revisions shouldn't pause again.
+  if (state.revisionCount > 0) {
+    return 'extract';
+  }
   if (state.config.reviewMode === 'review') {
     return END;
   }
