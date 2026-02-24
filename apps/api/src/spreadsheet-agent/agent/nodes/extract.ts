@@ -285,13 +285,36 @@ function readSheetData(
   const headers = (headerRowData[0] as unknown[]).map((h) => String(h ?? '').trim());
 
   // Build column index map: source column name → column index
-  const sourceColumns = new Set(table.columns.map((c) => c.sourceName));
+  // Use case-insensitive matching with trimming to handle LLM/spreadsheet mismatches
   const colIndexMap = new Map<string, number>();
+  const headerLowerMap = new Map<string, number>();
   headers.forEach((h, idx) => {
-    if (sourceColumns.has(h)) {
-      colIndexMap.set(h, idx);
+    // Store the first occurrence for case-insensitive lookup
+    const key = h.toLowerCase();
+    if (!headerLowerMap.has(key)) {
+      headerLowerMap.set(key, idx);
     }
   });
+
+  for (const col of table.columns) {
+    const exactIdx = headers.indexOf(col.sourceName);
+    if (exactIdx !== -1) {
+      colIndexMap.set(col.sourceName, exactIdx);
+    } else {
+      // Fallback: case-insensitive match
+      const lowerIdx = headerLowerMap.get(col.sourceName.trim().toLowerCase());
+      if (lowerIdx !== undefined) {
+        colIndexMap.set(col.sourceName, lowerIdx);
+        logger.debug(
+          `Column "${col.sourceName}" matched header "${headers[lowerIdx]}" (case-insensitive) in table "${table.tableName}"`,
+        );
+      } else {
+        logger.warn(
+          `Column "${col.sourceName}" not found in sheet "${table.sourceSheetName}" headers [${headers.join(', ')}] for table "${table.tableName}"`,
+        );
+      }
+    }
+  }
 
   // Read data rows
   const dataEndRow = table.dataEndRow ?? fullRange.e.r;
