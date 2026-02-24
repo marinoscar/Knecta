@@ -28,7 +28,6 @@ import { DataAgentModule } from './data-agent/data-agent.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OAuthModule } from './oauth/oauth.module';
 import { McpModule } from './mcp/mcp.module';
-import { SpreadsheetAgentModule } from './spreadsheet-agent/spreadsheet-agent.module';
 import { DataImportsModule } from './data-imports/data-imports.module';
 
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -79,7 +78,6 @@ import configuration from './config/configuration';
     NotificationsModule,
     OAuthModule,
     McpModule,
-    SpreadsheetAgentModule,
     DataImportsModule,
 
     // Test modules (non-production only)
