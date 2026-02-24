@@ -16,7 +16,7 @@ import { DuckDBSessionOptions } from './duckdb.util';
 
 /**
  * S3Driver implements schema discovery and query execution for Amazon S3
- * (and S3-compatible stores such as MinIO) backed by Parquet files.
+ * backed by Parquet files.
  *
  * Mapping conventions:
  *   database = S3 bucket name
@@ -32,8 +32,7 @@ import { DuckDBSessionOptions } from './duckdb.util';
  *   params.options.bucket    = restrict discovery to a single bucket (optional)
  *   params.options.pathPrefix = path prefix inside the bucket to scope all
  *                               listing operations (optional, no leading slash)
- *   params.options.endpointUrl = custom endpoint for S3-compatible stores
- *                                (e.g. http://minio:9000)
+ *   params.options.endpointUrl = custom S3-compatible endpoint URL (optional)
  */
 export class S3Driver extends DataLakeBaseDriver {
   // ----------------------------------------
@@ -363,7 +362,6 @@ export class S3Driver extends DataLakeBaseDriver {
       ...(endpointUrl
         ? {
             endpoint: endpointUrl,
-            // Required for MinIO and other S3-compatible stores
             forcePathStyle: true,
           }
         : {}),

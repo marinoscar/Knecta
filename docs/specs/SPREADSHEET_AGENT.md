@@ -28,7 +28,7 @@
 
 ## Feature Overview
 
-The Spreadsheet Agent enables users to upload multiple spreadsheet files (Excel, CSV, JSON, and other DuckDB-supported formats), have an AI agent analyze their structure, extract clean data tables, and export them as Parquet files to cloud storage (S3, Azure Blob, or MinIO). The agent handles real-world spreadsheet complexity — inconsistent headers, multiple logical tables per sheet, mixed data types, metadata and summary rows, merged cells, and pivot layouts — and produces clean, well-typed, properly named data tables ready for downstream analytics.
+The Spreadsheet Agent enables users to upload multiple spreadsheet files (Excel, CSV, JSON, and other DuckDB-supported formats), have an AI agent analyze their structure, extract clean data tables, and export them as Parquet files to cloud storage (S3 or Azure Blob). The agent handles real-world spreadsheet complexity — inconsistent headers, multiple logical tables per sheet, mixed data types, metadata and summary rows, merged cells, and pivot layouts — and produces clean, well-typed, properly named data tables ready for downstream analytics.
 
 ### Core Capabilities
 
@@ -37,7 +37,7 @@ The Spreadsheet Agent enables users to upload multiple spreadsheet files (Excel,
 - **Schema Design**: Holistic LLM pass designs a clean target schema with proper table names, column names, data types, and cross-file relationships
 - **Review Gate**: Optional pause for user to review and modify the extraction plan before processing (configurable: `auto` or `review` mode)
 - **DuckDB-Powered Extraction**: In-process analytical engine for SQL transformations, type casting, cleaning, and deduplication
-- **Cloud Storage Output**: Parquet files written directly to S3, Azure Blob, or MinIO via DuckDB extensions
+- **Cloud Storage Output**: Parquet files written directly to S3 or Azure Blob via DuckDB extensions
 - **Parallel Processing**: File-level, sheet-level, and table-level parallelism with configurable concurrency
 - **Incremental Re-processing**: SHA-256 file hashing enables change detection; only modified files are re-analyzed
 - **Run Tracking**: Complete audit trail with retry capability for failed runs
@@ -113,7 +113,7 @@ The Spreadsheet Agent enables users to upload multiple spreadsheet files (Excel,
 │  │  - Extractor: table-level parallel (DuckDB per table)        │  │
 │  └───────────────────────────────────────────────────────────────┘  │
 │                                                                       │
-│  StorageProviderService (S3 / Azure Blob / MinIO abstraction)       │
+│  StorageProviderService (S3 / Azure Blob abstraction)               │
 │  SandboxService (Python code execution — DuckDB + openpyxl)         │
 │  LlmModelConfig (multi-provider LLM — OpenAI, Anthropic, Azure)    │
 └─────────────┬────────────────┬────────────────┬────────────────────┘
@@ -123,7 +123,7 @@ The Spreadsheet Agent enables users to upload multiple spreadsheet files (Excel,
 │   PostgreSQL     │  │  Cloud Storage  │  │  Python Sandbox      │
 │                  │  │                 │  │  (Docker Container)  │
 │ - spreadsheet_   │  │ - S3 / Azure   │  │                      │
-│   projects       │  │   Blob / MinIO │  │ - DuckDB engine      │
+│   projects       │  │   Blob         │  │ - DuckDB engine      │
 │ - spreadsheet_   │  │                 │  │ - openpyxl / xlrd    │
 │   files          │  │ - Source files  │  │ - pyarrow            │
 │ - spreadsheet_   │  │   (uploaded)    │  │ - boto3              │
@@ -145,7 +145,7 @@ The Spreadsheet Agent enables users to upload multiple spreadsheet files (Excel,
 - **SpreadsheetAgentService**: CRUD operations for projects, files, and tables
 - **SpreadsheetAgentAgentService**: StateGraph creation and execution, run lifecycle management
 - **SpreadsheetAgentStreamController**: SSE streaming endpoint using Fastify `res.hijack()`
-- **StorageProviderService**: Cloud storage abstraction layer (S3, Azure Blob, MinIO)
+- **StorageProviderService**: Cloud storage abstraction layer (S3, Azure Blob)
 - **SandboxService**: Python code execution client (existing, shared with Data Agent)
 
 #### Frontend Components
@@ -160,7 +160,7 @@ The Spreadsheet Agent enables users to upload multiple spreadsheet files (Excel,
 
 #### External Services
 
-- **Cloud Storage**: S3, Azure Blob, or MinIO for source files and Parquet output
+- **Cloud Storage**: S3 or Azure Blob for source files and Parquet output
 - **Docker Sandbox**: Isolated Python + DuckDB execution environment (shared with Data Agent)
 - **LLM Provider**: Chat completion (OpenAI, Anthropic, or Azure OpenAI)
 
@@ -728,25 +728,17 @@ interface StorageProvider {
 - SAS token URLs for signed downloads (delegated key or account key method)
 - Prefix deletion via `listBlobsFlat` + `deleteBlob`
 
-**MinIO** (local development):
-- Uses `S3StorageProvider` with custom endpoint configured via `SPREADSHEET_MINIO_ENDPOINT`
-- S3-compatible API requires zero code changes
-- Default bucket created automatically on startup if it does not exist
-
 ### DuckDB Cloud Storage Integration
 
 DuckDB in the Python sandbox writes Parquet directly to cloud storage using provider-specific extensions:
 
-**S3 / MinIO (via `httpfs` extension)**:
+**S3 (via `httpfs` extension)**:
 
 ```python
 con.execute("INSTALL httpfs; LOAD httpfs;")
 con.execute(f"SET s3_region='{region}'")
 con.execute(f"SET s3_access_key_id='{access_key}'")
 con.execute(f"SET s3_secret_access_key='{secret_key}'")
-# For MinIO only:
-con.execute(f"SET s3_endpoint='{minio_endpoint}'")
-con.execute(f"SET s3_use_ssl=false")
 con.execute(f"COPY table TO 's3://{bucket}/{key}' (FORMAT PARQUET, COMPRESSION ZSTD)")
 ```
 
@@ -1125,7 +1117,7 @@ model SpreadsheetProject {
   name            String                    @db.VarChar(255)
   description     String?                   @db.Text
   status          SpreadsheetProjectStatus  @default(draft)
-  storageProvider String                    @map("storage_provider") @db.VarChar(20)  // 's3' | 'azure' | 'minio'
+  storageProvider String                    @map("storage_provider") @db.VarChar(20)  // 's3' | 'azure'
   outputBucket    String                    @map("output_bucket") @db.VarChar(255)
   outputPrefix    String                    @map("output_prefix") @db.VarChar(500)
   reviewMode      String                    @default("review") @map("review_mode") @db.VarChar(20)  // 'review' | 'auto'
@@ -1236,7 +1228,7 @@ model SpreadsheetRun {
 | `name` | String | Yes | User-defined project name |
 | `description` | String | No | Optional project description |
 | `status` | Enum | Yes | Project status (draft, processing, review_pending, ready, failed, partial) |
-| `storageProvider` | String | Yes | Cloud storage backend: `s3`, `azure`, or `minio` |
+| `storageProvider` | String | Yes | Cloud storage backend: `s3` or `azure` |
 | `outputBucket` | String | Yes | Destination bucket or container name |
 | `outputPrefix` | String | Yes | Prefix path within the bucket |
 | `reviewMode` | String | Yes | `review` (default) or `auto` |
@@ -1369,7 +1361,7 @@ POST /api/spreadsheet-agent/projects
 
 **Validation Rules:**
 - `name`: Required, 1–255 characters
-- `storageProvider`: Required, must be `s3`, `azure`, or `minio`
+- `storageProvider`: Required, must be `s3` or `azure`
 - `reviewMode`: Optional, defaults to `review`, must be `review` or `auto`
 
 **Response (201):**
@@ -2013,7 +2005,7 @@ The Python sandbox is identical to the Data Agent sandbox:
 - Credentials stored as environment variables only (never in the database or exposed to frontend)
 - Signed URLs generated server-side for Parquet downloads (frontend never receives raw credentials)
 - Storage prefix isolation: each project uses a unique prefix (`<outputPrefix>/<projectId>/`)
-- MinIO in development uses internal Docker network only — never exposed externally
+- Storage credentials scoped to the configured bucket/container prefix only — no cross-project access
 
 ### Input Validation
 
@@ -2126,7 +2118,7 @@ This ensures that a 50-file project where only 2 files changed does not re-analy
 The Spreadsheet Agent feeds into the broader analytics pipeline:
 
 ```
-Spreadsheets → [Spreadsheet Agent] → Parquet on S3 / Azure / MinIO
+Spreadsheets → [Spreadsheet Agent] → Parquet on S3 / Azure Blob
                                               │
                               ┌───────────────┴────────────────────────┐
                               │                                        │
@@ -2215,7 +2207,7 @@ const {
 #### Step 1: Project Setup
 - Project name (required, text field)
 - Description (optional, textarea)
-- Storage provider selection (S3, Azure Blob, MinIO) — shows only providers configured in environment
+- Storage provider selection (S3, Azure Blob) — shows only providers configured in environment
 - Review mode toggle: "Review plan before extraction" (default: on)
 
 #### Step 2: Upload Files
@@ -2594,23 +2586,17 @@ SPREADSHEET_MAX_FILES_PER_PROJECT=50
 
 # ── Spreadsheet Agent: Storage Provider ────────────────────────────
 # Which cloud storage backend to use for source files and Parquet output
-# Options: s3 | azure | minio
+# Options: s3 | azure
 SPREADSHEET_STORAGE_PROVIDER=s3
 
 # ── Spreadsheet Agent: S3 Configuration ────────────────────────────
-# (Required when SPREADSHEET_STORAGE_PROVIDER=s3 or minio)
+# (Required when SPREADSHEET_STORAGE_PROVIDER=s3)
 SPREADSHEET_S3_BUCKET=my-spreadsheet-bucket
 SPREADSHEET_S3_REGION=us-east-1
 SPREADSHEET_S3_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE
 SPREADSHEET_S3_SECRET_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 # Optional: output prefix within the bucket (default: spreadsheet-agent)
 SPREADSHEET_S3_OUTPUT_PREFIX=spreadsheet-agent
-
-# ── Spreadsheet Agent: MinIO Configuration ─────────────────────────
-# (Required when SPREADSHEET_STORAGE_PROVIDER=minio)
-# Uses S3StorageProvider internally with a custom endpoint
-SPREADSHEET_MINIO_ENDPOINT=http://minio:9000
-# Uses SPREADSHEET_S3_BUCKET, SPREADSHEET_S3_ACCESS_KEY, SPREADSHEET_S3_SECRET_KEY
 
 # ── Spreadsheet Agent: Azure Blob Configuration ─────────────────────
 # (Required when SPREADSHEET_STORAGE_PROVIDER=azure)
@@ -2638,17 +2624,16 @@ AZURE_OPENAI_API_VERSION=2024-02-01
 
 ### Docker Compose Integration
 
-The Spreadsheet Agent does not introduce a dedicated MinIO service to the compose files. Storage configuration is handled through the shared S3 environment variables already present in `infra/compose/.env.example`. There are no `SPREADSHEET_*` prefixed variables in `base.compose.yml`.
+Storage configuration is handled through the shared S3 environment variables already present in `infra/compose/.env.example`. There are no `SPREADSHEET_*` prefixed variables in `base.compose.yml`.
 
 Storage for the Spreadsheet Agent is configured via the same S3 variables used by the rest of the application:
 
 ```bash
 # From infra/compose/.env.example — shared S3 configuration
-S3_ENDPOINT=http://localhost:9000
 S3_BUCKET=my-bucket
 S3_REGION=us-east-1
-S3_ACCESS_KEY=minioadmin
-S3_SECRET_KEY=minioadmin
+S3_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE
+S3_SECRET_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 ```
 
 The Spreadsheet Agent-specific variables that are added to `infra/compose/.env.example` are limited to concurrency and limits:
@@ -2659,7 +2644,7 @@ SPREADSHEET_MAX_FILE_SIZE_MB=500
 SPREADSHEET_MAX_FILES_PER_PROJECT=50
 ```
 
-If you need local S3-compatible storage during development, configure a MinIO instance separately and point the shared `S3_*` variables at it. No additional compose service is bundled with this feature.
+The internal storage provider is AWS S3. No additional compose services are bundled with this feature.
 
 ---
 
@@ -2705,7 +2690,7 @@ apps/api/
 │       ├── providers/
 │       │   ├── storage-provider.interface.ts           # StorageProvider interface
 │       │   ├── s3/
-│       │   │   └── s3-storage.provider.ts              # AWS S3 and MinIO implementation
+│       │   │   └── s3-storage.provider.ts              # AWS S3 implementation
 │       │   └── storage-providers.module.ts             # Provider factory
 │       └── storage.module.ts                           # NestJS module
 └── test/

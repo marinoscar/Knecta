@@ -10,6 +10,8 @@ import {
   UploadPartCommand,
   CompleteMultipartUploadCommand,
   AbortMultipartUploadCommand,
+  CreateBucketCommand,
+  HeadBucketCommand,
   NotFound,
 } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
@@ -25,18 +27,17 @@ import {
 } from '../storage-provider.types';
 
 /**
- * S3-compatible storage provider implementation
- * Supports AWS S3, MinIO, LocalStack, and other S3-compatible storage services
+ * AWS S3 storage provider implementation
  */
 @Injectable()
 export class S3StorageProvider implements StorageProvider {
   private readonly logger = new Logger(S3StorageProvider.name);
   private readonly s3Client: S3Client;
   private readonly bucket: string;
+  private readonly region: string;
 
   constructor(private readonly configService: ConfigService) {
-    const region = this.configService.get<string>('storage.s3.region');
-    const endpoint = this.configService.get<string>('storage.s3.endpoint');
+    this.region = this.configService.get<string>('storage.s3.region') || 'us-east-1';
     const accessKeyId = this.configService.get<string>(
       'storage.s3.accessKeyId',
     );
@@ -52,8 +53,7 @@ export class S3StorageProvider implements StorageProvider {
 
     // Initialize S3 client
     this.s3Client = new S3Client({
-      region,
-      endpoint,
+      region: this.region,
       credentials:
         accessKeyId && secretAccessKey
           ? {
@@ -61,13 +61,47 @@ export class S3StorageProvider implements StorageProvider {
               secretAccessKey,
             }
           : undefined,
-      // Force path-style URLs for MinIO/LocalStack compatibility
-      forcePathStyle: !!endpoint,
     });
 
     this.logger.log(
-      `S3StorageProvider initialized - Bucket: ${this.bucket}, Region: ${region}${endpoint ? `, Endpoint: ${endpoint}` : ''}`,
+      `S3StorageProvider initialized - Bucket: ${this.bucket}, Region: ${this.region}`,
     );
+
+    // Ensure the bucket exists (fire-and-forget — logged on failure)
+    if (this.bucket) {
+      this.ensureBucketExists().catch((err) => {
+        this.logger.error(`Failed to ensure bucket exists: ${err.message}`);
+      });
+    }
+  }
+
+  /**
+   * Check if the configured bucket exists; create it if it does not.
+   */
+  private async ensureBucketExists(): Promise<void> {
+    try {
+      await this.s3Client.send(new HeadBucketCommand({ Bucket: this.bucket }));
+      this.logger.debug(`Bucket "${this.bucket}" exists`);
+    } catch (error: unknown) {
+      const code =
+        (error as { name?: string })?.name ??
+        (error as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode;
+
+      if (code === 'NotFound' || code === 404) {
+        this.logger.warn(`Bucket "${this.bucket}" not found — creating it`);
+        await this.s3Client.send(
+          new CreateBucketCommand({
+            Bucket: this.bucket,
+            ...(this.region !== 'us-east-1'
+              ? { CreateBucketConfiguration: { LocationConstraint: this.region as any } }
+              : {}),
+          }),
+        );
+        this.logger.log(`Bucket "${this.bucket}" created in ${this.region}`);
+      } else {
+        throw error;
+      }
+    }
   }
 
   /**

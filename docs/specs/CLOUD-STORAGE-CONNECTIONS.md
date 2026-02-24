@@ -28,7 +28,7 @@ The Cloud Storage Connections feature extends the existing Database Connections 
 
 ### Supported Storage Types
 
-- **AWS S3** (`s3`) — Amazon Web Services Simple Storage Service, including S3-compatible endpoints such as MinIO
+- **AWS S3** (`s3`) — Amazon Web Services Simple Storage Service, including S3-compatible endpoints
 - **Azure Blob Storage** (`azure_blob`) — Microsoft Azure Blob Storage with Account Key or SAS Token authentication
 
 ### Core Capabilities
@@ -210,7 +210,7 @@ The `options` JSONB field stores cloud-specific parameters that do not map to th
   "region": "us-east-1",
   "bucket": "my-data-lake",
   "pathPrefix": "prod/",
-  "endpointUrl": "https://minio.internal.example.com"
+  "endpointUrl": "https://s3.internal.example.com"
 }
 ```
 
@@ -219,7 +219,7 @@ The `options` JSONB field stores cloud-specific parameters that do not map to th
 | `region` | string | Yes | AWS region (e.g., `us-east-1`). Duplicate of `host` — stored in both for clarity. |
 | `bucket` | string | No | Default bucket for discovery. If omitted, the user picks during wizard. |
 | `pathPrefix` | string | No | Narrows listing to keys under this prefix (e.g., `prod/`). |
-| `endpointUrl` | string | No | Custom S3-compatible endpoint for MinIO or other services. |
+| `endpointUrl` | string | No | Custom S3-compatible endpoint for non-AWS S3-compatible services. |
 
 #### Azure Blob
 
@@ -278,7 +278,7 @@ This section documents how each `DataConnection` field is used for cloud storage
 | `options.region` | AWS Region | Required; mirrors `host` |
 | `options.bucket` | Default bucket | Optional; narrows wizard default |
 | `options.pathPrefix` | Key prefix filter | Optional; e.g., `prod/` |
-| `options.endpointUrl` | Custom endpoint URL | Optional; enables MinIO/S3-compatible services |
+| `options.endpointUrl` | Custom endpoint URL | Optional; enables S3-compatible services with custom endpoints |
 
 **S3 Validation Rules (Zod):**
 
@@ -1367,7 +1367,7 @@ export class S3Driver extends DataLakeBaseDriver {
         secretAccessKey: params.password ?? '',
       },
       endpoint: opts?.['endpointUrl'] ?? undefined,
-      forcePathStyle: !!opts?.['endpointUrl'], // Required for MinIO
+      forcePathStyle: !!opts?.['endpointUrl'], // Required for path-style S3-compatible endpoints
     });
   }
 
@@ -1514,7 +1514,7 @@ The dialog is extended with two new type-specific field sections. The structure 
     />
     <TextField
       label="Custom Endpoint URL"
-      helperText="Optional. For MinIO or S3-compatible services. e.g., https://minio.internal.example.com"
+      helperText="Optional. For S3-compatible services with custom endpoints. e.g., https://s3.example.com"
       value={s3EndpointUrl}
       onChange={(e) => setS3EndpointUrl(e.target.value)}
     />
@@ -1885,9 +1885,9 @@ The AWS SDK is mocked using `jest.mock('@aws-sdk/client-s3')`.
 **`buildParquetUri`** (via `listColumns` integration)
 - ✅ Returns `s3://bucket/schema/table.parquet` for single-file tables
 - ✅ Returns `s3://bucket/schema/table/**/*.parquet` for partitioned folders
-- ✅ Includes custom endpoint for MinIO connections
+- ✅ Includes custom endpoint for S3-compatible connections
 
-**`testConnection` (MinIO)**
+**`testConnection` (custom endpoint)**
 - ✅ Passes `forcePathStyle: true` when `options.endpointUrl` is set
 
 **Run:**
@@ -1985,7 +1985,7 @@ Additional test cases for cloud storage type rendering:
 - ✅ Renders "Access Key ID" label for username field
 - ✅ Renders "Secret Access Key" label for password field
 - ✅ Renders "Default Bucket" optional field
-- ✅ Renders "Custom Endpoint URL" optional field for MinIO
+- ✅ Renders "Custom Endpoint URL" optional field for S3-compatible endpoints
 - ✅ Does not render SSL toggle for S3 type
 - ✅ Port auto-fills to 443 when S3 type is selected
 

@@ -22,7 +22,7 @@ Before deploying Knecta, the following must already be in place:
 * DNS A record: `knecta.marin.cr` pointing to VPS IP
 * **Cloud-hosted PostgreSQL** instance accessible from the VPS
 * Google OAuth credentials configured for `knecta.marin.cr`
-* S3 bucket (AWS, R2, or MinIO) for file storage
+* S3 bucket (AWS) for file storage
 * At least one LLM API key (OpenAI or Anthropic)
 
 ---

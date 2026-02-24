@@ -545,7 +545,7 @@ export function ConnectionDialog({ open, onClose, onSave, onTestNew, connection 
                 value={endpointUrl}
                 onChange={(e) => setEndpointUrl(e.target.value)}
                 disabled={isSubmitting}
-                helperText="For MinIO or S3-compatible services"
+                helperText="Optional. For S3-compatible services"
               />
             </>
           )}

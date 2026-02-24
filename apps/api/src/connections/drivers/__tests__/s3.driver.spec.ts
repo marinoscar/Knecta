@@ -510,12 +510,12 @@ describe('S3Driver — URI builders', () => {
 
     it('should include endpointUrl when set in options', () => {
       const params = makeParams({
-        options: { endpointUrl: 'http://minio:9000' },
+        options: { endpointUrl: 'https://s3.custom-endpoint.example.com' },
       });
       const opts = (driver as unknown as Record<string, (...args: unknown[]) => unknown>)
         .buildSessionOptions(params) as { credentials: Record<string, unknown> };
 
-      expect(opts.credentials['endpointUrl']).toBe('http://minio:9000');
+      expect(opts.credentials['endpointUrl']).toBe('https://s3.custom-endpoint.example.com');
     });
 
     it('should not include endpointUrl when not set', () => {
