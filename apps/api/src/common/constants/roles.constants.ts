@@ -65,6 +65,11 @@ export const PERMISSIONS = {
   SPREADSHEET_AGENT_READ: 'spreadsheet_agent:read',
   SPREADSHEET_AGENT_WRITE: 'spreadsheet_agent:write',
   SPREADSHEET_AGENT_DELETE: 'spreadsheet_agent:delete',
+
+  // Data Imports
+  DATA_IMPORTS_READ: 'data_imports:read',
+  DATA_IMPORTS_WRITE: 'data_imports:write',
+  DATA_IMPORTS_DELETE: 'data_imports:delete',
 } as const;
 
 export type PermissionName = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
