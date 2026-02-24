@@ -148,7 +148,10 @@ export class DataImportsService {
   async getById(id: string) {
     const item = await this.prisma.dataImport.findUnique({
       where: { id },
-      include: { _count: { select: { runs: true } } },
+      include: {
+        _count: { select: { runs: true } },
+        connection: { select: { id: true, name: true, dbType: true, options: true } },
+      },
     });
 
     if (!item) {
@@ -673,42 +676,35 @@ export class DataImportsService {
         ? encrypt(secretAccessKey, this.encryptionKey)
         : null;
 
-      const outputTables: OutputTable[] = [];
-
-      for (const ut of uploadedTables) {
-        const connectionName = `Import: ${dataImport.name} - ${ut.tableName}`;
-
-        const connection = await this.prisma.dataConnection.create({
-          data: {
-            name: connectionName,
-            dbType: 's3',
-            host: `s3.${region}.amazonaws.com`,
-            port: 443,
-            username: accessKeyId || null,
-            encryptedCredential,
-            options: {
-              bucket,
-              pathPrefix: `data-imports/${dataImport.id}/tables`,
-              region,
-              tableName: ut.tableName,
-              s3Key: ut.s3Key,
-            },
-            createdByUserId: run.createdByUserId,
+      // Phase 4: Create single import-level S3 connection
+      const importConnection = await this.prisma.dataConnection.create({
+        data: {
+          name: `Import: ${dataImport.name}`,
+          dbType: 's3',
+          host: `s3.${region}.amazonaws.com`,
+          port: 443,
+          username: accessKeyId || null,
+          encryptedCredential,
+          options: {
+            bucket,
+            pathPrefix: `data-imports/${dataImport.id}/tables`,
+            region,
           },
-        });
+          createdByUserId: run.createdByUserId,
+        },
+      });
 
-        outputTables.push({
-          tableName: ut.tableName,
-          sheetName: ut.sheetName,
-          s3Key: ut.s3Key,
-          rowCount: ut.rowCount,
-          sizeBytes: ut.sizeBytes,
-          connectionId: connection.id,
-          columns: ut.columns,
-        });
-      }
+      const outputTables: OutputTable[] = uploadedTables.map((ut) => ({
+        tableName: ut.tableName,
+        sheetName: ut.sheetName,
+        s3Key: ut.s3Key,
+        rowCount: ut.rowCount,
+        sizeBytes: ut.sizeBytes,
+        connectionId: importConnection.id,
+        columns: ut.columns,
+      }));
 
-      emit('phase_complete', { phase: 'connecting', connectionCount: outputTables.length });
+      emit('phase_complete', { phase: 'connecting', connectionCount: 1 });
 
       // ── Finalize ──────────────────────────────────────────────────────────
       const totalRowCount = outputTables.reduce((sum, t) => sum + t.rowCount, 0);
@@ -728,6 +724,7 @@ export class DataImportsService {
           outputTables: outputTables as unknown as object[],
           totalRowCount: BigInt(totalRowCount),
           totalSizeBytes: BigInt(totalSizeBytes),
+          connectionId: importConnection.id,
           errorMessage: null,
         },
       });
