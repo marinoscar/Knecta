@@ -115,7 +115,7 @@ export interface StorageProvider {
    * Delete all files matching a key prefix.
    * Returns the number of objects deleted.
    *
-   * @param prefix - Key prefix to match (e.g. 'spreadsheet-agent/project-id/')
+   * @param prefix - Key prefix to match (e.g. 'prefix/subdir/')
    * @returns Number of objects deleted
    */
   deleteByPrefix(prefix: string): Promise<number>;
