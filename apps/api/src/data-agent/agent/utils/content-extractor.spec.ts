@@ -136,6 +136,52 @@ describe('extractTextContent', () => {
     });
   });
 
+  describe('OpenAI Responses API output_text blocks', () => {
+    it('should extract text from a single output_text block', () => {
+      const content = [{ type: 'output_text', text: 'Response from Responses API' }];
+      expect(extractTextContent(content)).toBe('Response from Responses API');
+    });
+
+    it('should concatenate multiple output_text blocks', () => {
+      const content = [
+        { type: 'output_text', text: 'Part one. ' },
+        { type: 'output_text', text: 'Part two.' },
+      ];
+      expect(extractTextContent(content)).toBe('Part one. Part two.');
+    });
+
+    it('should handle mixed text and output_text blocks', () => {
+      const content = [
+        { type: 'text', text: 'Standard text block. ' },
+        { type: 'output_text', text: 'Output text block.' },
+      ];
+      expect(extractTextContent(content)).toBe('Standard text block. Output text block.');
+    });
+
+    it('should ignore thinking blocks alongside output_text blocks', () => {
+      const content = [
+        { type: 'thinking', thinking: 'Internal reasoning' },
+        { type: 'output_text', text: 'Final answer via Responses API' },
+      ];
+      expect(extractTextContent(content)).toBe('Final answer via Responses API');
+    });
+
+    it('should handle mixed thinking, text, and output_text blocks', () => {
+      const content = [
+        { type: 'thinking', thinking: 'Step 1 reasoning' },
+        { type: 'text', text: 'Narrative text. ' },
+        { type: 'thinking', thinking: 'Step 2 reasoning' },
+        { type: 'output_text', text: 'API output text.' },
+      ];
+      expect(extractTextContent(content)).toBe('Narrative text. API output text.');
+    });
+
+    it('should return empty string for array containing only output_text with empty text', () => {
+      const content = [{ type: 'output_text', text: '' }];
+      expect(extractTextContent(content)).toBe('');
+    });
+  });
+
   describe('OpenAI vs Anthropic response formats', () => {
     it('should handle OpenAI response format (plain string content)', () => {
       // OpenAI returns: response.content = "The answer is 42"
