@@ -4,9 +4,11 @@ import {
   S3Client,
   GetObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   HeadObjectCommand,
   CopyObjectCommand,
   CreateMultipartUploadCommand,
+  ListObjectsV2Command,
   UploadPartCommand,
   CompleteMultipartUploadCommand,
   AbortMultipartUploadCommand,
@@ -383,6 +385,61 @@ export class S3StorageProvider implements StorageProvider {
       const stack = error instanceof Error ? error.stack : undefined;
       this.logger.error(
         `Failed to delete file for key ${key}: ${message}`,
+        stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Delete all files matching a key prefix
+   */
+  async deleteByPrefix(prefix: string): Promise<number> {
+    this.logger.debug(`Deleting all objects with prefix: ${prefix}`);
+
+    let totalDeleted = 0;
+    let continuationToken: string | undefined;
+
+    try {
+      do {
+        const listCommand = new ListObjectsV2Command({
+          Bucket: this.bucket,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        });
+
+        const listResult = await this.s3Client.send(listCommand);
+        const objects = listResult.Contents;
+
+        if (!objects || objects.length === 0) {
+          break;
+        }
+
+        const deleteCommand = new DeleteObjectsCommand({
+          Bucket: this.bucket,
+          Delete: {
+            Objects: objects.map((obj) => ({ Key: obj.Key })),
+            Quiet: true,
+          },
+        });
+
+        await this.s3Client.send(deleteCommand);
+        totalDeleted += objects.length;
+
+        continuationToken = listResult.IsTruncated
+          ? listResult.NextContinuationToken
+          : undefined;
+      } while (continuationToken);
+
+      this.logger.log(
+        `Deleted ${totalDeleted} objects with prefix: ${prefix}`,
+      );
+      return totalDeleted;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(
+        `Failed to delete objects with prefix ${prefix}: ${message}`,
         stack,
       );
       throw error;
