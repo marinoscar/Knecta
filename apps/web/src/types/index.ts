@@ -815,7 +815,7 @@ export interface DataImportsResponse {
 }
 
 export interface DataImportRunsResponse {
-  runs: DataImportRun[];
+  items: DataImportRun[];
   total: number;
   page: number;
   pageSize: number;

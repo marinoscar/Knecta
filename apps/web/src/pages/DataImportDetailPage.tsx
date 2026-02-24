@@ -91,7 +91,7 @@ export default function DataImportDetailPage() {
     setRunsLoading(true);
     try {
       const result = await getDataImportRuns(id);
-      setRuns(result.runs);
+      setRuns(result.items);
     } catch (err) {
       setSnackbar({
         open: true,

@@ -141,7 +141,7 @@ export default function DataImportsPage() {
         pageSize: runsPageSize,
         status: runsStatusFilter || undefined,
       });
-      setRuns(result.runs);
+      setRuns(result.items);
       setRunsTotal(result.total);
     } catch (err) {
       setSnackbar({
