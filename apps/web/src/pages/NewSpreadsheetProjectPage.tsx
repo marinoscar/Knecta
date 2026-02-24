@@ -230,6 +230,34 @@ export default function NewSpreadsheetProjectPage() {
               <Typography variant="h6" gutterBottom>
                 Processing
               </Typography>
+
+              {/* Top action area — shown when streaming has ended */}
+              {!runHook.isStreaming && runHook.run && (
+                <>
+                  {runHook.events.some((e) => e.type === 'review_ready') && (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      <strong>Action Required</strong> — The extraction plan is ready for your
+                      review. View the project to approve it.
+                    </Alert>
+                  )}
+                  {runHook.events.some((e) => e.type === 'run_error') && (
+                    <Alert severity="error" sx={{ mb: 2 }}>
+                      {runHook.events.find((e) => e.type === 'run_error')?.error ||
+                        runHook.events.find((e) => e.type === 'run_error')?.message ||
+                        'The agent encountered an error during processing.'}
+                    </Alert>
+                  )}
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+                    <Button
+                      variant="contained"
+                      onClick={() => navigate(`/spreadsheets/${project?.id}`)}
+                    >
+                      View Project
+                    </Button>
+                  </Box>
+                </>
+              )}
+
               <AgentProgressView
                 events={runHook.events}
                 progress={runHook.progress}
