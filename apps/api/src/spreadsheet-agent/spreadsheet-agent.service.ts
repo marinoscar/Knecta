@@ -12,6 +12,7 @@ import { createHash } from 'crypto';
 import { mkdirSync, writeFileSync } from 'fs';
 import { extname, join } from 'path';
 import { Readable } from 'stream';
+import { DuckDBSession } from '../connections/drivers/duckdb.util';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   STORAGE_PROVIDER,
@@ -527,13 +528,49 @@ export class SpreadsheetAgentService {
       );
     }
 
-    // TODO: Implement DuckDB-based Parquet preview in Phase 4
-    return {
-      columns: [] as string[],
-      rows: [] as Record<string, unknown>[],
-      rowCount: 0,
-      totalRows: Number(table.rowCount),
-    };
+    if (!table.outputPath) {
+      throw new ConflictException(
+        `Table ${tableId} has no output file`,
+      );
+    }
+
+    // Build S3 URI for DuckDB
+    const bucket = this.storageProvider.getBucket();
+    const s3Uri = `s3://${bucket}/${table.outputPath}`;
+
+    // Create DuckDB session with S3 credentials
+    const session = await DuckDBSession.create({
+      storageType: 's3',
+      credentials: {
+        accessKeyId: this.configService.get<string>('storage.s3.accessKeyId') ?? '',
+        secretAccessKey: this.configService.get<string>('storage.s3.secretAccessKey') ?? '',
+        region: this.configService.get<string>('storage.s3.region') ?? 'us-east-1',
+        endpointUrl: this.configService.get<string>('storage.s3.endpoint'),
+      },
+    });
+
+    try {
+      const safeLimit = Math.max(1, Math.min(limit || 50, 500));
+      const { columns, rows } = await session.query(
+        `SELECT * FROM read_parquet('${s3Uri}') LIMIT ${safeLimit}`,
+      );
+
+      // Convert row arrays to objects
+      const rowObjects = rows.map(row => {
+        const obj: Record<string, unknown> = {};
+        columns.forEach((col, i) => { obj[col] = row[i]; });
+        return obj;
+      });
+
+      return {
+        columns,
+        rows: rowObjects,
+        rowCount: rowObjects.length,
+        totalRows: Number(table.rowCount),
+      };
+    } finally {
+      await session.close();
+    }
   }
 
   /**
@@ -557,10 +594,24 @@ export class SpreadsheetAgentService {
       );
     }
 
-    // TODO: Implement signed URL generation via StorageProvider
+    if (!table.outputPath) {
+      throw new ConflictException(
+        `Table ${tableId} has no output file`,
+      );
+    }
+
+    const expiresIn = this.configService.get<number>('storage.signedUrlExpiry', 3600);
+    const downloadUrl = await this.storageProvider.getSignedDownloadUrl(
+      table.outputPath,
+      {
+        expiresIn,
+        responseContentDisposition: `attachment; filename="${table.tableName}.parquet"`,
+      },
+    );
+
     return {
-      downloadUrl: '',
-      expiresAt: '',
+      downloadUrl,
+      expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
       fileName: `${table.tableName}.parquet`,
       sizeBytes: Number(table.outputSizeBytes),
     };
