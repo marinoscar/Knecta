@@ -90,6 +90,18 @@ export class SpreadsheetAgentAgentService {
           );
       }
 
+      // Update file status to 'ready' after extraction completes
+      if (event.type === 'phase_complete' && event.phase === 'extract') {
+        this.prisma.spreadsheetFile
+          .updateMany({
+            where: { projectId: run.projectId },
+            data: { status: 'ready' },
+          })
+          .catch((err: Error) =>
+            this.logger.error(`Failed to update file status to ready: ${err.message}`),
+          );
+      }
+
       if (event.type === 'phase_start') {
         const phaseToStatus: Record<string, string> = {
           ingest: 'ingesting',
