@@ -15,6 +15,7 @@ import { useDataChat } from '../hooks/useDataChat';
 import { useAgentPreferences } from '../hooks/useAgentPreferences';
 import { useLlmProviders } from '../hooks/useLlmProviders';
 import { useUserSettings } from '../hooks/useUserSettings';
+import { useSystemSettings } from '../hooks/useSystemSettings';
 
 export default function DataAgentPage() {
   const { chatId } = useParams<{ chatId: string }>();
@@ -34,6 +35,8 @@ export default function DataAgentPage() {
 
   const { settings: userSettings } = useUserSettings();
   const { providers, defaultProvider } = useLlmProviders(userSettings?.defaultProvider);
+  const { settings: systemSettings } = useSystemSettings();
+  const globalWebSearchEnabled = systemSettings?.features?.webSearchEnabled === true;
 
   const {
     chats,
@@ -56,6 +59,7 @@ export default function DataAgentPage() {
     error: chatError,
     loadChat,
     sendMessage,
+    toggleWebSearch,
     clearError,
     clearPreferenceSuggestions,
     clearAutoSavedPreferences,
@@ -338,6 +342,9 @@ export default function DataAgentPage() {
                 onSend={sendMessage}
                 isStreaming={isStreaming}
                 disabled={chatLoading || !chat}
+                webSearchEnabled={chat?.webSearchEnabled === true}
+                onToggleWebSearch={toggleWebSearch}
+                globalWebSearchEnabled={globalWebSearchEnabled}
               />
             </Box>
           </>
