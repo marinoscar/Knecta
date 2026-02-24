@@ -97,6 +97,7 @@ describe('DataAgentAgentService', () => {
 
     mockLlmService = {
       getChatModel: jest.fn().mockReturnValue({ model: 'mock-llm' }),
+      getDefaultProvider: jest.fn().mockReturnValue('openai'),
     } as any;
 
     mockEmbeddingService = {
