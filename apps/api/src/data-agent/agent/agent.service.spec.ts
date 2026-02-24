@@ -533,9 +533,11 @@ describe('DataAgentAgentService', () => {
         sandboxService: mockSandboxService,
         ontologyId: mockOntologyId,
         connectionId: mockConnectionId,
+        databaseName: undefined,
         databaseType: 'postgresql',
         emit: onEvent,
         tracer: expect.any(Object),
+        webSearchTool: null,
       });
 
       expect(mockGraph.invoke).toHaveBeenCalledWith({
