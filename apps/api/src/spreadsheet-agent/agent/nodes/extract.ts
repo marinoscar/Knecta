@@ -2,12 +2,14 @@ import { Logger } from '@nestjs/common';
 import { SpreadsheetAgentStateType } from '../state';
 import { ExtractionPlan, ExtractionResult, PlanModification } from '../types';
 import { EmitFn } from '../graph';
+import { StorageProvider } from '../../../storage/providers/storage-provider.interface';
 
 const logger = new Logger('ExtractNode');
 
 // ─── Node factory ───
 
-export function createExtractNode(emit: EmitFn) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function createExtractNode(emit: EmitFn, _storageProvider: StorageProvider) {
   return async (
     state: SpreadsheetAgentStateType,
   ): Promise<Partial<SpreadsheetAgentStateType>> => {

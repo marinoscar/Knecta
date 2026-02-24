@@ -1,6 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LlmService } from '../../llm/llm.service';
+import {
+  STORAGE_PROVIDER,
+  StorageProvider,
+} from '../../storage/providers/storage-provider.interface';
 import { SpreadsheetAgentService } from '../spreadsheet-agent.service';
 import { buildSpreadsheetAgentGraph, EmitFn } from './graph';
 import { SpreadsheetAgentStateType } from './state';
@@ -14,6 +18,7 @@ export class SpreadsheetAgentAgentService {
     private readonly prisma: PrismaService,
     private readonly spreadsheetAgentService: SpreadsheetAgentService,
     private readonly llmService: LlmService,
+    @Inject(STORAGE_PROVIDER) private readonly storageProvider: StorageProvider,
   ) {}
 
   async executeAgent(
@@ -108,7 +113,10 @@ export class SpreadsheetAgentAgentService {
     try {
       // 6. Build and compile graph
       const llm = this.llmService.getChatModel();
-      const graph = buildSpreadsheetAgentGraph({ llm, prisma: this.prisma }, emit);
+      const graph = buildSpreadsheetAgentGraph(
+        { llm, prisma: this.prisma, storageProvider: this.storageProvider },
+        emit,
+      );
 
       // 7. Set initial state
       const initialState: Partial<SpreadsheetAgentStateType> = {

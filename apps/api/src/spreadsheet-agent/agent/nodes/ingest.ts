@@ -4,10 +4,12 @@ import * as XLSX from 'xlsx';
 import { SpreadsheetAgentStateType } from '../state';
 import { FileInventory } from '../types';
 import { EmitFn } from '../graph';
+import { StorageProvider } from '../../../storage/providers/storage-provider.interface';
 
 const logger = new Logger('IngestNode');
 
-export function createIngestNode(emit: EmitFn) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function createIngestNode(emit: EmitFn, _storageProvider: StorageProvider) {
   return async (state: SpreadsheetAgentStateType): Promise<Partial<SpreadsheetAgentStateType>> => {
     emit({ type: 'phase_start', phase: 'ingest', label: 'Ingesting files' });
 

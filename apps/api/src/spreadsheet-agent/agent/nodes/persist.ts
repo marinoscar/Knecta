@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { StorageProvider } from '../../../storage/providers/storage-provider.interface';
 import { SpreadsheetAgentStateType } from '../state';
 import { EmitFn } from '../graph';
 
@@ -8,6 +9,7 @@ const logger = new Logger('PersistNode');
 export interface PersistNodeDeps {
   prisma: PrismaService;
   emit: EmitFn;
+  storageProvider: StorageProvider;
 }
 
 export function createPersistNode(deps: PersistNodeDeps) {

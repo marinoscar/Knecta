@@ -1,4 +1,5 @@
 import {
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -12,6 +13,10 @@ import { mkdirSync, writeFileSync } from 'fs';
 import { extname, join } from 'path';
 import { Readable } from 'stream';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  STORAGE_PROVIDER,
+  StorageProvider,
+} from '../storage/providers/storage-provider.interface';
 import {
   CreateProjectDto,
   UpdateProjectDto,
@@ -60,6 +65,7 @@ export class SpreadsheetAgentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    @Inject(STORAGE_PROVIDER) private readonly storageProvider: StorageProvider,
   ) {}
 
   // ---------------------------------------------------------------------------
