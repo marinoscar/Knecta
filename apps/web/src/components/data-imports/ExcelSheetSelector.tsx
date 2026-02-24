@@ -22,6 +22,7 @@ import {
 import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
 import type { ExcelParseResult, ExcelSheetInfo, SheetPreviewResult, SheetConfig } from '../../types';
 import { getExcelSheetPreview } from '../../services/api';
+import { colToLetter, letterToCol, isValidColLetter } from '../../utils/excelColumns';
 
 interface ExcelSheetSelectorProps {
   importId: string;
@@ -85,9 +86,15 @@ export function ExcelSheetSelector({
         [sheetName]: { data: null, isLoading: true, error: null },
       }));
       try {
+        const apiRange = config.range ? {
+          startRow: config.range.startRow - 1,
+          endRow: config.range.endRow != null ? config.range.endRow - 1 : undefined,
+          startCol: config.range.startCol - 1,
+          endCol: config.range.endCol != null ? config.range.endCol - 1 : undefined,
+        } : undefined;
         const result = await getExcelSheetPreview(importId, {
           sheetName,
-          range: config.range,
+          range: apiRange,
           hasHeader: config.hasHeader ?? true,
           limit: 20,
         });
@@ -143,6 +150,11 @@ export function ExcelSheetSelector({
         const selected = isSheetSelected(sheet.name);
         const config = getSheetConfig(sheet.name);
         const preview = previews[sheet.name];
+
+        // Offsets for display purposes (1-based in state, so subtract 1 for 0-based index math)
+        const colOffset = (config.range?.startCol ?? 1) - 1;
+        const baseRow =
+          (config.range?.startRow ?? 1) - 1 + (config.hasHeader !== false ? 1 : 0);
 
         return (
           <Accordion
@@ -231,13 +243,14 @@ export function ExcelSheetSelector({
                     </Grid>
                     <Grid item xs={6} sm={3}>
                       <TextField
-                        label="Start Col"
-                        type="number"
+                        label="Start Col (e.g. A)"
+                        type="text"
                         size="small"
                         fullWidth
-                        value={config.range?.startCol ?? ''}
+                        value={config.range?.startCol ? colToLetter(config.range.startCol) : ''}
                         onChange={(e) => {
-                          const val = e.target.value ? parseInt(e.target.value, 10) : undefined;
+                          const raw = e.target.value.toUpperCase();
+                          const val = raw && isValidColLetter(raw) ? letterToCol(raw) : undefined;
                           const newConfig = {
                             ...config,
                             range: val != null
@@ -252,18 +265,19 @@ export function ExcelSheetSelector({
                           updateSheetConfig(sheet.name, newConfig);
                           debouncedLoadPreview(sheet.name, newConfig);
                         }}
-                        inputProps={{ min: 1 }}
+                        inputProps={{ style: { textTransform: 'uppercase' }, maxLength: 3 }}
                       />
                     </Grid>
                     <Grid item xs={6} sm={3}>
                       <TextField
-                        label="End Col"
-                        type="number"
+                        label="End Col (e.g. Z)"
+                        type="text"
                         size="small"
                         fullWidth
-                        value={config.range?.endCol ?? ''}
+                        value={config.range?.endCol ? colToLetter(config.range.endCol) : ''}
                         onChange={(e) => {
-                          const val = e.target.value ? parseInt(e.target.value, 10) : undefined;
+                          const raw = e.target.value.toUpperCase();
+                          const val = raw && isValidColLetter(raw) ? letterToCol(raw) : undefined;
                           const newConfig = {
                             ...config,
                             range: config.range
@@ -273,7 +287,7 @@ export function ExcelSheetSelector({
                           updateSheetConfig(sheet.name, newConfig);
                           debouncedLoadPreview(sheet.name, newConfig);
                         }}
-                        inputProps={{ min: 1 }}
+                        inputProps={{ style: { textTransform: 'uppercase' }, maxLength: 3 }}
                         placeholder="(to end)"
                       />
                     </Grid>
@@ -322,9 +336,13 @@ export function ExcelSheetSelector({
                       <Table size="small" stickyHeader>
                         <TableHead>
                           <TableRow>
+                            <TableCell sx={{ fontWeight: 'bold', whiteSpace: 'nowrap', width: 50 }}>#</TableCell>
                             {preview.data.columns.map((col, i) => (
                               <TableCell key={i} sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>
                                 {typeof col === 'string' ? col : col.name}
+                                <Typography variant="caption" display="block" sx={{ color: 'text.secondary', fontWeight: 'normal' }}>
+                                  {colToLetter(colOffset + i + 1)}
+                                </Typography>
                               </TableCell>
                             ))}
                           </TableRow>
@@ -332,6 +350,7 @@ export function ExcelSheetSelector({
                         <TableBody>
                           {preview.data.rows.map((row, rowIdx) => (
                             <TableRow key={rowIdx} hover>
+                              <TableCell sx={{ color: 'text.secondary', width: 50 }}>{baseRow + rowIdx + 1}</TableCell>
                               {(row as unknown[]).map((cell, cellIdx) => (
                                 <TableCell
                                   key={cellIdx}
