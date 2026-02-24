@@ -8,6 +8,7 @@ export const createRunSchema = z.object({
   selectedTables: z.array(z.string().min(1)).min(1), // format: "schema.table"
   name: z.string().min(1).max(255),
   instructions: z.string().max(2000).optional(),
+  dataImportId: z.string().uuid().optional(),
 });
 
 export class CreateRunDto extends createZodDto(createRunSchema) {}
