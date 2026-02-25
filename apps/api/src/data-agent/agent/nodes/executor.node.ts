@@ -106,7 +106,10 @@ export function createExecutorNode(
         // ── SQL Execution ──
         if (step.strategy === 'sql' || step.strategy === 'sql_then_python') {
           const querySpec = state.querySpecs?.find((q) => q.stepId === step.id);
-          if (querySpec) {
+          if (!querySpec) {
+            stepResult.error = 'No SQL query was generated for this step (SQL Builder may have failed)';
+            emit({ type: 'tool_error', phase: 'executor', stepId: step.id, name: 'query_database', error: stepResult.error });
+          } else {
             let fullSql = querySpec.fullSql;
 
             // Run pilot query first

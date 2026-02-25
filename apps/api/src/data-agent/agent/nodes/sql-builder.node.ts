@@ -19,6 +19,32 @@ const QuerySpecSchema = z.object({
   })),
 });
 
+/**
+ * Generate trivial SELECT queries as fallback when structured output fails.
+ * Uses the plan's dataset list and joinPlan's source info to build safe queries.
+ */
+function generateFallbackSpecs(
+  plan: { steps: Array<{ id: number; description: string; datasets: string[] }> },
+  joinPlan: { relevantDatasets: Array<{ name: string; source: string; yaml: string }> } | null | undefined,
+  dialectType: string,
+): QuerySpec[] {
+  return plan.steps.map((step) => {
+    const primaryDataset = step.datasets[0];
+    const ds = joinPlan?.relevantDatasets?.find(
+      (d) => d.name === primaryDataset,
+    );
+    const source = ds?.source || primaryDataset;
+    return {
+      stepId: step.id,
+      description: step.description,
+      pilotSql: `SELECT * FROM ${source} LIMIT 10`,
+      fullSql: `SELECT * FROM ${source} LIMIT 100`,
+      expectedColumns: [],
+      notes: 'Fallback query — structured output produced no queries',
+    };
+  });
+}
+
 export function createSqlBuilderNode(
   llm: any,
   neoOntologyService: NeoOntologyService,
@@ -83,8 +109,15 @@ export function createSqlBuilderNode(
         () => structuredLlm.invoke(messages),
       );
 
-      const querySpecs: QuerySpec[] = response.parsed.queries;
       const nodeTokens = extractTokenUsage(response.raw);
+
+      // Null-safe access: response.parsed can be null when structured output fails
+      let querySpecs: QuerySpec[] = response.parsed?.queries ?? [];
+
+      // If structured output produced no queries, generate fallback from plan datasets
+      if (querySpecs.length === 0) {
+        querySpecs = generateFallbackSpecs(plan, enrichedJoinPlan, dialectType);
+      }
 
       // ── Column validation against YAML schemas (defense-in-depth) ──
       const knownColumns = new Set<string>();
@@ -119,9 +152,13 @@ export function createSqlBuilderNode(
       };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
+      const plan = state.plan!;
+      const joinPlan = state.joinPlan;
+      const dialectType = (databaseType === 's3' || databaseType === 'azure_blob') ? 'DuckDB' : databaseType;
+      const fallbackSpecs = generateFallbackSpecs(plan, joinPlan, dialectType);
       emit({ type: 'phase_complete', phase: 'sql_builder' });
       return {
-        querySpecs: [],
+        querySpecs: fallbackSpecs,
         currentPhase: 'sql_builder',
         error: `SQL Builder error: ${msg}`,
         tokensUsed: { prompt: 0, completion: 0, total: 0 },
