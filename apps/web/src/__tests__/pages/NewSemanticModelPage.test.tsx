@@ -541,6 +541,121 @@ describe('NewSemanticModelPage', () => {
   });
 
   // ================================================================
+  // Generate Model step — import connection / bucket guard
+  // ================================================================
+
+  describe('Data Import flow — missing connection guard', () => {
+    async function advanceToGenerateStep(importItem: ReturnType<typeof buildImportItem>) {
+      server.use(
+        http.get('*/api/data-imports', () =>
+          HttpResponse.json({
+            data: {
+              items: [importItem],
+              total: 1,
+              page: 1,
+              pageSize: 100,
+              totalPages: 1,
+            },
+          }),
+        ),
+      );
+
+      const user = userEvent.setup();
+      render(<NewSemanticModelPage />);
+
+      // Switch to import mode
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Data Import' })).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole('button', { name: 'Data Import' }));
+
+      // Wait for imports to load and select the import
+      await waitFor(() => {
+        expect(screen.queryByText(/no completed imports/i)).not.toBeInTheDocument();
+      });
+      const comboboxes = screen.getAllByRole('combobox');
+      await user.click(comboboxes[0]);
+      await waitFor(() => {
+        expect(screen.getByRole('option', { name: /Sales Import/i })).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole('option', { name: /Sales Import/i }));
+
+      // Advance to Select Tables
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /next/i })).not.toBeDisabled();
+      });
+      await user.click(screen.getByRole('button', { name: /next/i }));
+
+      // Select a table
+      await waitFor(() => {
+        expect(screen.getByText('sales')).toBeInTheDocument();
+      });
+      const salesListItem = screen.getByText('sales').closest('[role="button"]') as HTMLElement;
+      await user.click(salesListItem);
+
+      await waitFor(() => {
+        const checkboxes = screen.getAllByRole('checkbox');
+        const checkedCount = checkboxes.filter((cb) => (cb as HTMLInputElement).checked).length;
+        expect(checkedCount).toBeGreaterThanOrEqual(1);
+      });
+
+      // Advance to Generate Model
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /next/i })).not.toBeDisabled();
+      });
+      await user.click(screen.getByRole('button', { name: /next/i }));
+
+      // Type model name
+      await waitFor(() => {
+        expect(screen.getByLabelText(/model name/i)).toBeInTheDocument();
+      });
+      await user.type(screen.getByLabelText(/model name/i), 'My Sales Model');
+
+      return user;
+    }
+
+    it('shows error when selected import has no connection configured', async () => {
+      const importWithNoConnection = buildImportItem({
+        connectionId: null,
+        connection: null,
+      });
+
+      const user = await advanceToGenerateStep(importWithNoConnection);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /start agent/i })).not.toBeDisabled();
+      });
+      await user.click(screen.getByRole('button', { name: /start agent/i }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/no connection.*re-run the import/i),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('shows error when selected import has no bucket configured', async () => {
+      const importWithNoBucket = buildImportItem({
+        connectionId: 'conn-s3-1',
+        connection: { id: 'conn-s3-1', name: 'S3 Bucket', dbType: 's3', options: {} },
+      });
+
+      const user = await advanceToGenerateStep(importWithNoBucket);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /start agent/i })).not.toBeDisabled();
+      });
+      await user.click(screen.getByRole('button', { name: /start agent/i }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/no bucket configured.*re-run the import/i),
+        ).toBeInTheDocument();
+      });
+    });
+  });
+
+  // ================================================================
   // Permission check
   // ================================================================
 

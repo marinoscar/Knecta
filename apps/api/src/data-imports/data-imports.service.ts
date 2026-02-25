@@ -184,7 +184,10 @@ export class DataImportsService {
         skip,
         take: pageSize,
         orderBy: { [sortBy]: sortOrder },
-        include: { _count: { select: { runs: true } } },
+        include: {
+          _count: { select: { runs: true } },
+          connection: { select: { id: true, name: true, dbType: true, options: true } },
+        },
       }),
       this.prisma.dataImport.count({ where }),
     ]);

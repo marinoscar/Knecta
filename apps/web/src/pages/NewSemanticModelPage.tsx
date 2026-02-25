@@ -260,10 +260,14 @@ export default function NewSemanticModelPage() {
         setError('Please select at least one table');
         return;
       }
+      const bucket = (selectedImport.connection?.options?.bucket as string) || '';
+      if (!bucket) {
+        setError('Import connection has no bucket configured. Please re-run the import.');
+        return;
+      }
       setIsStarting(true);
       setError(null);
       try {
-        const bucket = (selectedImport.connection?.options?.bucket as string) || '';
         const run = await createSemanticModelRun({
           connectionId: selectedImport.connectionId,
           databaseName: bucket,

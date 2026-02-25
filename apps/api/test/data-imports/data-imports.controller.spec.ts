@@ -52,6 +52,8 @@ function createMockImport(overrides: Partial<any> = {}): any {
     totalRowCount: overrides.totalRowCount ?? 0,
     totalSizeBytes: overrides.totalSizeBytes ?? 0,
     errorMessage: overrides.errorMessage ?? null,
+    connectionId: overrides.connectionId ?? null,
+    connection: overrides.connection ?? null,
     createdByUserId: overrides.createdByUserId ?? null,
     createdAt: overrides.createdAt ?? new Date(),
     updatedAt: overrides.updatedAt ?? new Date(),
@@ -225,6 +227,33 @@ describe('Data Imports — Controller Integration', () => {
         .get('/api/data-imports')
         .set(authHeader(viewer.accessToken))
         .expect(200);
+    });
+
+    it('should include connection data in list items when present', async () => {
+      const contributor = await createMockContributorUser(context);
+      const importWithConn = createMockImport({
+        connectionId: 'conn-1',
+        connection: {
+          id: 'conn-1',
+          name: 'Import: Test',
+          dbType: 's3',
+          options: { bucket: 'my-bucket', region: 'us-east-1' },
+        },
+      });
+      context.prismaMock.dataImport.findMany.mockResolvedValue([importWithConn]);
+      context.prismaMock.dataImport.count.mockResolvedValue(1);
+
+      const res = await request(context.app.getHttpServer())
+        .get('/api/data-imports')
+        .set(authHeader(contributor.accessToken))
+        .expect(200);
+
+      expect(res.body.data.items[0].connection).toEqual({
+        id: 'conn-1',
+        name: 'Import: Test',
+        dbType: 's3',
+        options: { bucket: 'my-bucket', region: 'us-east-1' },
+      });
     });
   });
 
