@@ -25,9 +25,14 @@ export function createVerifierNode(
       const plan = state.plan!;
       const stepResults = state.stepResults || [];
 
-      // Skip verification for simple single-table queries (no joins = low risk of grain explosion)
+      // Skip verification for simple queries with low risk of grain explosion:
+      // 1. No join paths at all, OR
+      // 2. Single-step query touching 1-2 datasets (Navigator may return extra join paths)
       const hasJoins = state.joinPlan && state.joinPlan.joinPaths.length > 0;
-      if (plan.complexity === 'simple' && !hasJoins) {
+      const isSingleStepSimple = plan.complexity === 'simple'
+        && plan.steps.length === 1
+        && plan.steps[0].datasets.length <= 2;
+      if ((plan.complexity === 'simple' && !hasJoins) || isSingleStepSimple) {
         const passReport: VerificationReport = {
           passed: true,
           checks: [{ name: 'simple_query_bypass', passed: true, message: 'Simple query — verification skipped' }],
@@ -46,11 +51,16 @@ export function createVerifierNode(
       // Check if all steps errored — nothing to verify
       const hasResults = stepResults.some((r) => r.sqlResult || r.pythonResult);
       if (!hasResults) {
+        const noSpecs = !state.querySpecs || state.querySpecs.length === 0;
+        const diagnosis = noSpecs
+          ? 'SQL Builder failed to generate any queries. Retry with simpler SQL or re-explore datasets.'
+          : 'All execution steps failed to produce results. Check SQL syntax and table names.';
+        const target: 'navigator' | 'sql_builder' = noSpecs ? 'navigator' : 'sql_builder';
         const failReport: VerificationReport = {
           passed: false,
           checks: [{ name: 'no_results', passed: false, message: 'No execution results to verify' }],
-          diagnosis: 'All execution steps failed to produce results.',
-          recommendedTarget: 'sql_builder',
+          diagnosis,
+          recommendedTarget: target,
         };
         emit({ type: 'phase_artifact', phase: 'verifier', artifact: failReport });
         emit({ type: 'phase_complete', phase: 'verifier' });
@@ -59,7 +69,7 @@ export function createVerifierNode(
           currentPhase: 'verifier',
           revisionCount: state.revisionCount + 1,
           revisionDiagnosis: failReport.diagnosis,
-          revisionTarget: 'sql_builder',
+          revisionTarget: target,
           tokensUsed: { prompt: 0, completion: 0, total: 0 },
         };
       }
