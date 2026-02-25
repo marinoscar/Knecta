@@ -517,6 +517,7 @@ describe('Data Imports — Controller Integration', () => {
       const mockImport = createMockImport({ status: 'draft' });
       const mockRun = createMockRun({ importId: mockImport.id });
       context.prismaMock.dataImport.findUnique.mockResolvedValue(mockImport);
+      context.prismaMock.dataImportRun.deleteMany.mockResolvedValue({ count: 0 });
       context.prismaMock.dataImportRun.create.mockResolvedValue(mockRun);
 
       const res = await request(context.app.getHttpServer())
@@ -534,6 +535,7 @@ describe('Data Imports — Controller Integration', () => {
       const mockImport = createMockImport({ status: 'pending' });
       const mockRun = createMockRun({ importId: mockImport.id });
       context.prismaMock.dataImport.findUnique.mockResolvedValue(mockImport);
+      context.prismaMock.dataImportRun.deleteMany.mockResolvedValue({ count: 0 });
       context.prismaMock.dataImportRun.create.mockResolvedValue(mockRun);
 
       await request(context.app.getHttpServer())
@@ -548,6 +550,7 @@ describe('Data Imports — Controller Integration', () => {
       const mockImport = createMockImport({ status: 'failed' });
       const mockRun = createMockRun({ importId: mockImport.id });
       context.prismaMock.dataImport.findUnique.mockResolvedValue(mockImport);
+      context.prismaMock.dataImportRun.deleteMany.mockResolvedValue({ count: 0 });
       context.prismaMock.dataImportRun.create.mockResolvedValue(mockRun);
 
       await request(context.app.getHttpServer())
@@ -557,16 +560,19 @@ describe('Data Imports — Controller Integration', () => {
         .expect(201);
     });
 
-    it('should return 409 when import is in an active status (ready)', async () => {
+    it('should return 201 for a ready import (re-run allowed)', async () => {
       const contributor = await createMockContributorUser(context);
       const mockImport = createMockImport({ status: 'ready' });
+      const mockRun = createMockRun({ importId: mockImport.id });
       context.prismaMock.dataImport.findUnique.mockResolvedValue(mockImport);
+      context.prismaMock.dataImportRun.deleteMany.mockResolvedValue({ count: 1 });
+      context.prismaMock.dataImportRun.create.mockResolvedValue(mockRun);
 
       await request(context.app.getHttpServer())
         .post('/api/data-imports/runs')
         .set(authHeader(contributor.accessToken))
         .send({ importId: mockImport.id })
-        .expect(409);
+        .expect(201);
     });
 
     it('should return 409 when import is currently importing', async () => {
