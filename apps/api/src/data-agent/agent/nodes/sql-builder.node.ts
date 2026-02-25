@@ -88,10 +88,11 @@ export function createSqlBuilderNode(
         !!webSearchTool,
       );
 
-      // Bind web search (server-side) before withStructuredOutput so the provider
-      // can look up dialect-specific syntax during query generation.
-      const baseLlm = webSearchTool ? llm.bindTools([webSearchTool]) : llm;
-      const structuredLlm = baseLlm.withStructuredOutput(QuerySpecSchema, {
+      // Do NOT bind web search tool here — server-side tools (OpenAI/Anthropic web search)
+      // interfere with withStructuredOutput, causing response.parsed to be null and
+      // triggering fallback queries. Web search is available in other phases (navigator,
+      // executor, explainer) that use llm.invoke() instead of withStructuredOutput.
+      const structuredLlm = llm.withStructuredOutput(QuerySpecSchema, {
         name: 'generate_queries',
         includeRaw: true,
       });

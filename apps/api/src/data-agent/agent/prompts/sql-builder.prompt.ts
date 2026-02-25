@@ -70,5 +70,5 @@ ${revisionSection}
 11. If a needed column or join is not available in the schemas, generate a query using only what IS available and add a note explaining what is missing.${webSearchEnabled ? `
 
 ## Web Search
-Web search is available but you MUST NOT use it to look up column names, table structures, or join conditions. The YAML schemas provided are the ONLY source of truth. Use web search only to understand domain-specific calculations or formulas referenced in the user's question.` : ''}`;
+Note: Web search is available in other phases of the pipeline (navigator, explainer). This SQL generation phase does not have direct web search access. Use only the YAML schemas and join paths provided above.` : ''}`;
 }
