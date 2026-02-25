@@ -32,18 +32,15 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { DataImportStatusChip } from '../components/data-imports/DataImportStatusChip';
-import { DataImportRunHistory } from '../components/data-imports/RunHistory';
 import { ImportProgressView } from '../components/data-imports/ImportProgressView';
 import { useDataImportRun } from '../hooks/useDataImportRun';
 import { usePermissions } from '../hooks/usePermissions';
 import {
   getDataImport,
-  getDataImportRuns,
   createDataImportRun,
-  deleteDataImportRun,
   deleteDataImport,
 } from '../services/api';
-import type { DataImport, DataImportRun } from '../types';
+import type { DataImport } from '../types';
 
 function formatBytes(bytes: number | null | undefined): string {
   if (bytes == null) return '-';
@@ -60,8 +57,6 @@ export default function DataImportDetailPage() {
   const canDelete = hasPermission('data_imports:delete');
 
   const [dataImport, setDataImport] = useState<DataImport | null>(null);
-  const [runs, setRuns] = useState<DataImportRun[]>([]);
-  const [runsLoading, setRunsLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -86,27 +81,9 @@ export default function DataImportDetailPage() {
     }
   }, [id]);
 
-  const fetchRuns = useCallback(async () => {
-    if (!id) return;
-    setRunsLoading(true);
-    try {
-      const result = await getDataImportRuns(id);
-      setRuns(result.runs);
-    } catch (err) {
-      setSnackbar({
-        open: true,
-        message: err instanceof Error ? err.message : 'Failed to load runs',
-        severity: 'error',
-      });
-    } finally {
-      setRunsLoading(false);
-    }
-  }, [id]);
-
   const runHook = useDataImportRun({
     onStreamEnd: () => {
       fetchImport();
-      fetchRuns();
     },
   });
 
@@ -114,42 +91,16 @@ export default function DataImportDetailPage() {
     fetchImport();
   }, [fetchImport]);
 
-  useEffect(() => {
-    if (activeTab === 1) fetchRuns();
-  }, [activeTab, fetchRuns]);
-
-  // Load runs on mount for error detail display
-  useEffect(() => {
-    if (dataImport?.status === 'failed') {
-      fetchRuns();
-    }
-  }, [dataImport?.status, fetchRuns]);
-
   const handleStartRun = async () => {
     if (!id) return;
     try {
       const run = await createDataImportRun(id);
-      setRuns((prev) => [run, ...prev]);
       runHook.startStream(run.id);
       setSnackbar({ open: true, message: 'Import run started', severity: 'success' });
     } catch (err) {
       setSnackbar({
         open: true,
         message: err instanceof Error ? err.message : 'Failed to start run',
-        severity: 'error',
-      });
-    }
-  };
-
-  const handleDeleteRun = async (runId: string) => {
-    try {
-      await deleteDataImportRun(runId);
-      setSnackbar({ open: true, message: 'Run deleted', severity: 'success' });
-      fetchRuns();
-    } catch (err) {
-      setSnackbar({
-        open: true,
-        message: err instanceof Error ? err.message : 'Failed to delete run',
         severity: 'error',
       });
     }
@@ -193,7 +144,7 @@ export default function DataImportDetailPage() {
     );
   }
 
-  const canRunImport = ['draft', 'failed', 'partial'].includes(dataImport.status);
+  const canRunImport = ['draft', 'pending', 'failed', 'partial', 'ready'].includes(dataImport.status);
   const isActiveImport = dataImport.status === 'importing';
 
   return (
@@ -302,16 +253,13 @@ export default function DataImportDetailPage() {
         {dataImport.status === 'failed' && !runHook.isStreaming && (
           <Alert severity="error" sx={{ mb: 3 }}>
             <AlertTitle>Import Failed</AlertTitle>
-            {dataImport.errorMessage ||
-              runs.find((r) => r.status === 'failed')?.errorMessage ||
-              'The import pipeline failed. Check the Runs tab for details.'}
+            {dataImport.errorMessage || 'The import pipeline failed.'}
           </Alert>
         )}
 
         {/* Tabs */}
         <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2 }}>
           <Tab label="Tables" />
-          <Tab label="Runs" />
           <Tab label="Config" />
         </Tabs>
 
@@ -393,21 +341,8 @@ export default function DataImportDetailPage() {
             </>
           )}
 
-          {/* Tab 1: Runs */}
+          {/* Tab 1: Config */}
           {activeTab === 1 && (
-            <DataImportRunHistory
-              runs={runs}
-              isLoading={runsLoading}
-              canWrite={canWrite}
-              canDelete={canDelete}
-              onRetry={() => handleStartRun()}
-              onCancel={(runId) => runHook.cancelRun(runId)}
-              onDelete={handleDeleteRun}
-            />
-          )}
-
-          {/* Tab 2: Config */}
-          {activeTab === 2 && (
             <Box sx={{ p: 3 }}>
               {!dataImport.config ? (
                 <Typography color="text.secondary">No configuration saved.</Typography>

@@ -286,6 +286,26 @@ export class SemanticModelsService {
       throw new NotFoundException(`Connection with ID ${dto.connectionId} not found`);
     }
 
+    // If dataImportId is provided, verify the import exists and is ready
+    if (dto.dataImportId) {
+      const dataImport = await this.prisma.dataImport.findUnique({
+        where: { id: dto.dataImportId },
+      });
+      if (!dataImport) {
+        throw new NotFoundException(`Data import '${dto.dataImportId}' not found`);
+      }
+      if (dataImport.status !== 'ready') {
+        throw new BadRequestException(
+          `Data import '${dto.dataImportId}' is in status '${dataImport.status}', expected 'ready'`,
+        );
+      }
+      if (dataImport.connectionId !== dto.connectionId) {
+        throw new BadRequestException(
+          'Connection ID does not match the data import connection',
+        );
+      }
+    }
+
     // Create run
     const run = await this.prisma.semanticModelRun.create({
       data: {
@@ -306,7 +326,11 @@ export class SemanticModelsService {
       'semantic_models:run:create',
       'semantic_model_run',
       run.id,
-      { connectionId: dto.connectionId, databaseName: dto.databaseName },
+      {
+        connectionId: dto.connectionId,
+        databaseName: dto.databaseName,
+        ...(dto.dataImportId ? { dataImportId: dto.dataImportId } : {}),
+      },
     );
 
     this.logger.log(`Semantic model run ${run.id} created by user ${userId}`);

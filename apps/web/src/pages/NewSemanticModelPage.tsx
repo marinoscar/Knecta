@@ -25,6 +25,8 @@ import {
   Card,
   CardContent,
   TextField,
+  ToggleButtonGroup,
+  ToggleButton,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -34,10 +36,13 @@ import {
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useConnections } from '../hooks/useConnections';
 import { useDiscovery } from '../hooks/useDiscovery';
+import { useDataImports } from '../hooks/useDataImports';
 import { usePermissions } from '../hooks/usePermissions';
 import { createSemanticModelRun } from '../services/api';
-import type { DataConnection, TableInfo } from '../types';
+import type { DataConnection, DataImport, TableInfo } from '../types';
 import { AgentLog } from '../components/semantic-models/AgentLog';
+
+type SourceType = 'connection' | 'import';
 
 function getDatabaseLabel(dbType: string | undefined): string {
   if (dbType === 's3') return 'Bucket';
@@ -58,7 +63,9 @@ export default function NewSemanticModelPage() {
   const canGenerate = hasPermission('semantic_models:generate');
 
   const [activeStep, setActiveStep] = useState(0);
+  const [sourceType, setSourceType] = useState<SourceType>('connection');
   const [selectedConnection, setSelectedConnection] = useState<DataConnection | null>(null);
+  const [selectedImport, setSelectedImport] = useState<DataImport | null>(null);
   const [selectedDatabase, setSelectedDatabase] = useState('');
   const [selectedTables, setSelectedTables] = useState<string[]>([]); // "schema.table" format
   const [isStarting, setIsStarting] = useState(false);
@@ -79,11 +86,19 @@ export default function NewSemanticModelPage() {
     reset,
     error: discoveryError,
   } = useDiscovery();
+  const { imports, isLoading: importsLoading, fetchImports } = useDataImports();
 
   // Fetch connections on mount
   useEffect(() => {
     fetchConnections({ pageSize: 100 });
   }, [fetchConnections]);
+
+  // Fetch ready imports when source type switches to 'import'
+  useEffect(() => {
+    if (sourceType === 'import') {
+      fetchImports({ status: 'ready', pageSize: 100 });
+    }
+  }, [sourceType, fetchImports]);
 
   // When connection changes, fetch databases and reset downstream state
   useEffect(() => {
@@ -129,10 +144,19 @@ export default function NewSemanticModelPage() {
   // Derive contextual step labels based on selected connection type
   const dbLabel = getDatabaseLabel(selectedConnection?.dbType);
   const schemaLabel = getSchemaLabel(selectedConnection?.dbType);
-  const wizardSteps = useMemo(
-    () => ['Select Connection', `Select ${dbLabel}`, 'Select Tables', 'Generate Model'],
-    [dbLabel]
-  );
+
+  const wizardSteps = useMemo(() => {
+    if (sourceType === 'import') {
+      return ['Select Source', 'Select Tables', 'Generate Model'];
+    }
+    return ['Select Source', `Select ${dbLabel}`, 'Select Tables', 'Generate Model'];
+  }, [sourceType, dbLabel]);
+
+  // Step index helpers
+  const isSelectSourceStep = activeStep === 0;
+  const isSelectDatabaseStep = sourceType === 'connection' && activeStep === 1;
+  const isSelectTablesStep = sourceType === 'import' ? activeStep === 1 : activeStep === 2;
+  const isGenerateStep = sourceType === 'import' ? activeStep === 2 : activeStep === 3;
 
   // Filter only successfully tested connections
   const testedConnections = useMemo(
@@ -140,25 +164,38 @@ export default function NewSemanticModelPage() {
     [connections]
   );
 
-  // Group tables by schema
-  const tablesBySchema = useMemo(() => {
+  // Derive tables from import outputTables
+  const importTables = useMemo<TableInfo[]>(() => {
+    if (!selectedImport?.outputTables) return [];
+    return selectedImport.outputTables.map((ot) => ({
+      name: ot.tableName,
+      schema: '_root',
+      database: '',
+      type: 'TABLE' as const,
+      rowCountEstimate: ot.rowCount,
+    }));
+  }, [selectedImport]);
+
+  // Group tables by schema — unified for both flows
+  const activeTablesBySchema = useMemo(() => {
+    const source = sourceType === 'import' ? importTables : tables;
     const grouped = new Map<string, TableInfo[]>();
-    tables.forEach((table) => {
+    source.forEach((table) => {
       const existing = grouped.get(table.schema) || [];
       grouped.set(table.schema, [...existing, table]);
     });
     return grouped;
-  }, [tables]);
+  }, [sourceType, importTables, tables]);
 
   // Check if all tables in a schema are selected
   const isSchemaFullySelected = (schemaName: string): boolean => {
-    const schemaTables = tablesBySchema.get(schemaName) || [];
+    const schemaTables = activeTablesBySchema.get(schemaName) || [];
     if (schemaTables.length === 0) return false;
     return schemaTables.every((t) => selectedTables.includes(`${t.schema}.${t.name}`));
   };
 
   const handleSelectAllSchema = (schemaName: string) => {
-    const schemaTables = tablesBySchema.get(schemaName) || [];
+    const schemaTables = activeTablesBySchema.get(schemaName) || [];
     const tableKeys = schemaTables.map((t) => `${t.schema}.${t.name}`);
 
     if (isSchemaFullySelected(schemaName)) {
@@ -176,6 +213,19 @@ export default function NewSemanticModelPage() {
     );
   };
 
+  const handleSourceTypeChange = (newType: SourceType) => {
+    if (newType === sourceType) return;
+    setSourceType(newType);
+    setSelectedConnection(null);
+    setSelectedImport(null);
+    setSelectedDatabase('');
+    setSelectedTables([]);
+    setError(null);
+    setModelName('');
+    setModelInstructions('');
+    reset();
+  };
+
   const handleNext = () => {
     setError(null);
     if (activeStep < wizardSteps.length - 1) {
@@ -190,29 +240,68 @@ export default function NewSemanticModelPage() {
     }
   };
 
-  const handleStartAgent = async () => {
-    if (!selectedConnection || !selectedDatabase || selectedTables.length === 0) {
-      setError('Please ensure all selections are made');
-      return;
+  const canProceed = () => {
+    if (isSelectSourceStep) {
+      return sourceType === 'import' ? selectedImport !== null : selectedConnection !== null;
     }
+    if (isSelectDatabaseStep) return selectedDatabase !== '';
+    if (isSelectTablesStep) return selectedTables.length > 0;
+    if (isGenerateStep) return modelName.trim().length > 0;
+    return false;
+  };
 
-    setIsStarting(true);
-    setError(null);
-    try {
-      const selectedSchemaNames = [...new Set(selectedTables.map((t) => t.split('.')[0]))];
-      const run = await createSemanticModelRun({
-        connectionId: selectedConnection.id,
-        databaseName: selectedDatabase,
-        selectedSchemas: selectedSchemaNames,
-        selectedTables,
-        name: modelName,
-        instructions: modelInstructions || undefined,
-      });
-      setRunId(run.id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start agent');
-    } finally {
-      setIsStarting(false);
+  const handleStartAgent = async () => {
+    if (sourceType === 'import') {
+      if (!selectedImport || !selectedImport.connectionId) {
+        setError('Selected import has no connection. Please re-run the import.');
+        return;
+      }
+      if (selectedTables.length === 0) {
+        setError('Please select at least one table');
+        return;
+      }
+      setIsStarting(true);
+      setError(null);
+      try {
+        const bucket = (selectedImport.connection?.options?.bucket as string) || '';
+        const run = await createSemanticModelRun({
+          connectionId: selectedImport.connectionId,
+          databaseName: bucket,
+          selectedSchemas: ['_root'],
+          selectedTables,
+          name: modelName,
+          instructions: modelInstructions || undefined,
+          dataImportId: selectedImport.id,
+        });
+        setRunId(run.id);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to start agent');
+      } finally {
+        setIsStarting(false);
+      }
+    } else {
+      if (!selectedConnection || !selectedDatabase || selectedTables.length === 0) {
+        setError('Please ensure all selections are made');
+        return;
+      }
+      setIsStarting(true);
+      setError(null);
+      try {
+        const selectedSchemaNames = [...new Set(selectedTables.map((t) => t.split('.')[0]))];
+        const run = await createSemanticModelRun({
+          connectionId: selectedConnection.id,
+          databaseName: selectedDatabase,
+          selectedSchemas: selectedSchemaNames,
+          selectedTables,
+          name: modelName,
+          instructions: modelInstructions || undefined,
+        });
+        setRunId(run.id);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to start agent');
+      } finally {
+        setIsStarting(false);
+      }
     }
   };
 
@@ -223,21 +312,6 @@ export default function NewSemanticModelPage() {
 
   const handleExit = () => {
     navigate('/semantic-models');
-  };
-
-  const canProceed = () => {
-    switch (activeStep) {
-      case 0:
-        return selectedConnection !== null;
-      case 1:
-        return selectedDatabase !== '';
-      case 2:
-        return selectedTables.length > 0;
-      case 3:
-        return modelName.trim().length > 0;
-      default:
-        return false;
-    }
   };
 
   if (!canGenerate) {
@@ -283,52 +357,119 @@ export default function NewSemanticModelPage() {
                 </Alert>
               )}
 
-              {/* Step 1: Select Connection */}
-              {activeStep === 0 && (
+              {/* Step 0: Select Source */}
+              {isSelectSourceStep && (
                 <Box>
                   <Typography variant="h6" gutterBottom>
-                    Select Database Connection
+                    Select Source
                   </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Choose a tested connection to use for the semantic model
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                    Choose whether to generate a semantic model from a live database connection or a completed data import
                   </Typography>
 
-                  {connectionsLoading ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-                      <CircularProgress />
-                    </Box>
-                  ) : testedConnections.length === 0 ? (
-                    <Alert severity="info">
-                      No tested connections available. Please create and test a connection first.
-                    </Alert>
-                  ) : (
-                    <FormControl fullWidth>
-                      <InputLabel>Connection</InputLabel>
-                      <Select
-                        value={selectedConnection?.id || ''}
-                        onChange={(e) => {
-                          const conn = testedConnections.find((c) => c.id === e.target.value);
-                          setSelectedConnection(conn || null);
-                        }}
-                        label="Connection"
-                      >
-                        {testedConnections.map((conn) => (
-                          <MenuItem key={conn.id} value={conn.id}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              {conn.name}
-                              <Chip label={conn.dbType} size="small" />
-                              <Chip label="Connected" color="success" size="small" />
-                            </Box>
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
+                  <ToggleButtonGroup
+                    value={sourceType}
+                    exclusive
+                    onChange={(_e, value) => {
+                      if (value !== null) handleSourceTypeChange(value as SourceType);
+                    }}
+                    sx={{ mb: 3 }}
+                  >
+                    <ToggleButton value="connection">Database Connection</ToggleButton>
+                    <ToggleButton value="import">Data Import</ToggleButton>
+                  </ToggleButtonGroup>
+
+                  {sourceType === 'connection' && (
+                    <>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        Choose a tested connection to use for the semantic model
+                      </Typography>
+
+                      {connectionsLoading ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                          <CircularProgress />
+                        </Box>
+                      ) : testedConnections.length === 0 ? (
+                        <Alert severity="info">
+                          No tested connections available. Please create and test a connection first.
+                        </Alert>
+                      ) : (
+                        <FormControl fullWidth>
+                          <InputLabel>Connection</InputLabel>
+                          <Select
+                            value={selectedConnection?.id || ''}
+                            onChange={(e) => {
+                              const conn = testedConnections.find((c) => c.id === e.target.value);
+                              setSelectedConnection(conn || null);
+                            }}
+                            label="Connection"
+                          >
+                            {testedConnections.map((conn) => (
+                              <MenuItem key={conn.id} value={conn.id}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  {conn.name}
+                                  <Chip label={conn.dbType} size="small" />
+                                  <Chip label="Connected" color="success" size="small" />
+                                </Box>
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      )}
+                    </>
+                  )}
+
+                  {sourceType === 'import' && (
+                    <>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        Choose a completed data import to use for the semantic model
+                      </Typography>
+
+                      {importsLoading ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                          <CircularProgress />
+                        </Box>
+                      ) : imports.length === 0 ? (
+                        <Alert severity="info">
+                          No completed imports available. Please run a data import first.
+                        </Alert>
+                      ) : (
+                        <FormControl fullWidth>
+                          <InputLabel>Data Import</InputLabel>
+                          <Select
+                            value={selectedImport?.id || ''}
+                            onChange={(e) => {
+                              const imp = imports.find((i) => i.id === e.target.value);
+                              setSelectedImport(imp || null);
+                              setSelectedTables([]);
+                            }}
+                            label="Data Import"
+                          >
+                            {imports.map((imp) => (
+                              <MenuItem key={imp.id} value={imp.id}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  {imp.name}
+                                  <Chip label={imp.sourceFileType.toUpperCase()} size="small" />
+                                  {imp.outputTables && (
+                                    <Chip
+                                      label={`${imp.outputTables.length} table${imp.outputTables.length !== 1 ? 's' : ''}`}
+                                      size="small"
+                                      variant="outlined"
+                                    />
+                                  )}
+                                </Box>
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      )}
+                    </>
                   )}
                 </Box>
               )}
 
-              {/* Step 2: Select Database / Bucket / Container */}
-              {activeStep === 1 && (
+              {/* Step 2 (connection only): Select Database / Bucket / Container */}
+              {isSelectDatabaseStep && (
                 <Box>
                   <Typography variant="h6" gutterBottom>
                     Select {dbLabel}
@@ -362,33 +503,42 @@ export default function NewSemanticModelPage() {
                 </Box>
               )}
 
-              {/* Step 3: Select Tables */}
-              {activeStep === 2 && (
+              {/* Select Tables step */}
+              {isSelectTablesStep && (
                 <Box>
                   <Typography variant="h6" gutterBottom>
-                    Select {schemaLabel}s and Tables
+                    {sourceType === 'import' ? 'Select Tables' : `Select ${schemaLabel}s and Tables`}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     Choose which tables to include in the semantic model
                   </Typography>
 
-                  {discoveryLoading ? (
+                  {sourceType === 'connection' && discoveryLoading ? (
                     <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
                       <CircularProgress />
                     </Box>
-                  ) : tablesBySchema.size === 0 ? (
-                    <Alert severity="info">No tables found in the selected {dbLabel.toLowerCase()}.</Alert>
+                  ) : activeTablesBySchema.size === 0 ? (
+                    <Alert severity="info">
+                      {sourceType === 'import'
+                        ? 'No tables found in the selected import.'
+                        : `No tables found in the selected ${dbLabel.toLowerCase()}.`}
+                    </Alert>
                   ) : (
                     <Box>
                       <Box sx={{ mb: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
                         <Typography variant="body2" fontWeight="medium">
-                          Selected: {selectedTables.length} table(s) across{' '}
-                          {new Set(selectedTables.map((t) => t.split('.')[0])).size} {schemaLabel.toLowerCase()}(s)
+                          Selected: {selectedTables.length} table(s)
+                          {sourceType === 'connection' && (
+                            <>
+                              {' '}across {new Set(selectedTables.map((t) => t.split('.')[0])).size}{' '}
+                              {schemaLabel.toLowerCase()}(s)
+                            </>
+                          )}
                         </Typography>
                       </Box>
 
                       <Box sx={{ maxHeight: 500, overflow: 'auto' }}>
-                        {Array.from(tablesBySchema.entries()).map(([schemaName, schemaTables]) => (
+                        {Array.from(activeTablesBySchema.entries()).map(([schemaName, schemaTables]) => (
                           <Box key={schemaName} sx={{ mb: 2 }}>
                             <Card variant="outlined">
                               <CardContent>
@@ -400,9 +550,15 @@ export default function NewSemanticModelPage() {
                                     mb: 1,
                                   }}
                                 >
-                                  <Typography variant="subtitle1" fontWeight="medium">
-                                    {schemaLabel}: {schemaName}
-                                  </Typography>
+                                  {sourceType === 'import' ? (
+                                    <Typography variant="subtitle1" fontWeight="medium">
+                                      Tables
+                                    </Typography>
+                                  ) : (
+                                    <Typography variant="subtitle1" fontWeight="medium">
+                                      {schemaLabel}: {schemaName}
+                                    </Typography>
+                                  )}
                                   <Button
                                     size="small"
                                     onClick={() => handleSelectAllSchema(schemaName)}
@@ -463,14 +619,16 @@ export default function NewSemanticModelPage() {
                 </Box>
               )}
 
-              {/* Step 4: Review and Start */}
-              {activeStep === 3 && (
+              {/* Generate Model step */}
+              {isGenerateStep && (
                 <Box>
                   {runId ? (
                     <Box>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                         <Typography variant="body2" color="text.secondary">
-                          {selectedConnection?.name} • {selectedDatabase} • {selectedTables.length} tables
+                          {sourceType === 'import'
+                            ? `${selectedImport?.name} • ${selectedTables.length} tables`
+                            : `${selectedConnection?.name} • ${selectedDatabase} • ${selectedTables.length} tables`}
                         </Typography>
                       </Box>
                       <AgentLog runId={runId} onRetry={handleRetry} onExit={handleExit} />
@@ -486,28 +644,43 @@ export default function NewSemanticModelPage() {
 
                       <Card variant="outlined" sx={{ mb: 3 }}>
                         <CardContent>
-                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                            Connection
-                          </Typography>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                            <Typography variant="body1">{selectedConnection?.name}</Typography>
-                            <Chip label={selectedConnection?.dbType} size="small" />
-                          </Box>
-
-                          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                            {dbLabel}
-                          </Typography>
-                          <Typography variant="body1" sx={{ mb: 2 }}>
-                            {selectedDatabase}
-                          </Typography>
+                          {sourceType === 'import' ? (
+                            <>
+                              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                                Data Import
+                              </Typography>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                                <Typography variant="body1">{selectedImport?.name}</Typography>
+                                <Chip label={selectedImport?.sourceFileType?.toUpperCase()} size="small" />
+                              </Box>
+                            </>
+                          ) : (
+                            <>
+                              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                                Connection
+                              </Typography>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                                <Typography variant="body1">{selectedConnection?.name}</Typography>
+                                <Chip label={selectedConnection?.dbType} size="small" />
+                              </Box>
+                              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                                {dbLabel}
+                              </Typography>
+                              <Typography variant="body1" sx={{ mb: 2 }}>
+                                {selectedDatabase}
+                              </Typography>
+                            </>
+                          )}
 
                           <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                             Selection Summary
                           </Typography>
                           <Box>
-                            <Typography variant="body2">
-                              • {new Set(selectedTables.map((t) => t.split('.')[0])).size} {schemaLabel.toLowerCase()}(s)
-                            </Typography>
+                            {sourceType === 'connection' && (
+                              <Typography variant="body2">
+                                • {new Set(selectedTables.map((t) => t.split('.')[0])).size} {schemaLabel.toLowerCase()}(s)
+                              </Typography>
+                            )}
                             <Typography variant="body2">• {selectedTables.length} table(s)</Typography>
                           </Box>
                         </CardContent>
