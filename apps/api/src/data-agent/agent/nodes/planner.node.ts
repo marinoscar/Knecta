@@ -73,10 +73,11 @@ export function createPlannerNode(
         !!webSearchTool,
       );
 
-      // Bind web search (server-side) before withStructuredOutput so the provider
-      // can use it during plan generation without disrupting structured output.
-      const baseLlm = webSearchTool ? llm.bindTools([webSearchTool]) : llm;
-      const structuredLlm = baseLlm.withStructuredOutput(PlanArtifactSchema, {
+      // Do NOT bind web search tool here — server-side tools (OpenAI/Anthropic web search)
+      // interfere with withStructuredOutput, causing response.parsed to be null and
+      // triggering the fallback plan. Web search is available in other phases (navigator,
+      // executor, explainer) that use llm.invoke() instead of withStructuredOutput.
+      const structuredLlm = llm.withStructuredOutput(PlanArtifactSchema, {
         name: 'create_plan',
         includeRaw: true,
       });
