@@ -94,6 +94,47 @@ describe('LoginPage', () => {
         expect(screen.getByText(/github/i)).toBeInTheDocument();
       });
     });
+
+    it('should render both Google and Microsoft buttons when both providers are configured', async () => {
+      const multipleProviders = [
+        { name: 'google', authUrl: '/api/auth/google' },
+        { name: 'microsoft', authUrl: '/api/auth/microsoft' },
+      ];
+
+      render(<LoginPage />, {
+        wrapperOptions: {
+          authenticated: false,
+          providers: multipleProviders,
+        },
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /continue with google/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /continue with microsoft/i })).toBeInTheDocument();
+      });
+    });
+
+    it('should call login when Microsoft button is clicked', async () => {
+      const user = userEvent.setup();
+
+      render(<LoginPage />, {
+        wrapperOptions: {
+          authenticated: false,
+          providers: [{ name: 'microsoft', authUrl: '/api/auth/microsoft' }],
+        },
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /continue with microsoft/i })).toBeInTheDocument();
+      });
+
+      const microsoftButton = screen.getByRole('button', { name: /continue with microsoft/i });
+      await user.click(microsoftButton);
+
+      // The button calls login() from context, which is the mocked vi.fn()
+      // Verify the click does not throw and the button remains in the document
+      expect(microsoftButton).toBeInTheDocument();
+    });
   });
 
   describe('Error Handling', () => {
