@@ -74,17 +74,16 @@ export class LlmService {
         const temperature = config?.temperature ?? 0;
         const reasoningEnabled = !!config?.reasoningLevel;
 
-        const modelKwargs: Record<string, unknown> = {};
-        if (config?.reasoningLevel) {
-          modelKwargs.reasoning_effort = config.reasoningLevel;
-        }
-
         return new ChatOpenAI({
           openAIApiKey: apiKey,
           modelName: model,
           // Reasoning models (o1/o3) do not support custom temperature
           ...(reasoningEnabled ? {} : { temperature }),
-          ...(Object.keys(modelKwargs).length > 0 ? { modelKwargs } : {}),
+          // Use native reasoning param — @langchain/openai handles API format
+          // differences internally (Completions vs Responses API)
+          ...(config?.reasoningLevel
+            ? { reasoning: { effort: config.reasoningLevel } }
+            : {}),
         });
       }
 
@@ -142,11 +141,6 @@ export class LlmService {
           throw new BadRequestException('Azure OpenAI not fully configured');
         }
 
-        const modelKwargs: Record<string, unknown> = {};
-        if (config?.reasoningLevel) {
-          modelKwargs.reasoning_effort = config.reasoningLevel;
-        }
-
         return new ChatOpenAI({
           openAIApiKey: apiKey,
           configuration: {
@@ -156,7 +150,11 @@ export class LlmService {
           },
           // Reasoning models (o1/o3) do not support custom temperature
           ...(reasoningEnabled ? {} : { temperature }),
-          ...(Object.keys(modelKwargs).length > 0 ? { modelKwargs } : {}),
+          // Use native reasoning param — @langchain/openai handles API format
+          // differences internally (Completions vs Responses API)
+          ...(config?.reasoningLevel
+            ? { reasoning: { effort: config.reasoningLevel } }
+            : {}),
         });
       }
 
