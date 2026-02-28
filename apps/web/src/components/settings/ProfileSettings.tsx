@@ -108,7 +108,7 @@ export function ProfileSettings({
                       disabled={disabled}
                     />
                   }
-                  label="Use Google profile image"
+                  label="Use provider profile image"
                 />
                 {!useProviderImage && (
                   <ImageUpload
@@ -126,7 +126,7 @@ export function ProfileSettings({
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder={user?.email?.split('@')[0]}
-            helperText="Leave empty to use your Google name"
+            helperText="Leave empty to use your provider name"
             disabled={disabled}
             fullWidth
           />
