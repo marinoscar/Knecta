@@ -52,6 +52,14 @@ export default () => {
     callbackUrl: process.env.GOOGLE_CALLBACK_URL,
   },
 
+  // OAuth - Microsoft (Azure AD / Entra ID)
+  microsoft: {
+    clientId: process.env.MICROSOFT_CLIENT_ID,
+    clientSecret: process.env.MICROSOFT_CLIENT_SECRET,
+    tenantId: process.env.MICROSOFT_TENANT_ID || 'common',
+    callbackUrl: process.env.MICROSOFT_CALLBACK_URL,
+  },
+
   // Admin bootstrap
   initialAdminEmail: process.env.INITIAL_ADMIN_EMAIL,
 
