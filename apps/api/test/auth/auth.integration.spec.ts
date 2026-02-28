@@ -45,6 +45,93 @@ describe('Auth Controller (Integration)', () => {
         .get('/api/auth/providers')
         .expect(200);
     });
+
+    it('should include google provider when GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set', async () => {
+      // The test environment (.env.test) always has GOOGLE_CLIENT_ID and
+      // GOOGLE_CLIENT_SECRET configured, so Google must appear in the response.
+      const response = await request(context.app.getHttpServer())
+        .get('/api/auth/providers')
+        .expect(200);
+
+      const providers: Array<{ name: string; enabled: boolean }> =
+        response.body.data.providers;
+
+      expect(providers).toContainEqual(
+        expect.objectContaining({ name: 'google', enabled: true }),
+      );
+    });
+  });
+
+  // ── Providers with both Google + Microsoft configured ────────────────────
+  //
+  // The primary test app (created in the outer beforeAll) uses only the env
+  // vars from .env.test, which do not include Microsoft credentials. A
+  // separate, short-lived app is created here with MICROSOFT_CLIENT_ID and
+  // MICROSOFT_CLIENT_SECRET set in the process environment so that
+  // ConfigService picks them up at module compile time.
+  //
+  describe('GET /api/auth/providers — with Microsoft also configured', () => {
+    let msContext: TestContext;
+
+    beforeAll(async () => {
+      // Temporarily inject Microsoft credentials into the process environment.
+      // These values are placeholders — the ConfigService reads them at startup
+      // and the Passport strategy is never invoked by this test.
+      process.env.MICROSOFT_CLIENT_ID = 'test-ms-client-id';
+      process.env.MICROSOFT_CLIENT_SECRET = 'test-ms-client-secret';
+      process.env.MICROSOFT_CALLBACK_URL =
+        'http://localhost:3000/api/auth/microsoft/callback';
+
+      msContext = await createTestApp({ useMockDatabase: true });
+    });
+
+    afterAll(async () => {
+      await closeTestApp(msContext);
+
+      // Remove the Microsoft env vars so they don't bleed into other test suites
+      delete process.env.MICROSOFT_CLIENT_ID;
+      delete process.env.MICROSOFT_CLIENT_SECRET;
+      delete process.env.MICROSOFT_CALLBACK_URL;
+    });
+
+    beforeEach(() => {
+      resetPrismaMock();
+      setupBaseMocks();
+    });
+
+    it('should return both google and microsoft when both are configured', async () => {
+      const response = await request(msContext.app.getHttpServer())
+        .get('/api/auth/providers')
+        .expect(200);
+
+      const providers: Array<{ name: string; enabled: boolean }> =
+        response.body.data.providers;
+
+      expect(providers).toContainEqual(
+        expect.objectContaining({ name: 'google', enabled: true }),
+      );
+      expect(providers).toContainEqual(
+        expect.objectContaining({ name: 'microsoft', enabled: true }),
+      );
+    });
+
+    it('should return exactly two providers when only google and microsoft are configured', async () => {
+      const response = await request(msContext.app.getHttpServer())
+        .get('/api/auth/providers')
+        .expect(200);
+
+      const providers: Array<{ name: string }> = response.body.data.providers;
+      const names = providers.map((p) => p.name);
+
+      expect(names).toContain('google');
+      expect(names).toContain('microsoft');
+    });
+
+    it('should remain publicly accessible with Microsoft credentials present', async () => {
+      await request(msContext.app.getHttpServer())
+        .get('/api/auth/providers')
+        .expect(200);
+    });
   });
 
   describe('GET /api/auth/me', () => {
