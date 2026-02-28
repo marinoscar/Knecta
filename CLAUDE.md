@@ -11,7 +11,7 @@ Web Application Foundation with React UI + Node API + PostgreSQL. Production-gra
 - **Backend**: Node.js + TypeScript, NestJS with Fastify adapter
 - **Frontend**: React + TypeScript, Material UI (MUI)
 - **Database**: PostgreSQL with Prisma ORM
-- **Auth**: Passport strategies (Google OAuth required)
+- **Auth**: Passport strategies (Google OAuth required, Microsoft Azure AD optional)
 - **Testing**: Jest + Supertest (backend), React Testing Library + Jest (frontend)
 - **Observability**: OpenTelemetry, Uptrace, Pino structured logging
 - **Containerization**: Docker + Docker Compose
@@ -257,6 +257,8 @@ cd apps/api && npm run prisma:migrate
 - `GET /api/auth/providers` - List enabled OAuth providers
 - `GET /api/auth/google` - Initiate Google OAuth
 - `GET /api/auth/google/callback` - OAuth callback
+- `GET /api/auth/microsoft` - Initiate Microsoft OAuth
+- `GET /api/auth/microsoft/callback` - Microsoft OAuth callback
 - `POST /api/auth/refresh` - Refresh access token
 - `POST /api/auth/logout` - Logout and invalidate session
 - `POST /api/auth/logout-all` - Logout from all devices
@@ -489,6 +491,9 @@ Note: `DATABASE_URL` is constructed automatically from these variables at runtim
 - `JWT_ACCESS_TTL_MINUTES` - Access token TTL (default: 15)
 - `JWT_REFRESH_TTL_DAYS` - Refresh token TTL (default: 14)
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` - Google OAuth credentials
+- `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` - Microsoft Azure AD OAuth credentials
+- `MICROSOFT_TENANT_ID` - Azure AD tenant (default: common)
+- `MICROSOFT_CALLBACK_URL` - Microsoft OAuth callback URL
 - `INITIAL_ADMIN_EMAIL` - First user with this email becomes Admin
 - `DEVICE_CODE_EXPIRY_MINUTES` - Device code lifetime (default: 15)
 - `DEVICE_CODE_POLL_INTERVAL` - Device polling interval in seconds (default: 5)

@@ -119,6 +119,30 @@ Endpoints returning lists support pagination with the following query parameters
 
 ---
 
+#### GET /auth/microsoft
+**Public endpoint** - Initiate Microsoft Azure AD OAuth flow. Redirects to Microsoft consent screen.
+
+**Response:** HTTP 302 redirect to Microsoft
+
+---
+
+#### GET /auth/microsoft/callback
+**Public endpoint** - OAuth callback handler (called by Microsoft Azure AD).
+
+**Query Parameters:**
+- `code` (string) - Authorization code from Microsoft
+- `state` (string, optional) - CSRF protection state
+
+**Response:** HTTP 302 redirect to frontend with access token in query parameter
+- Sets HttpOnly refresh token cookie
+- Redirects to `/auth/callback?accessToken=<token>`
+
+**Error Cases:**
+- Email not in allowlist → Redirects to `/auth/error?error=not_authorized`
+- OAuth failure → Redirects to `/auth/error?error=oauth_failed`
+
+---
+
 #### GET /auth/me
 **Requires Authentication** - Get current user profile.
 
