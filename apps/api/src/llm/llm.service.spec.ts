@@ -202,7 +202,7 @@ describe('LlmService', () => {
     });
 
     describe('reasoning for OpenAI', () => {
-      it('should pass reasoning_effort in modelKwargs when reasoningLevel is high', () => {
+      it('should pass reasoning: { effort } when reasoningLevel is high', () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.openai.apiKey') return 'test-openai-key';
           if (key === 'llm.openai.model') return 'o1';
@@ -214,13 +214,11 @@ describe('LlmService', () => {
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-openai-key',
           modelName: 'o1',
-          modelKwargs: {
-            reasoning_effort: 'high',
-          },
+          reasoning: { effort: 'high' },
         });
       });
 
-      it('should pass reasoning_effort medium for openai', () => {
+      it('should pass reasoning: { effort } medium for openai', () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.openai.apiKey') return 'test-openai-key';
           if (key === 'llm.openai.model') return 'o1';
@@ -232,10 +230,51 @@ describe('LlmService', () => {
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-openai-key',
           modelName: 'o1',
-          modelKwargs: {
-            reasoning_effort: 'medium',
-          },
+          reasoning: { effort: 'medium' },
         });
+      });
+
+      it('should pass reasoning: { effort } low for openai', () => {
+        mockConfigService.get.mockImplementation((key: string) => {
+          if (key === 'llm.openai.apiKey') return 'test-openai-key';
+          if (key === 'llm.openai.model') return 'o1';
+          return undefined;
+        });
+
+        service.getChatModel('openai', { reasoningLevel: 'low' });
+
+        expect(ChatOpenAI).toHaveBeenCalledWith({
+          openAIApiKey: 'test-openai-key',
+          modelName: 'o1',
+          reasoning: { effort: 'low' },
+        });
+      });
+
+      it('should omit temperature and include reasoning when reasoningLevel is set', () => {
+        mockConfigService.get.mockImplementation((key: string) => {
+          if (key === 'llm.openai.apiKey') return 'test-openai-key';
+          if (key === 'llm.openai.model') return 'o1';
+          return undefined;
+        });
+
+        service.getChatModel('openai', { reasoningLevel: 'high' });
+
+        const callArgs = (ChatOpenAI as jest.MockedClass<typeof ChatOpenAI>).mock.calls[0][0];
+        expect(callArgs).not.toHaveProperty('temperature');
+        expect(callArgs).toHaveProperty('reasoning', { effort: 'high' });
+      });
+
+      it('should not include modelKwargs in the constructor call (regression)', () => {
+        mockConfigService.get.mockImplementation((key: string) => {
+          if (key === 'llm.openai.apiKey') return 'test-openai-key';
+          if (key === 'llm.openai.model') return 'o1';
+          return undefined;
+        });
+
+        service.getChatModel('openai', { reasoningLevel: 'high' });
+
+        const callArgs = (ChatOpenAI as jest.MockedClass<typeof ChatOpenAI>).mock.calls[0][0];
+        expect(callArgs).not.toHaveProperty('modelKwargs');
       });
     });
 
@@ -304,6 +343,61 @@ describe('LlmService', () => {
           modelName: 'claude-opus-4-6',
           thinking: { type: 'enabled', budget_tokens: 1024 },
         });
+      });
+    });
+
+    describe('reasoning for Azure', () => {
+      it('should pass reasoning: { effort } when reasoningLevel is high for azure', () => {
+        mockConfigService.get.mockImplementation((key: string) => {
+          if (key === 'llm.azure.apiKey') return 'test-azure-key';
+          if (key === 'llm.azure.endpoint') return 'https://test.openai.azure.com';
+          if (key === 'llm.azure.deployment') return 'o1';
+          if (key === 'llm.azure.apiVersion') return '2024-02-01';
+          return undefined;
+        });
+
+        service.getChatModel('azure', { reasoningLevel: 'high' });
+
+        expect(ChatOpenAI).toHaveBeenCalledWith({
+          openAIApiKey: 'test-azure-key',
+          configuration: {
+            baseURL: 'https://test.openai.azure.com/openai/deployments/o1',
+            defaultQuery: { 'api-version': '2024-02-01' },
+            defaultHeaders: { 'api-key': 'test-azure-key' },
+          },
+          reasoning: { effort: 'high' },
+        });
+      });
+
+      it('should omit temperature and include reasoning when reasoningLevel is set for azure', () => {
+        mockConfigService.get.mockImplementation((key: string) => {
+          if (key === 'llm.azure.apiKey') return 'test-azure-key';
+          if (key === 'llm.azure.endpoint') return 'https://test.openai.azure.com';
+          if (key === 'llm.azure.deployment') return 'o1';
+          if (key === 'llm.azure.apiVersion') return '2024-02-01';
+          return undefined;
+        });
+
+        service.getChatModel('azure', { reasoningLevel: 'medium' });
+
+        const callArgs = (ChatOpenAI as jest.MockedClass<typeof ChatOpenAI>).mock.calls[0][0];
+        expect(callArgs).not.toHaveProperty('temperature');
+        expect(callArgs).toHaveProperty('reasoning', { effort: 'medium' });
+      });
+
+      it('should not include modelKwargs in the azure constructor call (regression)', () => {
+        mockConfigService.get.mockImplementation((key: string) => {
+          if (key === 'llm.azure.apiKey') return 'test-azure-key';
+          if (key === 'llm.azure.endpoint') return 'https://test.openai.azure.com';
+          if (key === 'llm.azure.deployment') return 'o1';
+          if (key === 'llm.azure.apiVersion') return '2024-02-01';
+          return undefined;
+        });
+
+        service.getChatModel('azure', { reasoningLevel: 'high' });
+
+        const callArgs = (ChatOpenAI as jest.MockedClass<typeof ChatOpenAI>).mock.calls[0][0];
+        expect(callArgs).not.toHaveProperty('modelKwargs');
       });
     });
 
