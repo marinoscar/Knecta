@@ -65,6 +65,7 @@ export class LlmService {
 
   getChatModel(provider?: string, config?: LlmModelConfig): BaseChatModel {
     const targetProvider = provider || this.configService.get<string>('llm.defaultProvider') || 'openai';
+    const maxRetries = this.configService.get<number>('llm.maxRetries') ?? 3;
 
     switch (targetProvider) {
       case 'openai': {
@@ -77,6 +78,7 @@ export class LlmService {
         return new ChatOpenAI({
           openAIApiKey: apiKey,
           modelName: model,
+          maxRetries,
           // Reasoning models (o1/o3) do not support custom temperature
           ...(reasoningEnabled ? {} : { temperature }),
           // Use native reasoning param — @langchain/openai handles API format
@@ -109,6 +111,7 @@ export class LlmService {
         const opts: any = {
           anthropicApiKey: apiKey,
           modelName: model,
+          maxRetries,
         };
 
         // Only set temperature if thinking is NOT enabled
@@ -143,6 +146,7 @@ export class LlmService {
 
         return new ChatOpenAI({
           openAIApiKey: apiKey,
+          maxRetries,
           configuration: {
             baseURL: `${endpoint}/openai/deployments/${deployment}`,
             defaultQuery: { 'api-version': apiVersion },
