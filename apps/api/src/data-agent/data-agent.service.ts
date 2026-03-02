@@ -533,7 +533,7 @@ export class DataAgentService {
    */
   private buildShareUrl(shareToken: string): string {
     const appUrl = this.configService.get<string>('APP_URL') || 'http://localhost:8319';
-    return `${appUrl}/share/${shareToken}`;
+    return `${appUrl}/share/${shareToken}?showInsights=true`;
   }
 
   /**
