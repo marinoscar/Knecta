@@ -937,6 +937,7 @@ The `LLM_DEFAULT_PROVIDER` environment variable sets the default:
 
 ```bash
 LLM_DEFAULT_PROVIDER=openai  # Options: openai, anthropic, azure
+LLM_MAX_RETRIES=3            # Retry attempts for transient failures (default: 3, 0 to disable)
 ```
 
 **Provider Selection Logic:**
@@ -2852,6 +2853,7 @@ Required in `infra/compose/.env`:
 
 # Default provider (openai | anthropic | azure)
 LLM_DEFAULT_PROVIDER=openai
+LLM_MAX_RETRIES=3  # Retry attempts for transient failures (default: 3, 0 to disable)
 
 # OpenAI
 OPENAI_API_KEY=sk-proj-...

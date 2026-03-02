@@ -503,6 +503,7 @@ Note: `DATABASE_URL` is constructed automatically from these variables at runtim
 
 **LLM Providers:**
 - `LLM_DEFAULT_PROVIDER` - Default LLM provider (openai|anthropic|azure)
+- `LLM_MAX_RETRIES` - Max retry attempts for transient LLM failures (default: 3, set 0 to disable)
 - `OPENAI_API_KEY` / `OPENAI_MODEL` - OpenAI configuration
 - `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` - Anthropic configuration
 - `AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_ENDPOINT` / `AZURE_OPENAI_DEPLOYMENT` / `AZURE_OPENAI_API_VERSION` - Azure OpenAI configuration

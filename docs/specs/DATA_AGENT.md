@@ -3556,6 +3556,7 @@ AZURE_OPENAI_API_VERSION=2024-02-15-preview
 **Default Provider**:
 ```bash
 LLM_DEFAULT_PROVIDER=openai  # openai | anthropic | azure
+LLM_MAX_RETRIES=3            # Retry attempts for transient failures (default: 3, 0 to disable)
 ```
 
 **Admin Model Configuration**:
