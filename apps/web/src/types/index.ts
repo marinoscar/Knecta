@@ -384,19 +384,19 @@ export interface ChartSlice {
 export interface ChartPoint {
   x: number;
   y: number;
-  label?: string;
+  label?: string | null;
 }
 
 export interface ChartSpec {
   type: 'bar' | 'line' | 'pie' | 'scatter';
   title: string;
-  xAxisLabel?: string;
-  yAxisLabel?: string;
-  categories?: string[];
-  series?: ChartSeries[];
-  slices?: ChartSlice[];
-  points?: ChartPoint[];
-  layout?: 'vertical' | 'horizontal';
+  xAxisLabel?: string | null;
+  yAxisLabel?: string | null;
+  categories?: string[] | null;
+  series?: ChartSeries[] | null;
+  slices?: ChartSlice[] | null;
+  points?: ChartPoint[] | null;
+  layout?: 'vertical' | 'horizontal' | null;
 }
 
 // ==========================================

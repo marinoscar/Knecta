@@ -26,7 +26,7 @@ const ChartSliceSchema = z.object({
 const ChartPointSchema = z.object({
   x: z.number().describe('X coordinate'),
   y: z.number().describe('Y coordinate'),
-  label: z.string().optional().describe('Optional point label for hover tooltip'),
+  label: z.string().nullable().optional().describe('Optional point label for hover tooltip'),
 });
 
 export const ChartSpecSchema = z.object({
@@ -36,19 +36,19 @@ export const ChartSpecSchema = z.object({
     .min(1)
     .max(60)
     .describe('Concise chart title (max 60 chars)'),
-  xAxisLabel: z.string().optional()
+  xAxisLabel: z.string().nullable().optional()
     .describe('X-axis label with units (e.g., "Month", "Region")'),
-  yAxisLabel: z.string().optional()
+  yAxisLabel: z.string().nullable().optional()
     .describe('Y-axis label with units (e.g., "Revenue ($M)")'),
-  categories: z.array(z.string()).optional()
+  categories: z.array(z.string()).nullable().optional()
     .describe('X-axis category labels (for bar/line charts)'),
-  series: z.array(ChartSeriesSchema).optional()
+  series: z.array(ChartSeriesSchema).nullable().optional()
     .describe('Data series for bar/line charts (can be multiple)'),
-  slices: z.array(ChartSliceSchema).max(8).optional()
+  slices: z.array(ChartSliceSchema).max(8).nullable().optional()
     .describe('Pie chart slices (max 8, group remaining as "Other")'),
-  points: z.array(ChartPointSchema).optional()
+  points: z.array(ChartPointSchema).nullable().optional()
     .describe('Scatter plot points (x/y coordinates)'),
-  layout: z.enum(['vertical', 'horizontal']).optional()
+  layout: z.enum(['vertical', 'horizontal']).nullable().optional()
     .describe('Chart orientation (bar charts only, default: vertical)'),
 });
 
