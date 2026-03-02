@@ -82,7 +82,7 @@ export class LlmService {
           // Use native reasoning param — @langchain/openai handles API format
           // differences internally (Completions vs Responses API)
           ...(config?.reasoningLevel
-            ? { reasoning: { effort: config.reasoningLevel } }
+            ? { reasoning: { effort: config.reasoningLevel as 'low' | 'medium' | 'high' } }
             : {}),
         });
       }
@@ -153,7 +153,7 @@ export class LlmService {
           // Use native reasoning param — @langchain/openai handles API format
           // differences internally (Completions vs Responses API)
           ...(config?.reasoningLevel
-            ? { reasoning: { effort: config.reasoningLevel } }
+            ? { reasoning: { effort: config.reasoningLevel as 'low' | 'medium' | 'high' } }
             : {}),
         });
       }
