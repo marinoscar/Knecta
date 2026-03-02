@@ -100,15 +100,8 @@ export class AgentStreamController {
         return;
       }
 
-      // Get the user's question from the message before this one
-      // (the assistant message is the placeholder, the user message was created just before it)
-      const messages = await this.dataAgentService.getChatMessages(chatId);
-      // Find the last user message before this assistant message
-      const assistantMsgIndex = messages.findIndex((m) => m.id === messageId);
-      const userMessage = messages
-        .slice(0, assistantMsgIndex)
-        .reverse()
-        .find((m) => m.role === 'user');
+      // Get the user's question — the last user message in this chat
+      const userMessage = await this.dataAgentService.getLastUserMessage(chatId);
 
       if (!userMessage) {
         emit({ type: 'message_error', message: 'No user message found' });
