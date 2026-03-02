@@ -50,6 +50,7 @@ describe('LlmService', () => {
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-openai-key',
           modelName: 'gpt-4o',
+          maxRetries: 3,
           temperature: 0,
         });
       });
@@ -68,6 +69,7 @@ describe('LlmService', () => {
         expect(ChatAnthropic).toHaveBeenCalledWith({
           anthropicApiKey: 'test-anthropic-key',
           modelName: 'claude-sonnet-4-5-20250929',
+          maxRetries: 3,
           temperature: 0,
         });
       });
@@ -84,6 +86,7 @@ describe('LlmService', () => {
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-openai-key',
           modelName: 'gpt-4o',
+          maxRetries: 3,
           temperature: 0,
         });
       });
@@ -101,6 +104,7 @@ describe('LlmService', () => {
 
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-azure-key',
+          maxRetries: 3,
           configuration: {
             baseURL: 'https://test.openai.azure.com/openai/deployments/gpt-4o',
             defaultQuery: { 'api-version': '2024-02-01' },
@@ -124,6 +128,7 @@ describe('LlmService', () => {
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-openai-key',
           modelName: 'gpt-4o',
+          maxRetries: 3,
           temperature: 0.5,
         });
       });
@@ -140,6 +145,7 @@ describe('LlmService', () => {
         expect(ChatAnthropic).toHaveBeenCalledWith({
           anthropicApiKey: 'test-anthropic-key',
           modelName: 'claude-sonnet-4-5-20250929',
+          maxRetries: 3,
           temperature: 1.0,
         });
       });
@@ -158,6 +164,7 @@ describe('LlmService', () => {
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-openai-key',
           modelName: 'gpt-4o-mini',
+          maxRetries: 3,
           temperature: 0,
         });
       });
@@ -174,6 +181,7 @@ describe('LlmService', () => {
         expect(ChatAnthropic).toHaveBeenCalledWith({
           anthropicApiKey: 'test-anthropic-key',
           modelName: 'claude-opus-4-6',
+          maxRetries: 3,
           temperature: 0,
         });
       });
@@ -191,6 +199,7 @@ describe('LlmService', () => {
 
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-azure-key',
+          maxRetries: 3,
           configuration: {
             baseURL: 'https://test.openai.azure.com/openai/deployments/gpt-4o-mini',
             defaultQuery: { 'api-version': '2024-02-01' },
@@ -214,6 +223,7 @@ describe('LlmService', () => {
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-openai-key',
           modelName: 'o1',
+          maxRetries: 3,
           reasoning: { effort: 'high' },
         });
       });
@@ -230,6 +240,7 @@ describe('LlmService', () => {
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-openai-key',
           modelName: 'o1',
+          maxRetries: 3,
           reasoning: { effort: 'medium' },
         });
       });
@@ -246,6 +257,7 @@ describe('LlmService', () => {
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-openai-key',
           modelName: 'o1',
+          maxRetries: 3,
           reasoning: { effort: 'low' },
         });
       });
@@ -291,6 +303,7 @@ describe('LlmService', () => {
         expect(ChatAnthropic).toHaveBeenCalledWith({
           anthropicApiKey: 'test-anthropic-key',
           modelName: 'claude-opus-4-6',
+          maxRetries: 3,
           thinking: { type: 'adaptive' },
         });
       });
@@ -309,6 +322,7 @@ describe('LlmService', () => {
         expect(ChatAnthropic).toHaveBeenCalledWith({
           anthropicApiKey: 'test-anthropic-key',
           modelName: 'claude-opus-4-6',
+          maxRetries: 3,
           thinking: { type: 'enabled', budget_tokens: 10000 },
         });
       });
@@ -325,6 +339,7 @@ describe('LlmService', () => {
         expect(ChatAnthropic).toHaveBeenCalledWith({
           anthropicApiKey: 'test-anthropic-key',
           modelName: 'claude-opus-4-6',
+          maxRetries: 3,
           temperature: 0,
         });
       });
@@ -341,6 +356,7 @@ describe('LlmService', () => {
         expect(ChatAnthropic).toHaveBeenCalledWith({
           anthropicApiKey: 'test-anthropic-key',
           modelName: 'claude-opus-4-6',
+          maxRetries: 3,
           thinking: { type: 'enabled', budget_tokens: 1024 },
         });
       });
@@ -360,6 +376,7 @@ describe('LlmService', () => {
 
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-azure-key',
+          maxRetries: 3,
           configuration: {
             baseURL: 'https://test.openai.azure.com/openai/deployments/o1',
             defaultQuery: { 'api-version': '2024-02-01' },
@@ -398,6 +415,50 @@ describe('LlmService', () => {
 
         const callArgs = (ChatOpenAI as jest.MockedClass<typeof ChatOpenAI>).mock.calls[0][0];
         expect(callArgs).not.toHaveProperty('modelKwargs');
+      });
+    });
+
+    describe('maxRetries', () => {
+      it('should pass default maxRetries of 3 when not configured', () => {
+        mockConfigService.get.mockImplementation((key: string) => {
+          if (key === 'llm.openai.apiKey') return 'test-openai-key';
+          if (key === 'llm.openai.model') return 'gpt-4o';
+          // llm.maxRetries returns undefined → defaults to 3
+          return undefined;
+        });
+
+        service.getChatModel('openai');
+
+        const callArgs = (ChatOpenAI as jest.MockedClass<typeof ChatOpenAI>).mock.calls[0][0];
+        expect(callArgs).toHaveProperty('maxRetries', 3);
+      });
+
+      it('should pass custom maxRetries when configured', () => {
+        mockConfigService.get.mockImplementation((key: string) => {
+          if (key === 'llm.openai.apiKey') return 'test-openai-key';
+          if (key === 'llm.openai.model') return 'gpt-4o';
+          if (key === 'llm.maxRetries') return 5;
+          return undefined;
+        });
+
+        service.getChatModel('openai');
+
+        const callArgs = (ChatOpenAI as jest.MockedClass<typeof ChatOpenAI>).mock.calls[0][0];
+        expect(callArgs).toHaveProperty('maxRetries', 5);
+      });
+
+      it('should pass maxRetries: 0 to disable retries when configured as 0', () => {
+        mockConfigService.get.mockImplementation((key: string) => {
+          if (key === 'llm.openai.apiKey') return 'test-openai-key';
+          if (key === 'llm.openai.model') return 'gpt-4o';
+          if (key === 'llm.maxRetries') return 0;
+          return undefined;
+        });
+
+        service.getChatModel('openai');
+
+        const callArgs = (ChatOpenAI as jest.MockedClass<typeof ChatOpenAI>).mock.calls[0][0];
+        expect(callArgs).toHaveProperty('maxRetries', 0);
       });
     });
 

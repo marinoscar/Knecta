@@ -101,6 +101,7 @@ export default () => {
   // LLM Providers
   llm: {
     defaultProvider: process.env.LLM_DEFAULT_PROVIDER || 'openai',
+    maxRetries: parseInt(process.env.LLM_MAX_RETRIES || '3', 10),
     openai: {
       apiKey: process.env.OPENAI_API_KEY,
       model: process.env.OPENAI_MODEL || 'gpt-4o',
