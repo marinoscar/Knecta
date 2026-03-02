@@ -44,10 +44,10 @@ export function ChartRenderer({ chartSpec }: ChartRendererProps) {
       const bandAxisConfig = {
         data: chartSpec.categories || [],
         scaleType: 'band' as const,
-        label: isHorizontal ? chartSpec.yAxisLabel : chartSpec.xAxisLabel,
+        label: (isHorizontal ? chartSpec.yAxisLabel : chartSpec.xAxisLabel) ?? undefined,
       };
       const valueAxisConfig = {
-        label: isHorizontal ? chartSpec.xAxisLabel : chartSpec.yAxisLabel,
+        label: (isHorizontal ? chartSpec.xAxisLabel : chartSpec.yAxisLabel) ?? undefined,
       };
       return (
         <Paper sx={containerSx} elevation={0} variant="outlined">
@@ -62,7 +62,7 @@ export function ChartRenderer({ chartSpec }: ChartRendererProps) {
             }))}
             xAxis={[isHorizontal ? valueAxisConfig : bandAxisConfig]}
             yAxis={[isHorizontal ? bandAxisConfig : valueAxisConfig]}
-            layout={chartSpec.layout}
+            layout={chartSpec.layout ?? undefined}
             slotProps={{
               legend: {
                 direction: 'horizontal',
@@ -91,10 +91,10 @@ export function ChartRenderer({ chartSpec }: ChartRendererProps) {
               {
                 data: chartSpec.categories || [],
                 scaleType: 'band' as const,
-                label: chartSpec.xAxisLabel,
+                label: chartSpec.xAxisLabel ?? undefined,
               },
             ]}
-            yAxis={[{ label: chartSpec.yAxisLabel }]}
+            yAxis={[{ label: chartSpec.yAxisLabel ?? undefined }]}
             slotProps={{
               legend: {
                 direction: 'horizontal',
@@ -153,8 +153,8 @@ export function ChartRenderer({ chartSpec }: ChartRendererProps) {
                 })),
               },
             ]}
-            xAxis={[{ label: chartSpec.xAxisLabel }]}
-            yAxis={[{ label: chartSpec.yAxisLabel }]}
+            xAxis={[{ label: chartSpec.xAxisLabel ?? undefined }]}
+            yAxis={[{ label: chartSpec.yAxisLabel ?? undefined }]}
             sx={chartSx}
           />
         </Paper>
