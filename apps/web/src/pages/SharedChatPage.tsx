@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -90,7 +90,11 @@ export default function SharedChatPage() {
   const [data, setData] = useState<SharedChatData | null>(null);
   const [error, setError] = useState<{ status: number; message: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [insightsOpen, setInsightsOpen] = useState(false);
+  const [searchParams] = useSearchParams();
+  const showInsightsParam = searchParams.get('showInsights');
+  const [insightsOpen, setInsightsOpen] = useState(
+    showInsightsParam !== null ? showInsightsParam !== 'false' : true
+  );
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
 
   useEffect(() => {
