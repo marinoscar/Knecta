@@ -2,10 +2,10 @@
 
 ## Executive Summary
 
-This document provides a comprehensive overview of the security architecture for the Enterprise Application Foundation. The system implements defense-in-depth security through multiple layers: OAuth 2.0 authentication with Google, JWT-based session management with token rotation, email allowlist access control, Role-Based Access Control (RBAC), and comprehensive audit logging.
+This document provides a comprehensive overview of the security architecture for the Enterprise Application Foundation. The system implements defense-in-depth security through multiple layers: OAuth 2.0 authentication with Google and Microsoft Azure AD, JWT-based session management with token rotation, email allowlist access control, Role-Based Access Control (RBAC), and comprehensive audit logging.
 
 **Key Security Technologies:**
-- **Authentication**: OAuth 2.0 / OpenID Connect (Google)
+- **Authentication**: OAuth 2.0 / OpenID Connect (Google, Microsoft Azure AD)
 - **Access Control**: Email allowlist restricts access to pre-authorized users
 - **Session Management**: JWT access tokens + HttpOnly refresh tokens with rotation
 - **Authorization**: Role-Based Access Control (RBAC) with three roles (Admin, Contributor, Viewer)
@@ -19,9 +19,9 @@ This document provides a comprehensive overview of the security architecture for
 
 ## 1. Authentication Architecture
 
-### OAuth 2.0 Flow with Google
+### OAuth 2.0 Flow with Google and Microsoft Azure AD
 
-The application uses OAuth 2.0 with OpenID Connect for authentication. All user authentication flows through Google's OAuth service, eliminating the need to store or manage passwords.
+The application uses OAuth 2.0 with OpenID Connect for authentication. Users may authenticate via Google or Microsoft Azure AD, eliminating the need to store or manage passwords.
 
 ```mermaid
 sequenceDiagram
@@ -53,6 +53,8 @@ sequenceDiagram
 **OAuth Endpoints:**
 - `GET /api/auth/google` - Initiates OAuth flow, redirects to Google
 - `GET /api/auth/google/callback` - Handles OAuth callback, provisions user, returns tokens
+- `GET /api/auth/microsoft` - Initiates OAuth flow, redirects to Microsoft Azure AD
+- `GET /api/auth/microsoft/callback` - Handles Microsoft OAuth callback, provisions user, returns tokens
 
 **User Provisioning Logic:**
 1. **Allowlist check**: Verify email is in `allowed_emails` table (or matches `INITIAL_ADMIN_EMAIL`)

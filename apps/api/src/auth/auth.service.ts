@@ -25,9 +25,22 @@ export interface FullTokenResponse {
   refreshToken?: string; // Only returned on initial auth, not refresh
 }
 
+export interface OAuthProfile {
+  provider: string;
+  id: string;
+  email: string;
+  displayName: string;
+  picture?: string;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+
+  private readonly providerConfigs = [
+    { name: 'google', clientIdKey: 'google.clientId', secretKey: 'google.clientSecret' },
+    { name: 'microsoft', clientIdKey: 'microsoft.clientId', secretKey: 'microsoft.clientSecret' },
+  ];
 
   constructor(
     private readonly prisma: PrismaService,
@@ -44,7 +57,42 @@ export class AuthService {
   async handleGoogleLogin(
     profile: GoogleProfile,
   ): Promise<FullTokenResponse> {
-    this.logger.log(`Google login attempt for email: ${profile.email}`);
+    return this.handleOAuthLogin({
+      provider: 'google',
+      id: profile.id,
+      email: profile.email,
+      displayName: profile.displayName,
+      picture: profile.picture,
+    });
+  }
+
+  /**
+   * Handles Microsoft OAuth login
+   * Creates or updates user, links identity, checks admin bootstrap
+   */
+  async handleMicrosoftLogin(profile: {
+    id: string;
+    email: string;
+    displayName: string;
+    picture?: string;
+  }): Promise<FullTokenResponse> {
+    return this.handleOAuthLogin({
+      provider: 'microsoft',
+      id: profile.id,
+      email: profile.email,
+      displayName: profile.displayName,
+      picture: profile.picture,
+    });
+  }
+
+  /**
+   * Handles OAuth login for any provider
+   * Creates or updates user, links identity, checks admin bootstrap
+   */
+  private async handleOAuthLogin(
+    profile: OAuthProfile,
+  ): Promise<FullTokenResponse> {
+    this.logger.log(`${profile.provider} login attempt for email: ${profile.email}`);
 
     // Check allowlist before any user lookup/creation
     const email = profile.email.toLowerCase();
@@ -62,7 +110,7 @@ export class AuthService {
     let identity = await this.prisma.userIdentity.findUnique({
       where: {
         provider_providerSubject: {
-          provider: 'google',
+          provider: profile.provider,
           providerSubject: profile.id,
         },
       },
@@ -113,12 +161,12 @@ export class AuthService {
       if (existingUser) {
         // Link new identity to existing user
         this.logger.log(
-          `Linking Google identity to existing user: ${existingUser.email}`,
+          `Linking ${profile.provider} identity to existing user: ${existingUser.email}`,
         );
         await this.prisma.userIdentity.create({
           data: {
             userId: existingUser.id,
-            provider: 'google',
+            provider: profile.provider,
             providerSubject: profile.id,
             providerEmail: profile.email,
           },
@@ -160,7 +208,7 @@ export class AuthService {
    * Creates a new user with default role, settings, and identity
    * Handles admin bootstrap if applicable
    */
-  private async createNewUser(profile: GoogleProfile) {
+  private async createNewUser(profile: OAuthProfile) {
     // Check if this should be the initial admin
     const shouldGrantAdmin =
       await this.adminBootstrapService.shouldGrantAdminRole(profile.email);
@@ -200,7 +248,7 @@ export class AuthService {
           // Create identity
           identities: {
             create: {
-              provider: 'google',
+              provider: profile.provider,
               providerSubject: profile.id,
               providerEmail: profile.email,
             },
@@ -550,22 +598,13 @@ export class AuthService {
    * Returns list of enabled OAuth providers
    */
   async getEnabledProviders(): Promise<AuthProviderDto[]> {
-    const providers: AuthProviderDto[] = [];
-
-    // Check if Google OAuth is configured
-    const googleClientId = this.configService.get<string>('google.clientId');
-    const googleClientSecret = this.configService.get<string>(
-      'google.clientSecret',
-    );
-
-    if (googleClientId && googleClientSecret) {
-      providers.push({
-        name: 'google',
-        enabled: true,
-      });
-    }
-
-    return providers;
+    return this.providerConfigs
+      .filter(
+        (p) =>
+          this.configService.get<string>(p.clientIdKey) &&
+          this.configService.get<string>(p.secretKey),
+      )
+      .map((p) => ({ name: p.name, enabled: true }));
   }
 
   /**

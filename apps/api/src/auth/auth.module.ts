@@ -7,6 +7,7 @@ import { AllowlistModule } from '../allowlist/allowlist.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { GoogleStrategy } from './strategies/google.strategy';
+import { MicrosoftStrategy } from './strategies/microsoft.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { TokenCleanupTask } from './tasks/token-cleanup.task';
 
@@ -33,7 +34,24 @@ import { TokenCleanupTask } from './tasks/token-cleanup.task';
     AllowlistModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, GoogleStrategy, JwtStrategy, TokenCleanupTask],
+  providers: [
+    AuthService,
+    GoogleStrategy,
+    {
+      provide: 'MICROSOFT_STRATEGY',
+      useFactory: (config: ConfigService) => {
+        const clientId = config.get<string>('microsoft.clientId');
+        const clientSecret = config.get<string>('microsoft.clientSecret');
+        if (clientId && clientSecret) {
+          return new MicrosoftStrategy(config);
+        }
+        return null;
+      },
+      inject: [ConfigService],
+    },
+    JwtStrategy,
+    TokenCleanupTask,
+  ],
   exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

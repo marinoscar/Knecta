@@ -19,13 +19,15 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { AuthService } from './auth.service';
+import { AuthService, FullTokenResponse } from './auth.service';
 import { GoogleOAuthGuard } from './guards/google-oauth.guard';
+import { MicrosoftOAuthGuard } from './guards/microsoft-oauth.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { RequestUser } from './interfaces/authenticated-user.interface';
 import { GoogleProfile } from './strategies/google.strategy';
+import { MicrosoftProfile } from './strategies/microsoft.strategy';
 import {
   AuthProvidersResponseDto,
   AuthProviderDto,
@@ -114,54 +116,105 @@ export class AuthController {
     @Res() res: FastifyReply,
   ) {
     try {
-      // Google profile is attached by the guard
       const profile = req.user;
-
       if (!profile) {
         this.logger.error('No profile found in Google OAuth callback');
         const appUrl = this.configService.get<string>('appUrl');
-        return res.redirect(
-          `${appUrl}/auth/callback?error=authentication_failed`,
-        );
+        return res.redirect(`${appUrl}/auth/callback?error=authentication_failed`);
       }
-
-      // Handle login and generate tokens
       const tokens = await this.authService.handleGoogleLogin(profile);
-
-      // Set refresh token in HttpOnly cookie
-      this.logger.log(`Setting refresh token cookie with options: ${JSON.stringify(COOKIE_OPTIONS)}`);
-      res.setCookie(REFRESH_TOKEN_COOKIE, tokens.refreshToken!, COOKIE_OPTIONS);
-
-      // Redirect to frontend with access token only
-      const appUrl = this.configService.get<string>('appUrl');
-      const redirectUrl = new URL('/auth/callback', appUrl);
-      redirectUrl.searchParams.set('token', tokens.accessToken);
-      redirectUrl.searchParams.set('expiresIn', tokens.expiresIn.toString());
-
-      this.logger.log(`Redirecting to: ${redirectUrl.toString()}`);
-      return res.status(302).redirect(redirectUrl.toString());
+      return this.handleOAuthRedirect(res, tokens);
     } catch (error) {
-      // Log with full context for debugging
-      if (error instanceof DatabaseSeedException) {
-        this.logger.error(
-          'Database seed error during OAuth callback - seeds have not been run',
-          {
-            error: error.message,
-            stack: error.stack,
-          },
-        );
-      } else {
-        this.logger.error('Error in Google OAuth callback', error);
-      }
+      return this.handleOAuthError(res, error);
+    }
+  }
 
-      const appUrl = this.configService.get<string>('appUrl');
-      // Sanitize error message for URL - remove newlines and encode
-      const errorMessage = error instanceof Error
-        ? encodeURIComponent(error.message.replace(/[\r\n]/g, ' ').substring(0, 200))
-        : 'authentication_failed';
-      return res.redirect(
-        `${appUrl}/auth/callback?error=${errorMessage}`,
+  /**
+   * Shared OAuth callback handler
+   * Sets refresh token cookie and redirects to frontend with access token
+   */
+  private handleOAuthRedirect(
+    res: FastifyReply,
+    tokens: FullTokenResponse,
+  ): void {
+    res.setCookie(REFRESH_TOKEN_COOKIE, tokens.refreshToken!, COOKIE_OPTIONS);
+    const appUrl = this.configService.get<string>('appUrl');
+    const redirectUrl = new URL('/auth/callback', appUrl);
+    redirectUrl.searchParams.set('token', tokens.accessToken);
+    redirectUrl.searchParams.set('expiresIn', tokens.expiresIn.toString());
+    this.logger.log(`Redirecting to: ${redirectUrl.toString()}`);
+    res.status(302).redirect(redirectUrl.toString());
+  }
+
+  /**
+   * Shared OAuth error handler
+   * Redirects to frontend with sanitized error message
+   */
+  private handleOAuthError(res: FastifyReply, error: unknown): void {
+    if (error instanceof DatabaseSeedException) {
+      this.logger.error(
+        'Database seed error during OAuth callback - seeds have not been run',
+        { error: (error as Error).message, stack: (error as Error).stack },
       );
+    } else {
+      this.logger.error('Error in OAuth callback', error);
+    }
+    const appUrl = this.configService.get<string>('appUrl');
+    const errorMessage = error instanceof Error
+      ? encodeURIComponent(error.message.replace(/[\r\n]/g, ' ').substring(0, 200))
+      : 'authentication_failed';
+    res.redirect(`${appUrl}/auth/callback?error=${errorMessage}`);
+  }
+
+  /**
+   * GET /auth/microsoft
+   * Initiates Microsoft OAuth flow
+   */
+  @Public()
+  @Get('microsoft')
+  @UseGuards(MicrosoftOAuthGuard)
+  @ApiOperation({
+    summary: 'Initiate Microsoft OAuth',
+    description: 'Redirects to Microsoft OAuth consent screen',
+  })
+  @ApiResponse({
+    status: 302,
+    description: 'Redirects to Microsoft OAuth',
+  })
+  async microsoftAuth() {
+    // Guard handles the redirect to Microsoft
+  }
+
+  /**
+   * GET /auth/microsoft/callback
+   * Microsoft OAuth callback endpoint
+   */
+  @Public()
+  @Get('microsoft/callback')
+  @UseGuards(MicrosoftOAuthGuard)
+  @ApiOperation({
+    summary: 'Microsoft OAuth callback',
+    description: 'Handles the OAuth callback from Microsoft and redirects to frontend with token',
+  })
+  @ApiResponse({
+    status: 302,
+    description: 'Redirects to frontend with token in query params',
+  })
+  async microsoftAuthCallback(
+    @Req() req: FastifyRequest & { user?: MicrosoftProfile },
+    @Res() res: FastifyReply,
+  ) {
+    try {
+      const profile = req.user;
+      if (!profile) {
+        this.logger.error('No profile found in Microsoft OAuth callback');
+        const appUrl = this.configService.get<string>('appUrl');
+        return res.redirect(`${appUrl}/auth/callback?error=authentication_failed`);
+      }
+      const tokens = await this.authService.handleMicrosoftLogin(profile);
+      return this.handleOAuthRedirect(res, tokens);
+    } catch (error) {
+      return this.handleOAuthError(res, error);
     }
   }
 
