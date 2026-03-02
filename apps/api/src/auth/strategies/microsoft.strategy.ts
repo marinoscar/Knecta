@@ -44,6 +44,7 @@ export class MicrosoftStrategy extends PassportStrategy(OIDCStrategy, 'microsoft
       scope: ['openid', 'profile', 'email'],
       // Allow HTTP redirect URLs in non-production environments only
       allowHttpForRedirectUrl: configService.get<string>('nodeEnv') !== 'production',
+      passReqToCallback: false as const,
     });
   }
 
@@ -70,7 +71,7 @@ export class MicrosoftStrategy extends PassportStrategy(OIDCStrategy, 'microsoft
 
     // Build standardized profile object matching the shape used by other providers
     const microsoftProfile: MicrosoftProfile = {
-      id: profile.oid,
+      id: profile.oid || '',
       email,
       displayName: profile.displayName || email,
       picture: undefined, // Azure AD OIDC does not return picture in token claims
