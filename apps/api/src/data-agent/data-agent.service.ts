@@ -338,6 +338,19 @@ export class DataAgentService {
   }
 
   /**
+   * Get the most recent user message in a chat.
+   * Used by the stream controller to retrieve the question that triggered
+   * an assistant placeholder, avoiding the non-deterministic positional
+   * lookup that breaks when both messages share the same createdAt timestamp.
+   */
+  async getLastUserMessage(chatId: string): Promise<DataChatMessage | null> {
+    return this.prisma.dataChatMessage.findFirst({
+      where: { chatId, role: 'user' },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
    * Persist LLM traces for a message (batch write)
    */
   async persistTraces(messageId: string, traces: CollectedTrace[]): Promise<void> {
