@@ -234,6 +234,8 @@ export function ConnectionDialog({ open, onClose, onSave, onTestNew, connection 
     if (!name.trim()) return 'Name is required';
     if (dbType === 's3') {
       if (!region.trim()) return 'Region is required for S3 connections';
+    } else if (dbType === 'snowflake') {
+      // Snowflake uses Account, not Host/Port
     } else {
       if (!host.trim()) return 'Host is required';
       if (!port || port < 1) return 'Valid port is required';
@@ -250,7 +252,8 @@ export function ConnectionDialog({ open, onClose, onSave, onTestNew, connection 
   };
 
   // Derive the effective host for S3 (region doubles as host for backend validation)
-  const effectiveHost = dbType === 's3' ? region : host;
+  // Snowflake uses Account instead of Host — send account as host for backend DTO validation
+  const effectiveHost = dbType === 's3' ? region : dbType === 'snowflake' ? (account || 'snowflake') : host;
 
   // Handle submit
   const handleSubmit = async () => {
@@ -361,7 +364,7 @@ export function ConnectionDialog({ open, onClose, onSave, onTestNew, connection 
           : 'Password';
 
   // Test button is disabled when the primary identifier is missing
-  const testDisabled = isSubmitting || isTesting || (dbType === 's3' ? !region : !host);
+  const testDisabled = isSubmitting || isTesting || (dbType === 's3' ? !region : dbType === 'snowflake' ? !account : !host);
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
@@ -407,8 +410,8 @@ export function ConnectionDialog({ open, onClose, onSave, onTestNew, connection 
             </Select>
           </FormControl>
 
-          {/* Host / Region / Account URL — hidden for S3 (uses dedicated Region field below) */}
-          {dbType !== 's3' && (
+          {/* Host / Region / Account URL — hidden for S3 and Snowflake (Snowflake uses Account) */}
+          {dbType !== 's3' && dbType !== 'snowflake' && (
             <Box display="flex" gap={2}>
               <TextField
                 label={hostLabel}
@@ -435,8 +438,8 @@ export function ConnectionDialog({ open, onClose, onSave, onTestNew, connection 
             </Box>
           )}
 
-          {/* Database Name — hidden for cloud storage types */}
-          {!isCloudStorage && (
+          {/* Database Name — hidden for cloud storage types and Snowflake (Snowflake has its own Database Name in its section) */}
+          {!isCloudStorage && dbType !== 'snowflake' && (
             <TextField
               label="Database Name"
               fullWidth
@@ -469,8 +472,8 @@ export function ConnectionDialog({ open, onClose, onSave, onTestNew, connection 
             )}
           </Box>
 
-          {/* SSL switch — hidden for cloud storage types (always HTTPS) */}
-          {!isCloudStorage && (
+          {/* SSL switch — hidden for cloud storage types and Snowflake (always HTTPS) */}
+          {!isCloudStorage && dbType !== 'snowflake' && (
             <FormControlLabel
               control={<Switch checked={useSsl} onChange={(e) => setUseSsl(e.target.checked)} disabled={isSubmitting} />}
               label="Use SSL"
@@ -534,6 +537,13 @@ export function ConnectionDialog({ open, onClose, onSave, onTestNew, connection 
                 onChange={(e) => setAccount(e.target.value)}
                 disabled={isSubmitting}
                 helperText="e.g., xy12345.us-east-1"
+              />
+              <TextField
+                label="Database Name"
+                fullWidth
+                value={databaseName}
+                onChange={(e) => setDatabaseName(e.target.value)}
+                disabled={isSubmitting}
               />
               <Box display="flex" gap={2}>
                 <TextField
