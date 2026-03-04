@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { render } from '../../utils/test-utils';
 import { ConnectionDialog } from '../../../components/connections/ConnectionDialog';
@@ -513,8 +513,12 @@ describe('ConnectionDialog', () => {
       await user.type(screen.getByLabelText(/connection name/i), 'My Snowflake');
       await user.type(screen.getByLabelText(/^host/i), 'xy12345.us-east-1.snowflakecomputing.com');
       await user.type(screen.getByLabelText(/^account/i), 'xy12345.us-east-1');
-      await user.type(screen.getByLabelText(/private key \(pem\)/i), '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----');
-      await user.type(screen.getByLabelText(/private key passphrase/i), 'mysecret');
+      fireEvent.change(screen.getByLabelText(/private key \(pem\)/i), {
+        target: { value: '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----' },
+      });
+      fireEvent.change(screen.getByLabelText(/private key passphrase/i), {
+        target: { value: 'mysecret' },
+      });
 
       await user.click(screen.getByRole('button', { name: /create/i }));
 
@@ -552,7 +556,9 @@ describe('ConnectionDialog', () => {
       await user.type(screen.getByLabelText(/connection name/i), 'My Snowflake');
       await user.type(screen.getByLabelText(/^host/i), 'xy12345.us-east-1.snowflakecomputing.com');
       await user.type(screen.getByLabelText(/^account/i), 'xy12345.us-east-1');
-      await user.type(screen.getByLabelText(/private key \(pem\)/i), '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----');
+      fireEvent.change(screen.getByLabelText(/private key \(pem\)/i), {
+        target: { value: '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----' },
+      });
       // Leave passphrase empty
 
       await user.click(screen.getByRole('button', { name: /create/i }));
