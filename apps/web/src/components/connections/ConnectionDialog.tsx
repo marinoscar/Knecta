@@ -78,6 +78,16 @@ export function ConnectionDialog({ open, onClose, onSave, onTestNew, connection 
   const [containerName, setContainerName] = useState('');
   const [authMethod, setAuthMethod] = useState<'key' | 'sas'>('key');
 
+  // Snowflake auth method
+  const [snowflakeAuthMethod, setSnowflakeAuthMethod] = useState<'password' | 'key_pair'>('password');
+  // Databricks auth method
+  const [databricksAuthMethod, setDatabricksAuthMethod] = useState<'token' | 'oauth_m2m'>('token');
+  // Snowflake key pair fields
+  const [privateKey, setPrivateKey] = useState('');
+  const [passphrase, setPassphrase] = useState('');
+  // Databricks OAuth M2M fields
+  const [oauthClientId, setOauthClientId] = useState('');
+
   // UI state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
@@ -110,6 +120,11 @@ export function ConnectionDialog({ open, onClose, onSave, onTestNew, connection 
     setEndpointUrl('');
     setContainerName('');
     setAuthMethod('key');
+    setSnowflakeAuthMethod('password');
+    setDatabricksAuthMethod('token');
+    setPrivateKey('');
+    setPassphrase('');
+    setOauthClientId('');
     setPortManuallySet(false);
   };
 
@@ -144,7 +159,18 @@ export function ConnectionDialog({ open, onClose, onSave, onTestNew, connection 
 
       // Azure Blob options
       if (opts.containerName) setContainerName(opts.containerName as string);
-      if (opts.authMethod) setAuthMethod(opts.authMethod as 'key' | 'sas');
+      if (opts.authMethod && connection.dbType === 'azure_blob') setAuthMethod(opts.authMethod as 'key' | 'sas');
+
+      // Snowflake auth method (private key is never sent back from server)
+      if (connection.dbType === 'snowflake') {
+        setSnowflakeAuthMethod((opts.authMethod as 'password' | 'key_pair') || 'password');
+      }
+
+      // Databricks auth method
+      if (connection.dbType === 'databricks') {
+        setDatabricksAuthMethod((opts.authMethod as 'token' | 'oauth_m2m') || 'token');
+        if (opts.oauthClientId) setOauthClientId(opts.oauthClientId as string);
+      }
     } else {
       resetForm();
     }
@@ -158,9 +184,12 @@ export function ConnectionDialog({ open, onClose, onSave, onTestNew, connection 
 
     switch (dbType) {
       case 'databricks':
+        opts.authMethod = databricksAuthMethod;
         if (httpPath) opts.httpPath = httpPath;
+        if (databricksAuthMethod === 'oauth_m2m' && oauthClientId) opts.oauthClientId = oauthClientId;
         break;
       case 'snowflake':
+        opts.authMethod = snowflakeAuthMethod;
         if (account) opts.account = account;
         if (warehouse) opts.warehouse = warehouse;
         if (role) opts.role = role;
@@ -211,6 +240,12 @@ export function ConnectionDialog({ open, onClose, onSave, onTestNew, connection 
     }
     if (dbType === 'databricks' && !httpPath.trim()) return 'HTTP Path is required for Databricks';
     if (dbType === 'snowflake' && !account.trim()) return 'Account is required for Snowflake';
+    if (dbType === 'snowflake' && snowflakeAuthMethod === 'key_pair' && !connection && !privateKey.trim()) {
+      return 'Private Key is required for Key Pair authentication';
+    }
+    if (dbType === 'databricks' && databricksAuthMethod === 'oauth_m2m' && !oauthClientId.trim()) {
+      return 'OAuth Client ID is required for OAuth M2M authentication';
+    }
     return null;
   };
 
@@ -241,8 +276,15 @@ export function ConnectionDialog({ open, onClose, onSave, onTestNew, connection 
         options: buildOptions(),
       };
 
-      // Only include password if provided
-      if (password) {
+      // Build credential payload
+      if (dbType === 'snowflake' && snowflakeAuthMethod === 'key_pair') {
+        if (privateKey) {
+          data.password = JSON.stringify({
+            privateKey,
+            ...(passphrase ? { passphrase } : {}),
+          });
+        }
+      } else if (password) {
         data.password = password;
       }
 
@@ -266,7 +308,12 @@ export function ConnectionDialog({ open, onClose, onSave, onTestNew, connection 
         port,
         databaseName: databaseName.trim() || undefined,
         username: username.trim() || undefined,
-        password: password || undefined,
+        password:
+          dbType === 'snowflake' && snowflakeAuthMethod === 'key_pair'
+            ? privateKey
+              ? JSON.stringify({ privateKey, ...(passphrase ? { passphrase } : {}) })
+              : undefined
+            : password || undefined,
         useSsl,
         options: buildOptions(),
       };
@@ -308,7 +355,9 @@ export function ConnectionDialog({ open, onClose, onSave, onTestNew, connection 
           ? 'SAS Token'
           : 'Account Key'
         : dbType === 'databricks'
-          ? 'Access Token'
+          ? databricksAuthMethod === 'oauth_m2m'
+            ? 'Client Secret'
+            : 'Access Token'
           : 'Password';
 
   // Test button is disabled when the primary identifier is missing
@@ -398,22 +447,26 @@ export function ConnectionDialog({ open, onClose, onSave, onTestNew, connection 
           )}
 
           <Box display="flex" gap={2}>
-            <TextField
-              label={usernameLabel}
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              sx={{ flex: 1 }}
-              disabled={isSubmitting}
-            />
-            <TextField
-              label={passwordLabel}
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              sx={{ flex: 1 }}
-              disabled={isSubmitting}
-              helperText={connection ? 'Leave blank to keep existing' : undefined}
-            />
+            {!(dbType === 'databricks' && databricksAuthMethod === 'oauth_m2m') && (
+              <TextField
+                label={usernameLabel}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                sx={{ flex: 1 }}
+                disabled={isSubmitting}
+              />
+            )}
+            {!(dbType === 'snowflake' && snowflakeAuthMethod === 'key_pair') && (
+              <TextField
+                label={passwordLabel}
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                sx={{ flex: 1 }}
+                disabled={isSubmitting}
+                helperText={connection ? 'Leave blank to keep existing' : undefined}
+              />
+            )}
           </Box>
 
           {/* SSL switch — hidden for cloud storage types (always HTTPS) */}
@@ -425,19 +478,54 @@ export function ConnectionDialog({ open, onClose, onSave, onTestNew, connection 
           )}
 
           {dbType === 'databricks' && (
-            <TextField
-              label="HTTP Path"
-              required
-              fullWidth
-              value={httpPath}
-              onChange={(e) => setHttpPath(e.target.value)}
-              disabled={isSubmitting}
-              helperText="e.g., /sql/1.0/warehouses/abc123"
-            />
+            <>
+              <FormControl fullWidth disabled={isSubmitting}>
+                <InputLabel>Authentication Method</InputLabel>
+                <Select
+                  value={databricksAuthMethod}
+                  onChange={(e) => setDatabricksAuthMethod(e.target.value as 'token' | 'oauth_m2m')}
+                  label="Authentication Method"
+                >
+                  <MenuItem value="token">Personal Access Token</MenuItem>
+                  <MenuItem value="oauth_m2m">OAuth M2M (Recommended)</MenuItem>
+                </Select>
+              </FormControl>
+              {databricksAuthMethod === 'oauth_m2m' && (
+                <TextField
+                  label="OAuth Client ID"
+                  required
+                  fullWidth
+                  value={oauthClientId}
+                  onChange={(e) => setOauthClientId(e.target.value)}
+                  disabled={isSubmitting}
+                  helperText="Service principal client ID from your Databricks workspace"
+                />
+              )}
+              <TextField
+                label="HTTP Path"
+                required
+                fullWidth
+                value={httpPath}
+                onChange={(e) => setHttpPath(e.target.value)}
+                disabled={isSubmitting}
+                helperText="e.g., /sql/1.0/warehouses/abc123"
+              />
+            </>
           )}
 
           {dbType === 'snowflake' && (
             <>
+              <FormControl fullWidth disabled={isSubmitting}>
+                <InputLabel>Authentication Method</InputLabel>
+                <Select
+                  value={snowflakeAuthMethod}
+                  onChange={(e) => setSnowflakeAuthMethod(e.target.value as 'password' | 'key_pair')}
+                  label="Authentication Method"
+                >
+                  <MenuItem value="password">Username / Password</MenuItem>
+                  <MenuItem value="key_pair">Key Pair (Recommended)</MenuItem>
+                </Select>
+              </FormControl>
               <TextField
                 label="Account"
                 required
@@ -470,6 +558,31 @@ export function ConnectionDialog({ open, onClose, onSave, onTestNew, connection 
                 onChange={(e) => setSchema(e.target.value)}
                 disabled={isSubmitting}
               />
+              {snowflakeAuthMethod === 'key_pair' && (
+                <>
+                  <TextField
+                    label="Private Key (PEM)"
+                    required={!connection}
+                    fullWidth
+                    multiline
+                    rows={4}
+                    value={privateKey}
+                    onChange={(e) => setPrivateKey(e.target.value)}
+                    disabled={isSubmitting}
+                    helperText={connection ? 'Leave blank to keep existing' : 'Paste RSA private key in PEM format'}
+                    placeholder={'-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----'}
+                  />
+                  <TextField
+                    label="Private Key Passphrase"
+                    type="password"
+                    fullWidth
+                    value={passphrase}
+                    onChange={(e) => setPassphrase(e.target.value)}
+                    disabled={isSubmitting}
+                    helperText="Optional. Only needed if the private key is encrypted."
+                  />
+                </>
+              )}
             </>
           )}
 
