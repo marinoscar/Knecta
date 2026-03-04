@@ -32,6 +32,42 @@ export class SnowflakeDriver implements DiscoveryDriver {
     return import('snowflake-sdk');
   }
 
+  private resolveAuth(params: ConnectionParams): Record<string, string> {
+    const authMethod = (params.options?.authMethod as string) || 'password';
+
+    if (authMethod === 'key_pair') {
+      if (!params.password) {
+        throw new Error('Private key is required for key pair authentication');
+      }
+
+      let privateKey: string;
+      let privateKeyPass: string | undefined;
+
+      try {
+        const parsed = JSON.parse(params.password) as { privateKey: string; passphrase?: string };
+        privateKey = parsed.privateKey;
+        privateKeyPass = parsed.passphrase;
+      } catch {
+        // Not JSON — treat the raw value as a PEM string
+        privateKey = params.password;
+        privateKeyPass = undefined;
+      }
+
+      return {
+        username: params.username || '',
+        authenticator: 'SNOWFLAKE_JWT',
+        privateKey,
+        ...(privateKeyPass ? { privateKeyPass } : {}),
+      };
+    }
+
+    // Default: password auth
+    return {
+      username: params.username || '',
+      password: params.password || '',
+    };
+  }
+
   private buildConnectionConfig(params: ConnectionParams, database?: string) {
     const account = params.options?.account as string;
     if (!account) {
@@ -39,8 +75,7 @@ export class SnowflakeDriver implements DiscoveryDriver {
     }
     return {
       account,
-      username: params.username || '',
-      password: params.password || '',
+      ...this.resolveAuth(params),
       database: database || params.databaseName || undefined,
       warehouse: (params.options?.warehouse as string) || undefined,
       role: (params.options?.role as string) || undefined,
@@ -114,26 +149,19 @@ export class SnowflakeDriver implements DiscoveryDriver {
     try {
       const snowflake = await this.getSnowflake();
 
-      const account = params.options?.account as string;
-      if (!account) {
+      let config: ReturnType<typeof this.buildConnectionConfig>;
+      try {
+        config = this.buildConnectionConfig(params);
+      } catch (configError) {
         return {
           success: false,
-          message: 'Account identifier is required for Snowflake connections',
+          message: configError instanceof Error ? configError.message : 'Invalid connection configuration',
           latencyMs: Date.now() - start,
         };
       }
 
       return await new Promise<ConnectionTestResult>((resolve) => {
-        const connection = snowflake.createConnection({
-          account,
-          username: params.username || '',
-          password: params.password || '',
-          database: params.databaseName || undefined,
-          warehouse: (params.options?.warehouse as string) || undefined,
-          role: (params.options?.role as string) || undefined,
-          schema: (params.options?.schema as string) || undefined,
-          timeout: 10000,
-        });
+        const connection = snowflake.createConnection({ ...config, timeout: 10000 });
 
         connection.connect((err) => {
           if (err) {
