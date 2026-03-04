@@ -186,7 +186,7 @@ Look for the `RSA_PUBLIC_KEY_FP` property in the output. If it shows a SHA-256 f
 
    | Field | Value |
    |---|---|
-   | Account | Your Snowflake account identifier (e.g., `myorg-myaccount`) |
+   | Account Identifier | Your Snowflake account identifier — this is the subdomain from your Snowflake URL. For example, if your URL is `https://myorg-myaccount.snowflakecomputing.com`, enter `myorg-myaccount`. You can also find it under **Admin → Accounts** in the Snowflake UI. |
    | Username | The Snowflake user with the public key assigned |
    | Private Key | The full PEM content of `rsa_key.p8`, including the header and footer lines |
    | Private Key Passphrase | The passphrase you set in Step 1 (leave blank if unencrypted) |
@@ -252,6 +252,14 @@ This error means Snowflake rejected the JWT generated from the private key. Comm
 ### Clock skew
 
 JWT-based authentication is time-sensitive. If the server running Knecta has a clock that is significantly out of sync (more than 30 seconds), Snowflake will reject the token. Ensure NTP is configured and the system clock is accurate.
+
+### "Request to Snowflake failed"
+
+This generic error usually means Snowflake could not be reached or the account identifier is wrong. Common causes:
+
+- **Wrong account identifier** — the account identifier must match the subdomain of your Snowflake URL exactly. If your URL is `https://myorg-myaccount.snowflakecomputing.com`, enter `myorg-myaccount`. Do not include `.snowflakecomputing.com`.
+- **Legacy format** — older Snowflake accounts may use the format `accountname.region.cloud` (e.g., `xy12345.us-east-1`). Check your Snowflake URL to determine which format applies.
+- **Network connectivity** — the server running Knecta must be able to reach `*.snowflakecomputing.com` on port 443. Check firewall rules and proxy settings.
 
 ---
 
