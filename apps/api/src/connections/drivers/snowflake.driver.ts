@@ -1,3 +1,5 @@
+import { createPrivateKey } from 'crypto';
+
 import {
   DiscoveryDriver,
   ConnectionParams,
@@ -53,11 +55,30 @@ export class SnowflakeDriver implements DiscoveryDriver {
         privateKeyPass = undefined;
       }
 
+      let resolvedKey = privateKey;
+      if (privateKey.includes('BEGIN ENCRYPTED PRIVATE KEY')) {
+        if (!privateKeyPass) {
+          throw new Error('Passphrase is required for encrypted private keys');
+        }
+        try {
+          const keyObject = createPrivateKey({
+            key: privateKey,
+            format: 'pem',
+            passphrase: privateKeyPass,
+          });
+          resolvedKey = keyObject.export({ format: 'pem', type: 'pkcs8' }) as string;
+        } catch (err) {
+          if (err instanceof Error && err.message.includes('Passphrase is required')) {
+            throw err;
+          }
+          throw new Error('Failed to decrypt private key. Verify the passphrase is correct.');
+        }
+      }
+
       return {
         username: params.username || '',
         authenticator: 'SNOWFLAKE_JWT',
-        privateKey,
-        ...(privateKeyPass ? { privateKeyPass } : {}),
+        privateKey: resolvedKey,
       };
     }
 
