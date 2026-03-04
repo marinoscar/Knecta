@@ -28,7 +28,7 @@ Before starting, ensure you have the following:
   - Debian/Ubuntu: `sudo apt-get install openssl`
   - Windows: OpenSSL is **not** included natively in PowerShell or CMD. Choose one of the following:
     - **Git Bash** (recommended) — installed automatically with [Git for Windows](https://git-scm.com/download/win). Open "Git Bash" from the Start menu and OpenSSL is available immediately.
-    - **WSL (Windows Subsystem for Linux)** — install a Linux distribution from the Microsoft Store, then run `sudo apt-get install openssl` inside it.
+    - **WSL (Windows Subsystem for Linux)** — see [Setting up WSL](#setting-up-wsl-windows-subsystem-for-linux) at the bottom of this guide for installation steps. Once installed, open a WSL terminal and run `sudo apt-get install openssl` if it is not already present.
     - **Win64 OpenSSL installer** — download the full installer from [slproweb.com/products/Win32OpenSSL.html](https://slproweb.com/products/Win32OpenSSL.html). After installation, add the `bin` directory to your PATH or use the full path to `openssl.exe`.
 - A **Snowflake account** where you have the `ACCOUNTADMIN` or `SECURITYADMIN` role
 - A **Snowflake user** to assign the key to
@@ -46,11 +46,12 @@ Open a terminal and run the following commands.
 The commands below use standard OpenSSL syntax. Which terminal you use determines whether they work without modification:
 
 - **Git Bash** — all commands work as-is. This is the easiest option on Windows.
-- **WSL** — all commands work as-is inside the WSL shell. The files are saved in the WSL filesystem. To copy them to Windows afterwards, run:
+- **WSL** — open WSL by typing `wsl` in PowerShell/CMD, or search for "Ubuntu" (or your installed distro) in the Start menu. All commands work as-is inside the WSL shell. The files are saved in the WSL filesystem (e.g., `~/rsa_key.p8`). To copy them to an accessible Windows folder afterwards, run:
   ```bash
   cp rsa_key.p8 /mnt/c/Users/<YourWindowsUsername>/Documents/
   cp rsa_key.pub /mnt/c/Users/<YourWindowsUsername>/Documents/
   ```
+  See [Setting up WSL](#setting-up-wsl-windows-subsystem-for-linux) at the bottom of this guide if you have not installed WSL yet.
 - **PowerShell with Win64 OpenSSL installed** — `openssl` is not on the PATH by default. Either add the install directory to your PATH first, or prefix each command with the full executable path:
   ```powershell
   # Add OpenSSL to PATH for the current PowerShell session
@@ -210,3 +211,81 @@ This error means Snowflake rejected the JWT generated from the private key. Comm
 ### Clock skew
 
 JWT-based authentication is time-sensitive. If the server running Knecta has a clock that is significantly out of sync (more than 30 seconds), Snowflake will reject the token. Ensure NTP is configured and the system clock is accurate.
+
+---
+
+## Appendix: Setting up WSL (Windows Subsystem for Linux)
+
+WSL lets you run a full Linux terminal directly on Windows. If you prefer using WSL for key generation, follow these steps to install it.
+
+### Requirements
+
+- Windows 10 version 2004 or later, or Windows 11
+- Administrator access (for the initial installation)
+
+### Installation
+
+1. **Open PowerShell as Administrator.** Right-click the Start button and select **Terminal (Admin)** or **Windows PowerShell (Admin)**.
+
+2. **Install WSL and a default Linux distribution (Ubuntu):**
+
+   ```powershell
+   wsl --install
+   ```
+
+   This command enables the WSL feature, downloads the Linux kernel, and installs Ubuntu as the default distribution. If WSL is already enabled but no distro is installed, it will install Ubuntu.
+
+3. **Restart your computer** when prompted.
+
+4. **Complete the Ubuntu setup.** After restart, the Ubuntu terminal will open automatically (or search for "Ubuntu" in the Start menu). You will be asked to create a Linux username and password. These are local to WSL and do not need to match your Windows credentials.
+
+5. **Verify the installation:**
+
+   ```bash
+   # Inside the WSL terminal
+   openssl version
+   ```
+
+   You should see output like `OpenSSL 3.0.x ...`. If `openssl` is not found, install it:
+
+   ```bash
+   sudo apt-get update && sudo apt-get install -y openssl
+   ```
+
+### Opening a WSL terminal
+
+After installation, you can open a WSL terminal in any of these ways:
+
+- **Start menu:** Search for "Ubuntu" (or whichever distro you installed) and click it
+- **PowerShell or CMD:** Type `wsl` and press Enter to drop into the Linux shell
+- **Windows Terminal:** If you have Windows Terminal installed, a new "Ubuntu" profile appears in the dropdown — select it to open a WSL tab
+
+### Accessing Windows files from WSL
+
+Your Windows drives are mounted under `/mnt/` inside WSL:
+
+| Windows path | WSL path |
+|---|---|
+| `C:\Users\oscar\Documents` | `/mnt/c/Users/oscar/Documents` |
+| `D:\Projects` | `/mnt/d/Projects` |
+
+To copy generated key files from WSL to your Windows Documents folder:
+
+```bash
+cp ~/rsa_key.p8 /mnt/c/Users/<YourWindowsUsername>/Documents/
+cp ~/rsa_key.pub /mnt/c/Users/<YourWindowsUsername>/Documents/
+```
+
+### Installing a different Linux distribution (optional)
+
+To see available distributions:
+
+```powershell
+wsl --list --online
+```
+
+To install a specific distribution (e.g., Debian):
+
+```powershell
+wsl --install -d Debian
+```
