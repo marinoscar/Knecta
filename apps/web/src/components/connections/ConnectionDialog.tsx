@@ -530,13 +530,14 @@ export function ConnectionDialog({ open, onClose, onSave, onTestNew, connection 
                 </Select>
               </FormControl>
               <TextField
-                label="Account"
+                label="Account Identifier"
                 required
                 fullWidth
                 value={account}
                 onChange={(e) => setAccount(e.target.value)}
                 disabled={isSubmitting}
-                helperText="e.g., xy12345.us-east-1"
+                placeholder="myorg-myaccount"
+                helperText="Found in your Snowflake URL: https://<account-identifier>.snowflakecomputing.com"
               />
               <TextField
                 label="Database Name"
