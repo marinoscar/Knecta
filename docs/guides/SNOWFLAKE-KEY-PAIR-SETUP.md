@@ -152,10 +152,37 @@ Look for the `RSA_PUBLIC_KEY_FP` property in the output. If it shows a SHA-256 f
 
 ## Step 3: Configure the Connection in Knecta
 
-1. Navigate to **Connections** in the Knecta sidebar and click **Add Connection**.
-2. Select **Snowflake** as the database type.
-3. Under **Authentication Method**, select **Key Pair (Recommended)**.
-4. Fill in the connection fields:
+1. Copy the private key contents from `rsa_key.p8`. You will paste this into the connection form.
+
+   **Copy the private key — choose the command for your terminal:**
+   - WSL or Git Bash: `cat rsa_key.p8`
+   - PowerShell: `Get-Content rsa_key.p8 -Raw`
+   - CMD (Command Prompt): `type rsa_key.p8`
+
+   The output should look like this (encrypted key shown):
+
+   ```
+   -----BEGIN ENCRYPTED PRIVATE KEY-----
+   MIIFHDBOBgkqhkiG9w0BBQ0wQTApBgkqhkiG9w0BBQwwHAQI...
+   ...multiple lines of Base64...
+   -----END ENCRYPTED PRIVATE KEY-----
+   ```
+
+   Or for an unencrypted key:
+
+   ```
+   -----BEGIN PRIVATE KEY-----
+   MIIEvgIBADANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...
+   ...multiple lines of Base64...
+   -----END PRIVATE KEY-----
+   ```
+
+   Select and copy the **entire block**, including the `-----BEGIN` and `-----END` lines.
+
+2. Navigate to **Connections** in the Knecta sidebar and click **Add Connection**.
+3. Select **Snowflake** as the database type.
+4. Under **Authentication Method**, select **Key Pair (Recommended)**.
+5. Fill in the connection fields:
 
    | Field | Value |
    |---|---|
@@ -170,8 +197,8 @@ Look for the `RSA_PUBLIC_KEY_FP` property in the output. If it shows a SHA-256 f
 
    > **Private Key format:** Paste the entire contents of `rsa_key.p8`, including the `-----BEGIN ENCRYPTED PRIVATE KEY-----` (or `-----BEGIN PRIVATE KEY-----`) and the matching `-----END` lines. Knecta accepts the full PEM block.
 
-5. Click **Test Connection** to verify the credentials are valid. A successful test confirms the key pair is correctly configured end-to-end.
-6. Click **Save** to store the connection.
+6. Click **Test Connection** to verify the credentials are valid. A successful test confirms the key pair is correctly configured end-to-end.
+7. Click **Save** to store the connection.
 
 The private key is encrypted at rest using AES-256-GCM before being stored in the database.
 
