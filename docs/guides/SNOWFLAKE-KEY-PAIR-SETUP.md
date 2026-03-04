@@ -83,12 +83,24 @@ Use this only in environments where secret management infrastructure (e.g., a se
 openssl genrsa 2048 | openssl pkcs8 -topk8 -nocrypt -inform PEM -out rsa_key.p8
 ```
 
-### Extract the public key
+### Extract the public key (required — do not skip)
+
+> **Important:** The private key generation above only creates `rsa_key.p8`. You **must** run the following command to extract the public key into a separate file. Without this step, `rsa_key.pub` will not exist and Step 2 will fail.
 
 ```bash
 # Extract the public key from the private key file
 openssl rsa -in rsa_key.p8 -pubout -out rsa_key.pub
 ```
+
+If you encrypted the private key (Option A), you will be prompted to enter the passphrase.
+
+### Verify both files exist
+
+```bash
+ls -l rsa_key.p8 rsa_key.pub
+```
+
+You should see two files listed. If `rsa_key.pub` is missing, re-run the extraction command above.
 
 You should now have two files:
 - `rsa_key.p8` — the private key (keep this secret, never commit to version control)
@@ -100,10 +112,12 @@ You should now have two files:
 
 1. Open the `rsa_key.pub` file and copy its contents.
 
-   **Viewing the file on Windows:**
-   - Git Bash: `cat rsa_key.pub`
+   **Viewing the file — choose the command for your terminal:**
+   - WSL or Git Bash: `cat rsa_key.pub`
    - PowerShell: `Get-Content rsa_key.pub`
-   - CMD: `type rsa_key.pub`
+   - CMD (Command Prompt): `type rsa_key.pub`
+
+   > **Warning:** `type` is a Windows CMD command. Do **not** use `type` in WSL or Git Bash — in those shells, `type` is a different built-in that does not display file contents. Use `cat` instead.
 
 2. Remove the header line (`-----BEGIN PUBLIC KEY-----`), the footer line (`-----END PUBLIC KEY-----`), and all newlines. You need the raw Base64 content as a single string.
 
