@@ -326,6 +326,558 @@ describe('ConnectionDialog', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Snowflake auth method selector
+  // ---------------------------------------------------------------------------
+  describe('Snowflake auth method selector', () => {
+    async function selectSnowflake(user: ReturnType<typeof userEvent.setup>) {
+      const dbTypeSelect = getSelectByLabel('Database Type');
+      await user.click(dbTypeSelect);
+      const snowflakeOption = await screen.findByRole('option', { name: /snowflake/i });
+      await user.click(snowflakeOption);
+    }
+
+    it('renders Authentication Method selector when Snowflake type is selected', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ConnectionDialog
+          open={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          onTestNew={mockOnTestNew}
+        />,
+      );
+
+      await selectSnowflake(user);
+
+      expect(() => getSelectByLabel('Authentication Method')).not.toThrow();
+    });
+
+    it('defaults to "Username / Password" auth method for Snowflake', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ConnectionDialog
+          open={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          onTestNew={mockOnTestNew}
+        />,
+      );
+
+      await selectSnowflake(user);
+
+      // The combobox should reflect the 'password' value by displaying the label text
+      const authMethodSelect = getSelectByLabel('Authentication Method');
+      expect(authMethodSelect).toHaveTextContent(/username \/ password/i);
+    });
+
+    it('shows standard Password field when Snowflake uses "password" auth method', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ConnectionDialog
+          open={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          onTestNew={mockOnTestNew}
+        />,
+      );
+
+      await selectSnowflake(user);
+
+      // Default is 'password' method — Password field must be visible
+      expect(screen.getByLabelText(/^password/i)).toBeInTheDocument();
+    });
+
+    it('hides standard Password field when Snowflake uses "key_pair" auth method', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ConnectionDialog
+          open={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          onTestNew={mockOnTestNew}
+        />,
+      );
+
+      await selectSnowflake(user);
+
+      // Switch to key pair
+      const authMethodSelect = getSelectByLabel('Authentication Method');
+      await user.click(authMethodSelect);
+      const keyPairOption = await screen.findByRole('option', { name: /key pair/i });
+      await user.click(keyPairOption);
+
+      expect(screen.queryByLabelText(/^password/i)).not.toBeInTheDocument();
+    });
+
+    it('shows Private Key (PEM) textarea when "key_pair" auth method is selected', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ConnectionDialog
+          open={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          onTestNew={mockOnTestNew}
+        />,
+      );
+
+      await selectSnowflake(user);
+
+      const authMethodSelect = getSelectByLabel('Authentication Method');
+      await user.click(authMethodSelect);
+      const keyPairOption = await screen.findByRole('option', { name: /key pair/i });
+      await user.click(keyPairOption);
+
+      expect(screen.getByLabelText(/private key \(pem\)/i)).toBeInTheDocument();
+    });
+
+    it('shows Private Key Passphrase field when "key_pair" auth method is selected', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ConnectionDialog
+          open={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          onTestNew={mockOnTestNew}
+        />,
+      );
+
+      await selectSnowflake(user);
+
+      const authMethodSelect = getSelectByLabel('Authentication Method');
+      await user.click(authMethodSelect);
+      const keyPairOption = await screen.findByRole('option', { name: /key pair/i });
+      await user.click(keyPairOption);
+
+      expect(screen.getByLabelText(/private key passphrase/i)).toBeInTheDocument();
+    });
+
+    it('validates that Private Key is required for new key_pair connections', async () => {
+      const user = userEvent.setup({ delay: null });
+
+      render(
+        <ConnectionDialog
+          open={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          onTestNew={mockOnTestNew}
+        />,
+      );
+
+      await selectSnowflake(user);
+
+      // Switch to key pair
+      const authMethodSelect = getSelectByLabel('Authentication Method');
+      await user.click(authMethodSelect);
+      const keyPairOption = await screen.findByRole('option', { name: /key pair/i });
+      await user.click(keyPairOption);
+
+      // Fill required fields but leave Private Key empty
+      await user.type(screen.getByLabelText(/connection name/i), 'My Snowflake');
+      await user.type(screen.getByLabelText(/^host/i), 'xy12345.us-east-1.snowflakecomputing.com');
+      await user.type(screen.getByLabelText(/^account/i), 'xy12345.us-east-1');
+
+      await user.click(screen.getByRole('button', { name: /create/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/private key is required for key pair authentication/i)).toBeInTheDocument();
+      });
+
+      expect(mockOnSave).not.toHaveBeenCalled();
+    });
+
+    it('JSON-encodes privateKey and passphrase as password on submit', async () => {
+      const user = userEvent.setup({ delay: null });
+
+      render(
+        <ConnectionDialog
+          open={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          onTestNew={mockOnTestNew}
+        />,
+      );
+
+      await selectSnowflake(user);
+
+      const authMethodSelect = getSelectByLabel('Authentication Method');
+      await user.click(authMethodSelect);
+      const keyPairOption = await screen.findByRole('option', { name: /key pair/i });
+      await user.click(keyPairOption);
+
+      await user.type(screen.getByLabelText(/connection name/i), 'My Snowflake');
+      await user.type(screen.getByLabelText(/^host/i), 'xy12345.us-east-1.snowflakecomputing.com');
+      await user.type(screen.getByLabelText(/^account/i), 'xy12345.us-east-1');
+      await user.type(screen.getByLabelText(/private key \(pem\)/i), '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----');
+      await user.type(screen.getByLabelText(/private key passphrase/i), 'mysecret');
+
+      await user.click(screen.getByRole('button', { name: /create/i }));
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalled();
+      });
+
+      const callArg = mockOnSave.mock.calls[0][0] as Record<string, unknown>;
+      const decoded = JSON.parse(callArg.password as string);
+      expect(decoded).toMatchObject({
+        privateKey: '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----',
+        passphrase: 'mysecret',
+      });
+    });
+
+    it('JSON-encodes privateKey without passphrase when passphrase is empty', async () => {
+      const user = userEvent.setup({ delay: null });
+
+      render(
+        <ConnectionDialog
+          open={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          onTestNew={mockOnTestNew}
+        />,
+      );
+
+      await selectSnowflake(user);
+
+      const authMethodSelect = getSelectByLabel('Authentication Method');
+      await user.click(authMethodSelect);
+      const keyPairOption = await screen.findByRole('option', { name: /key pair/i });
+      await user.click(keyPairOption);
+
+      await user.type(screen.getByLabelText(/connection name/i), 'My Snowflake');
+      await user.type(screen.getByLabelText(/^host/i), 'xy12345.us-east-1.snowflakecomputing.com');
+      await user.type(screen.getByLabelText(/^account/i), 'xy12345.us-east-1');
+      await user.type(screen.getByLabelText(/private key \(pem\)/i), '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----');
+      // Leave passphrase empty
+
+      await user.click(screen.getByRole('button', { name: /create/i }));
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalled();
+      });
+
+      const callArg = mockOnSave.mock.calls[0][0] as Record<string, unknown>;
+      const decoded = JSON.parse(callArg.password as string);
+      expect(decoded).toMatchObject({
+        privateKey: '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----',
+      });
+      expect(decoded).not.toHaveProperty('passphrase');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Databricks auth method selector
+  // ---------------------------------------------------------------------------
+  describe('Databricks auth method selector', () => {
+    async function selectDatabricks(user: ReturnType<typeof userEvent.setup>) {
+      const dbTypeSelect = getSelectByLabel('Database Type');
+      await user.click(dbTypeSelect);
+      const databricksOption = await screen.findByRole('option', { name: /^databricks$/i });
+      await user.click(databricksOption);
+    }
+
+    it('renders Authentication Method selector when Databricks type is selected', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ConnectionDialog
+          open={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          onTestNew={mockOnTestNew}
+        />,
+      );
+
+      await selectDatabricks(user);
+
+      expect(() => getSelectByLabel('Authentication Method')).not.toThrow();
+    });
+
+    it('defaults to "Personal Access Token" auth method for Databricks', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ConnectionDialog
+          open={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          onTestNew={mockOnTestNew}
+        />,
+      );
+
+      await selectDatabricks(user);
+
+      const authMethodSelect = getSelectByLabel('Authentication Method');
+      expect(authMethodSelect).toHaveTextContent(/personal access token/i);
+    });
+
+    it('shows "Access Token" as the password field label with "token" auth method', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ConnectionDialog
+          open={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          onTestNew={mockOnTestNew}
+        />,
+      );
+
+      await selectDatabricks(user);
+
+      // Default is 'token' — the password field label should be "Access Token"
+      expect(screen.getByLabelText(/^access token/i)).toBeInTheDocument();
+    });
+
+    it('shows "Client Secret" as the password field label when using "oauth_m2m" auth method', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ConnectionDialog
+          open={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          onTestNew={mockOnTestNew}
+        />,
+      );
+
+      await selectDatabricks(user);
+
+      const authMethodSelect = getSelectByLabel('Authentication Method');
+      await user.click(authMethodSelect);
+      const oauthOption = await screen.findByRole('option', { name: /oauth m2m/i });
+      await user.click(oauthOption);
+
+      expect(screen.getByLabelText(/^client secret/i)).toBeInTheDocument();
+    });
+
+    it('shows OAuth Client ID field when "oauth_m2m" is selected', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ConnectionDialog
+          open={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          onTestNew={mockOnTestNew}
+        />,
+      );
+
+      await selectDatabricks(user);
+
+      const authMethodSelect = getSelectByLabel('Authentication Method');
+      await user.click(authMethodSelect);
+      const oauthOption = await screen.findByRole('option', { name: /oauth m2m/i });
+      await user.click(oauthOption);
+
+      expect(screen.getByLabelText(/^oauth client id/i)).toBeInTheDocument();
+    });
+
+    it('hides OAuth Client ID field when "token" auth method is selected', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ConnectionDialog
+          open={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          onTestNew={mockOnTestNew}
+        />,
+      );
+
+      await selectDatabricks(user);
+
+      // Default is 'token' — OAuth Client ID must not be present
+      expect(screen.queryByLabelText(/^oauth client id/i)).not.toBeInTheDocument();
+    });
+
+    it('hides Username field when "oauth_m2m" auth method is selected', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ConnectionDialog
+          open={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          onTestNew={mockOnTestNew}
+        />,
+      );
+
+      await selectDatabricks(user);
+
+      // Username is visible with default 'token' method
+      expect(screen.getByLabelText(/^username/i)).toBeInTheDocument();
+
+      const authMethodSelect = getSelectByLabel('Authentication Method');
+      await user.click(authMethodSelect);
+      const oauthOption = await screen.findByRole('option', { name: /oauth m2m/i });
+      await user.click(oauthOption);
+
+      expect(screen.queryByLabelText(/^username/i)).not.toBeInTheDocument();
+    });
+
+    it('validates that OAuth Client ID is required for oauth_m2m connections', async () => {
+      const user = userEvent.setup({ delay: null });
+
+      render(
+        <ConnectionDialog
+          open={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          onTestNew={mockOnTestNew}
+        />,
+      );
+
+      await selectDatabricks(user);
+
+      const authMethodSelect = getSelectByLabel('Authentication Method');
+      await user.click(authMethodSelect);
+      const oauthOption = await screen.findByRole('option', { name: /oauth m2m/i });
+      await user.click(oauthOption);
+
+      // Fill required fields but leave OAuth Client ID empty
+      await user.type(screen.getByLabelText(/connection name/i), 'My Databricks');
+      await user.type(screen.getByLabelText(/^host/i), 'adb-123456.azuredatabricks.net');
+      await user.type(screen.getByLabelText(/http path/i), '/sql/1.0/warehouses/abc123');
+
+      await user.click(screen.getByRole('button', { name: /create/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/oauth client id is required for oauth m2m authentication/i)).toBeInTheDocument();
+      });
+
+      expect(mockOnSave).not.toHaveBeenCalled();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Edit mode — populating auth method from existing connection options
+  // ---------------------------------------------------------------------------
+  describe('Edit mode — auth method pre-population', () => {
+    it('populates Snowflake auth method from existing connection options', () => {
+      const existingConnection = {
+        id: 'conn-sf-1',
+        name: 'Prod Snowflake',
+        description: null,
+        dbType: 'snowflake' as const,
+        host: 'xy12345.us-east-1.snowflakecomputing.com',
+        port: 443,
+        databaseName: null,
+        username: 'svc_user',
+        hasCredential: true,
+        useSsl: true,
+        options: { authMethod: 'key_pair', account: 'xy12345.us-east-1' },
+        lastTestedAt: null,
+        lastTestResult: null,
+        lastTestMessage: null,
+        createdByUserId: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      render(
+        <ConnectionDialog
+          open={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          onTestNew={mockOnTestNew}
+          connection={existingConnection}
+        />,
+      );
+
+      // The auth method selector should reflect key_pair
+      const authMethodSelect = getSelectByLabel('Authentication Method');
+      expect(authMethodSelect).toHaveTextContent(/key pair/i);
+
+      // Private Key field should be present (key_pair mode)
+      expect(screen.getByLabelText(/private key \(pem\)/i)).toBeInTheDocument();
+    });
+
+    it('populates Databricks auth method and oauthClientId from existing connection options', () => {
+      const existingConnection = {
+        id: 'conn-db-1',
+        name: 'Prod Databricks',
+        description: null,
+        dbType: 'databricks' as const,
+        host: 'adb-123456.azuredatabricks.net',
+        port: 443,
+        databaseName: null,
+        username: null,
+        hasCredential: true,
+        useSsl: true,
+        options: {
+          authMethod: 'oauth_m2m',
+          oauthClientId: 'my-client-id',
+          httpPath: '/sql/1.0/warehouses/abc123',
+        },
+        lastTestedAt: null,
+        lastTestResult: null,
+        lastTestMessage: null,
+        createdByUserId: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      render(
+        <ConnectionDialog
+          open={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          onTestNew={mockOnTestNew}
+          connection={existingConnection}
+        />,
+      );
+
+      // Auth method selector should reflect oauth_m2m
+      const authMethodSelect = getSelectByLabel('Authentication Method');
+      expect(authMethodSelect).toHaveTextContent(/oauth m2m/i);
+
+      // OAuth Client ID field should be populated
+      expect(screen.getByLabelText(/^oauth client id/i)).toHaveValue('my-client-id');
+    });
+
+    it('shows "Leave blank to keep existing" helper for Private Key in edit mode', () => {
+      const existingConnection = {
+        id: 'conn-sf-2',
+        name: 'Prod Snowflake KP',
+        description: null,
+        dbType: 'snowflake' as const,
+        host: 'xy12345.us-east-1.snowflakecomputing.com',
+        port: 443,
+        databaseName: null,
+        username: 'svc_user',
+        hasCredential: true,
+        useSsl: true,
+        options: { authMethod: 'key_pair', account: 'xy12345.us-east-1' },
+        lastTestedAt: null,
+        lastTestResult: null,
+        lastTestMessage: null,
+        createdByUserId: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      render(
+        <ConnectionDialog
+          open={true}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          onTestNew={mockOnTestNew}
+          connection={existingConnection}
+        />,
+      );
+
+      // The helper text for the Private Key field in edit mode
+      expect(screen.getByText(/leave blank to keep existing/i)).toBeInTheDocument();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Azure Blob Storage — cloud storage type
   // ---------------------------------------------------------------------------
   describe('Azure Blob-specific form fields', () => {
