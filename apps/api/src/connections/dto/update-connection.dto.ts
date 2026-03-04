@@ -11,7 +11,7 @@ export const updateConnectionSchema = z.object({
   port: z.coerce.number().int('Port must be an integer').min(1, 'Port must be at least 1').max(65535, 'Port must be at most 65535').optional(),
   databaseName: z.string().max(255, 'Database name must be 255 characters or less').optional(),
   username: z.string().max(255, 'Username must be 255 characters or less').optional(),
-  password: z.string().max(1000, 'Password must be 1000 characters or less').optional(),
+  password: z.string().max(5000, 'Password must be 5000 characters or less').optional(),
   useSsl: z.boolean().optional(),
   options: z.record(z.unknown()).optional(),
 });
