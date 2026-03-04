@@ -26,7 +26,10 @@ Before starting, ensure you have the following:
 - **OpenSSL** installed on your workstation (version 1.1.1 or later)
   - macOS: `brew install openssl`
   - Debian/Ubuntu: `sudo apt-get install openssl`
-  - Windows: use Git Bash or WSL, which include OpenSSL
+  - Windows: OpenSSL is **not** included natively in PowerShell or CMD. Choose one of the following:
+    - **Git Bash** (recommended) — installed automatically with [Git for Windows](https://git-scm.com/download/win). Open "Git Bash" from the Start menu and OpenSSL is available immediately.
+    - **WSL (Windows Subsystem for Linux)** — install a Linux distribution from the Microsoft Store, then run `sudo apt-get install openssl` inside it.
+    - **Win64 OpenSSL installer** — download the full installer from [slproweb.com/products/Win32OpenSSL.html](https://slproweb.com/products/Win32OpenSSL.html). After installation, add the `bin` directory to your PATH or use the full path to `openssl.exe`.
 - A **Snowflake account** where you have the `ACCOUNTADMIN` or `SECURITYADMIN` role
 - A **Snowflake user** to assign the key to
 
@@ -37,6 +40,27 @@ Before starting, ensure you have the following:
 ## Step 1: Generate the RSA Key Pair
 
 Open a terminal and run the following commands.
+
+### Windows terminal options
+
+The commands below use standard OpenSSL syntax. Which terminal you use determines whether they work without modification:
+
+- **Git Bash** — all commands work as-is. This is the easiest option on Windows.
+- **WSL** — all commands work as-is inside the WSL shell. The files are saved in the WSL filesystem. To copy them to Windows afterwards, run:
+  ```bash
+  cp rsa_key.p8 /mnt/c/Users/<YourWindowsUsername>/Documents/
+  cp rsa_key.pub /mnt/c/Users/<YourWindowsUsername>/Documents/
+  ```
+- **PowerShell with Win64 OpenSSL installed** — `openssl` is not on the PATH by default. Either add the install directory to your PATH first, or prefix each command with the full executable path:
+  ```powershell
+  # Add OpenSSL to PATH for the current PowerShell session
+  $env:PATH += ";C:\Program Files\OpenSSL-Win64\bin"
+
+  # Then run the same commands shown below
+  openssl genrsa 2048 | openssl pkcs8 -topk8 -v2 aes-256-cbc -inform PEM -out rsa_key.p8
+  ```
+
+> **File paths on Windows:** Git Bash accepts forward slashes (`/`). PowerShell and CMD use backslashes (`\`). When pasting key file contents into Knecta, paste the file contents directly — not a file path.
 
 ### Option A: Encrypted private key (recommended)
 
@@ -75,7 +99,18 @@ You should now have two files:
 
 1. Open the `rsa_key.pub` file and copy its contents.
 
+   **Viewing the file on Windows:**
+   - Git Bash: `cat rsa_key.pub`
+   - PowerShell: `Get-Content rsa_key.pub`
+   - CMD: `type rsa_key.pub`
+
 2. Remove the header line (`-----BEGIN PUBLIC KEY-----`), the footer line (`-----END PUBLIC KEY-----`), and all newlines. You need the raw Base64 content as a single string.
+
+   **Stripping headers on Windows with PowerShell:**
+   ```powershell
+   (Get-Content rsa_key.pub) -notmatch "BEGIN|END" -join ""
+   ```
+   This outputs the raw Base64 string you can paste directly into the SQL command below.
 
    Example of what to copy (truncated):
    ```

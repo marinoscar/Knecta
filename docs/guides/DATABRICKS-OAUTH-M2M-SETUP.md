@@ -29,6 +29,8 @@ Before starting, ensure you have the following:
 - A **SQL Warehouse** or cluster endpoint that the service principal will use
 - For Azure Databricks: access to **Microsoft Entra ID** (Azure Active Directory)
 
+> **Windows users:** All steps in this guide are performed through web browsers (the Azure Portal, Databricks workspace console, and Knecta UI) and the Databricks SQL Editor. No command-line tools are required. The instructions work identically on Windows, macOS, and Linux.
+
 ---
 
 ## Step 1: Create a Service Principal
@@ -109,7 +111,9 @@ The service principal needs access to the SQL Warehouse and to the data it will 
 
 ### Grant data access (Unity Catalog)
 
-If your workspace uses Unity Catalog, grant the service principal the minimum required privileges:
+If your workspace uses Unity Catalog, grant the service principal the minimum required privileges.
+
+> **Note:** The SQL commands below are executed in the **Databricks SQL Editor** in your browser. Open the SQL Editor from the workspace left sidebar, select the warehouse you configured in the previous step, and run each statement there. This works the same on all operating systems.
 
 ```sql
 -- Grant access to a catalog
@@ -159,7 +163,7 @@ GRANT SELECT ON DATABASE my_database TO `<service-principal-name>`;
 
    > **Finding the HTTP Path:** In the workspace, go to **SQL Warehouses** → click the warehouse → **Connection Details** tab. The HTTP Path is listed there.
 
-   > **Finding the Hostname:** The workspace hostname is the domain portion of your Databricks workspace URL, without `https://` and without any trailing path.
+   > **Finding the Hostname:** The workspace hostname is the domain portion of your Databricks workspace URL, without `https://` and without any trailing path. On Windows, you can read it directly from the browser address bar when logged into your workspace. For Azure Databricks, it is also visible in the **Azure Portal** under the Databricks workspace resource on the **Overview** page, labelled **Workspace URL**.
 
 5. Click **Test Connection** to verify the credentials are valid. A successful test confirms the service principal can authenticate and reach the warehouse.
 6. Click **Save** to store the connection.
