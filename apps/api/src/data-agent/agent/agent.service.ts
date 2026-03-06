@@ -187,11 +187,11 @@ export class DataAgentAgentService {
       .join('\n\n');
 
     // ── Step 5: Build and invoke multi-phase graph ──
-    const llm = this.llmService.getChatModel(provider, providerConfig);
+    const llm = await this.llmService.getChatModel(provider, providerConfig);
 
     // Create a version without reasoning for structured output phases
     // (Anthropic thinking mode is incompatible with withStructuredOutput/forced tool calling)
-    const structuredLlm = this.llmService.getChatModel(provider, {
+    const structuredLlm = await this.llmService.getChatModel(provider, {
       temperature: providerConfig?.temperature,
       model: providerConfig?.model,
       // Explicitly no reasoningLevel
@@ -203,7 +203,7 @@ export class DataAgentAgentService {
     const tracer = new DataAgentTracer(messageId, providerName, modelName, providerConfig?.temperature, onEvent);
 
     // Create web search tool when enabled; resolve the effective provider name for tool config
-    const resolvedProvider = provider || this.llmService.getDefaultProvider();
+    const resolvedProvider = provider || await this.llmService.getDefaultProvider();
     const webSearchTool = webSearchEnabled ? createWebSearchTool(resolvedProvider) : null;
 
     const graph = buildDataAgentGraph({

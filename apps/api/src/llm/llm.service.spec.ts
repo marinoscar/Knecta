@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { BadRequestException } from '@nestjs/common';
 import { LlmService } from './llm.service';
+import { LlmProviderService } from './llm-provider.service';
 import { ChatOpenAI } from '@langchain/openai';
 import { ChatAnthropic } from '@langchain/anthropic';
 
@@ -11,6 +12,7 @@ jest.mock('@langchain/anthropic');
 describe('LlmService', () => {
   let service: LlmService;
   let mockConfigService: jest.Mocked<ConfigService>;
+  let mockLlmProviderService: jest.Mocked<LlmProviderService>;
 
   beforeEach(async () => {
     // Reset mocks
@@ -21,10 +23,19 @@ describe('LlmService', () => {
       get: jest.fn(),
     } as any;
 
+    // Create mock LlmProviderService that returns nothing from DB
+    // so tests exercise the env-var fallback path (backward compatibility)
+    mockLlmProviderService = {
+      getDecryptedConfig: jest.fn().mockResolvedValue(null),
+      getEnabledProviders: jest.fn().mockResolvedValue([]),
+      getDefaultProviderType: jest.fn().mockResolvedValue(null),
+    } as any;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         LlmService,
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: LlmProviderService, useValue: mockLlmProviderService },
       ],
     }).compile();
 
@@ -37,7 +48,7 @@ describe('LlmService', () => {
 
   describe('getChatModel', () => {
     describe('backward compatibility', () => {
-      it('should create LLM with default provider and temperature 0 when called with no args', () => {
+      it('should create LLM with default provider and temperature 0 when called with no args', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.defaultProvider') return 'openai';
           if (key === 'llm.openai.apiKey') return 'test-openai-key';
@@ -45,7 +56,7 @@ describe('LlmService', () => {
           return undefined;
         });
 
-        service.getChatModel();
+        await service.getChatModel();
 
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-openai-key',
@@ -57,14 +68,14 @@ describe('LlmService', () => {
     });
 
     describe('provider selection', () => {
-      it('should create ChatAnthropic when provider is anthropic', () => {
+      it('should create ChatAnthropic when provider is anthropic', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.anthropic.apiKey') return 'test-anthropic-key';
           if (key === 'llm.anthropic.model') return 'claude-sonnet-4-5-20250929';
           return undefined;
         });
 
-        service.getChatModel('anthropic');
+        await service.getChatModel('anthropic');
 
         expect(ChatAnthropic).toHaveBeenCalledWith({
           anthropicApiKey: 'test-anthropic-key',
@@ -74,14 +85,14 @@ describe('LlmService', () => {
         });
       });
 
-      it('should create ChatOpenAI when provider is openai', () => {
+      it('should create ChatOpenAI when provider is openai', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.openai.apiKey') return 'test-openai-key';
           if (key === 'llm.openai.model') return 'gpt-4o';
           return undefined;
         });
 
-        service.getChatModel('openai');
+        await service.getChatModel('openai');
 
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-openai-key',
@@ -91,7 +102,7 @@ describe('LlmService', () => {
         });
       });
 
-      it('should create ChatOpenAI for azure provider', () => {
+      it('should create ChatOpenAI for azure provider', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.azure.apiKey') return 'test-azure-key';
           if (key === 'llm.azure.endpoint') return 'https://test.openai.azure.com';
@@ -100,7 +111,7 @@ describe('LlmService', () => {
           return undefined;
         });
 
-        service.getChatModel('azure');
+        await service.getChatModel('azure');
 
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-azure-key',
@@ -116,14 +127,14 @@ describe('LlmService', () => {
     });
 
     describe('temperature override', () => {
-      it('should pass temperature 0.5 when specified in config', () => {
+      it('should pass temperature 0.5 when specified in config', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.openai.apiKey') return 'test-openai-key';
           if (key === 'llm.openai.model') return 'gpt-4o';
           return undefined;
         });
 
-        service.getChatModel('openai', { temperature: 0.5 });
+        await service.getChatModel('openai', { temperature: 0.5 });
 
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-openai-key',
@@ -133,14 +144,14 @@ describe('LlmService', () => {
         });
       });
 
-      it('should pass temperature 1.0 for anthropic', () => {
+      it('should pass temperature 1.0 for anthropic', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.anthropic.apiKey') return 'test-anthropic-key';
           if (key === 'llm.anthropic.model') return 'claude-sonnet-4-5-20250929';
           return undefined;
         });
 
-        service.getChatModel('anthropic', { temperature: 1.0 });
+        await service.getChatModel('anthropic', { temperature: 1.0 });
 
         expect(ChatAnthropic).toHaveBeenCalledWith({
           anthropicApiKey: 'test-anthropic-key',
@@ -152,14 +163,14 @@ describe('LlmService', () => {
     });
 
     describe('model override', () => {
-      it('should use override model instead of env config for openai', () => {
+      it('should use override model instead of env config for openai', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.openai.apiKey') return 'test-openai-key';
           if (key === 'llm.openai.model') return 'gpt-4o';
           return undefined;
         });
 
-        service.getChatModel('openai', { model: 'gpt-4o-mini' });
+        await service.getChatModel('openai', { model: 'gpt-4o-mini' });
 
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-openai-key',
@@ -169,14 +180,14 @@ describe('LlmService', () => {
         });
       });
 
-      it('should use override model for anthropic', () => {
+      it('should use override model for anthropic', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.anthropic.apiKey') return 'test-anthropic-key';
           if (key === 'llm.anthropic.model') return 'claude-sonnet-4-5-20250929';
           return undefined;
         });
 
-        service.getChatModel('anthropic', { model: 'claude-opus-4-6' });
+        await service.getChatModel('anthropic', { model: 'claude-opus-4-6' });
 
         expect(ChatAnthropic).toHaveBeenCalledWith({
           anthropicApiKey: 'test-anthropic-key',
@@ -186,7 +197,7 @@ describe('LlmService', () => {
         });
       });
 
-      it('should use override deployment for azure', () => {
+      it('should use override deployment for azure', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.azure.apiKey') return 'test-azure-key';
           if (key === 'llm.azure.endpoint') return 'https://test.openai.azure.com';
@@ -195,7 +206,7 @@ describe('LlmService', () => {
           return undefined;
         });
 
-        service.getChatModel('azure', { model: 'gpt-4o-mini' });
+        await service.getChatModel('azure', { model: 'gpt-4o-mini' });
 
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-azure-key',
@@ -211,14 +222,14 @@ describe('LlmService', () => {
     });
 
     describe('reasoning for OpenAI', () => {
-      it('should pass reasoning: { effort } when reasoningLevel is high', () => {
+      it('should pass reasoning: { effort } when reasoningLevel is high', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.openai.apiKey') return 'test-openai-key';
           if (key === 'llm.openai.model') return 'o1';
           return undefined;
         });
 
-        service.getChatModel('openai', { reasoningLevel: 'high' });
+        await service.getChatModel('openai', { reasoningLevel: 'high' });
 
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-openai-key',
@@ -228,14 +239,14 @@ describe('LlmService', () => {
         });
       });
 
-      it('should pass reasoning: { effort } medium for openai', () => {
+      it('should pass reasoning: { effort } medium for openai', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.openai.apiKey') return 'test-openai-key';
           if (key === 'llm.openai.model') return 'o1';
           return undefined;
         });
 
-        service.getChatModel('openai', { reasoningLevel: 'medium' });
+        await service.getChatModel('openai', { reasoningLevel: 'medium' });
 
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-openai-key',
@@ -245,14 +256,14 @@ describe('LlmService', () => {
         });
       });
 
-      it('should pass reasoning: { effort } low for openai', () => {
+      it('should pass reasoning: { effort } low for openai', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.openai.apiKey') return 'test-openai-key';
           if (key === 'llm.openai.model') return 'o1';
           return undefined;
         });
 
-        service.getChatModel('openai', { reasoningLevel: 'low' });
+        await service.getChatModel('openai', { reasoningLevel: 'low' });
 
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-openai-key',
@@ -262,28 +273,28 @@ describe('LlmService', () => {
         });
       });
 
-      it('should omit temperature and include reasoning when reasoningLevel is set', () => {
+      it('should omit temperature and include reasoning when reasoningLevel is set', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.openai.apiKey') return 'test-openai-key';
           if (key === 'llm.openai.model') return 'o1';
           return undefined;
         });
 
-        service.getChatModel('openai', { reasoningLevel: 'high' });
+        await service.getChatModel('openai', { reasoningLevel: 'high' });
 
         const callArgs = (ChatOpenAI as jest.MockedClass<typeof ChatOpenAI>).mock.calls[0][0];
         expect(callArgs).not.toHaveProperty('temperature');
         expect(callArgs).toHaveProperty('reasoning', { effort: 'high' });
       });
 
-      it('should not include modelKwargs in the constructor call (regression)', () => {
+      it('should not include modelKwargs in the constructor call (regression)', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.openai.apiKey') return 'test-openai-key';
           if (key === 'llm.openai.model') return 'o1';
           return undefined;
         });
 
-        service.getChatModel('openai', { reasoningLevel: 'high' });
+        await service.getChatModel('openai', { reasoningLevel: 'high' });
 
         const callArgs = (ChatOpenAI as jest.MockedClass<typeof ChatOpenAI>).mock.calls[0][0];
         expect(callArgs).not.toHaveProperty('modelKwargs');
@@ -291,14 +302,14 @@ describe('LlmService', () => {
     });
 
     describe('reasoning for Anthropic (adaptive)', () => {
-      it('should pass thinking config with type adaptive', () => {
+      it('should pass thinking config with type adaptive', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.anthropic.apiKey') return 'test-anthropic-key';
           if (key === 'llm.anthropic.model') return 'claude-opus-4-6';
           return undefined;
         });
 
-        service.getChatModel('anthropic', { reasoningLevel: 'adaptive' });
+        await service.getChatModel('anthropic', { reasoningLevel: 'adaptive' });
 
         expect(ChatAnthropic).toHaveBeenCalledWith({
           anthropicApiKey: 'test-anthropic-key',
@@ -310,14 +321,14 @@ describe('LlmService', () => {
     });
 
     describe('reasoning for Anthropic (budget)', () => {
-      it('should pass thinking with budget_tokens when reasoningLevel is numeric', () => {
+      it('should pass thinking with budget_tokens when reasoningLevel is numeric', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.anthropic.apiKey') return 'test-anthropic-key';
           if (key === 'llm.anthropic.model') return 'claude-opus-4-6';
           return undefined;
         });
 
-        service.getChatModel('anthropic', { reasoningLevel: '10000' });
+        await service.getChatModel('anthropic', { reasoningLevel: '10000' });
 
         expect(ChatAnthropic).toHaveBeenCalledWith({
           anthropicApiKey: 'test-anthropic-key',
@@ -327,14 +338,14 @@ describe('LlmService', () => {
         });
       });
 
-      it('should ignore budget less than 1024', () => {
+      it('should ignore budget less than 1024', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.anthropic.apiKey') return 'test-anthropic-key';
           if (key === 'llm.anthropic.model') return 'claude-opus-4-6';
           return undefined;
         });
 
-        service.getChatModel('anthropic', { reasoningLevel: '500' });
+        await service.getChatModel('anthropic', { reasoningLevel: '500' });
 
         expect(ChatAnthropic).toHaveBeenCalledWith({
           anthropicApiKey: 'test-anthropic-key',
@@ -344,14 +355,14 @@ describe('LlmService', () => {
         });
       });
 
-      it('should handle budget at minimum threshold', () => {
+      it('should handle budget at minimum threshold', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.anthropic.apiKey') return 'test-anthropic-key';
           if (key === 'llm.anthropic.model') return 'claude-opus-4-6';
           return undefined;
         });
 
-        service.getChatModel('anthropic', { reasoningLevel: '1024' });
+        await service.getChatModel('anthropic', { reasoningLevel: '1024' });
 
         expect(ChatAnthropic).toHaveBeenCalledWith({
           anthropicApiKey: 'test-anthropic-key',
@@ -363,7 +374,7 @@ describe('LlmService', () => {
     });
 
     describe('reasoning for Azure', () => {
-      it('should pass reasoning: { effort } when reasoningLevel is high for azure', () => {
+      it('should pass reasoning: { effort } when reasoningLevel is high for azure', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.azure.apiKey') return 'test-azure-key';
           if (key === 'llm.azure.endpoint') return 'https://test.openai.azure.com';
@@ -372,7 +383,7 @@ describe('LlmService', () => {
           return undefined;
         });
 
-        service.getChatModel('azure', { reasoningLevel: 'high' });
+        await service.getChatModel('azure', { reasoningLevel: 'high' });
 
         expect(ChatOpenAI).toHaveBeenCalledWith({
           openAIApiKey: 'test-azure-key',
@@ -386,7 +397,7 @@ describe('LlmService', () => {
         });
       });
 
-      it('should omit temperature and include reasoning when reasoningLevel is set for azure', () => {
+      it('should omit temperature and include reasoning when reasoningLevel is set for azure', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.azure.apiKey') return 'test-azure-key';
           if (key === 'llm.azure.endpoint') return 'https://test.openai.azure.com';
@@ -395,14 +406,14 @@ describe('LlmService', () => {
           return undefined;
         });
 
-        service.getChatModel('azure', { reasoningLevel: 'medium' });
+        await service.getChatModel('azure', { reasoningLevel: 'medium' });
 
         const callArgs = (ChatOpenAI as jest.MockedClass<typeof ChatOpenAI>).mock.calls[0][0];
         expect(callArgs).not.toHaveProperty('temperature');
         expect(callArgs).toHaveProperty('reasoning', { effort: 'medium' });
       });
 
-      it('should not include modelKwargs in the azure constructor call (regression)', () => {
+      it('should not include modelKwargs in the azure constructor call (regression)', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.azure.apiKey') return 'test-azure-key';
           if (key === 'llm.azure.endpoint') return 'https://test.openai.azure.com';
@@ -411,7 +422,7 @@ describe('LlmService', () => {
           return undefined;
         });
 
-        service.getChatModel('azure', { reasoningLevel: 'high' });
+        await service.getChatModel('azure', { reasoningLevel: 'high' });
 
         const callArgs = (ChatOpenAI as jest.MockedClass<typeof ChatOpenAI>).mock.calls[0][0];
         expect(callArgs).not.toHaveProperty('modelKwargs');
@@ -419,7 +430,7 @@ describe('LlmService', () => {
     });
 
     describe('maxRetries', () => {
-      it('should pass default maxRetries of 3 when not configured', () => {
+      it('should pass default maxRetries of 3 when not configured', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.openai.apiKey') return 'test-openai-key';
           if (key === 'llm.openai.model') return 'gpt-4o';
@@ -427,13 +438,13 @@ describe('LlmService', () => {
           return undefined;
         });
 
-        service.getChatModel('openai');
+        await service.getChatModel('openai');
 
         const callArgs = (ChatOpenAI as jest.MockedClass<typeof ChatOpenAI>).mock.calls[0][0];
         expect(callArgs).toHaveProperty('maxRetries', 3);
       });
 
-      it('should pass custom maxRetries when configured', () => {
+      it('should pass custom maxRetries when configured', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.openai.apiKey') return 'test-openai-key';
           if (key === 'llm.openai.model') return 'gpt-4o';
@@ -441,13 +452,13 @@ describe('LlmService', () => {
           return undefined;
         });
 
-        service.getChatModel('openai');
+        await service.getChatModel('openai');
 
         const callArgs = (ChatOpenAI as jest.MockedClass<typeof ChatOpenAI>).mock.calls[0][0];
         expect(callArgs).toHaveProperty('maxRetries', 5);
       });
 
-      it('should pass maxRetries: 0 to disable retries when configured as 0', () => {
+      it('should pass maxRetries: 0 to disable retries when configured as 0', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.openai.apiKey') return 'test-openai-key';
           if (key === 'llm.openai.model') return 'gpt-4o';
@@ -455,7 +466,7 @@ describe('LlmService', () => {
           return undefined;
         });
 
-        service.getChatModel('openai');
+        await service.getChatModel('openai');
 
         const callArgs = (ChatOpenAI as jest.MockedClass<typeof ChatOpenAI>).mock.calls[0][0];
         expect(callArgs).toHaveProperty('maxRetries', 0);
@@ -463,33 +474,33 @@ describe('LlmService', () => {
     });
 
     describe('missing API key throws', () => {
-      it('should throw BadRequestException when openai API key is missing', () => {
+      it('should throw BadRequestException when openai API key is missing', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.openai.apiKey') return undefined;
           return undefined;
         });
 
-        expect(() => service.getChatModel('openai')).toThrow(BadRequestException);
-        expect(() => service.getChatModel('openai')).toThrow(
+        await expect(service.getChatModel('openai')).rejects.toThrow(BadRequestException);
+        await expect(service.getChatModel('openai')).rejects.toThrow(
           'OpenAI API key not configured',
         );
       });
 
-      it('should throw BadRequestException when anthropic API key is missing', () => {
+      it('should throw BadRequestException when anthropic API key is missing', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.anthropic.apiKey') return undefined;
           return undefined;
         });
 
-        expect(() => service.getChatModel('anthropic')).toThrow(
+        await expect(service.getChatModel('anthropic')).rejects.toThrow(
           BadRequestException,
         );
-        expect(() => service.getChatModel('anthropic')).toThrow(
+        await expect(service.getChatModel('anthropic')).rejects.toThrow(
           'Anthropic API key not configured',
         );
       });
 
-      it('should throw BadRequestException when azure is not fully configured', () => {
+      it('should throw BadRequestException when azure is not fully configured', async () => {
         mockConfigService.get.mockImplementation((key: string) => {
           if (key === 'llm.azure.apiKey') return 'test-key';
           if (key === 'llm.azure.endpoint') return undefined; // Missing endpoint
@@ -497,17 +508,17 @@ describe('LlmService', () => {
           return undefined;
         });
 
-        expect(() => service.getChatModel('azure')).toThrow(BadRequestException);
-        expect(() => service.getChatModel('azure')).toThrow(
+        await expect(service.getChatModel('azure')).rejects.toThrow(BadRequestException);
+        await expect(service.getChatModel('azure')).rejects.toThrow(
           'Azure OpenAI not fully configured',
         );
       });
 
-      it('should throw BadRequestException for unsupported provider', () => {
-        expect(() => service.getChatModel('unsupported' as any)).toThrow(
+      it('should throw BadRequestException for unsupported provider', async () => {
+        await expect(service.getChatModel('unsupported' as any)).rejects.toThrow(
           BadRequestException,
         );
-        expect(() => service.getChatModel('unsupported' as any)).toThrow(
+        await expect(service.getChatModel('unsupported' as any)).rejects.toThrow(
           'Unsupported LLM provider: unsupported',
         );
       });
@@ -515,7 +526,7 @@ describe('LlmService', () => {
   });
 
   describe('getEnabledProviders', () => {
-    it('should return all configured providers', () => {
+    it('should return all configured providers from env when DB is empty', async () => {
       mockConfigService.get.mockImplementation((key: string) => {
         if (key === 'llm.defaultProvider') return 'openai';
         if (key === 'llm.openai.apiKey') return 'test-openai-key';
@@ -528,7 +539,7 @@ describe('LlmService', () => {
         return undefined;
       });
 
-      const providers = service.getEnabledProviders();
+      const providers = await service.getEnabledProviders();
 
       expect(providers).toHaveLength(3);
       expect(providers).toContainEqual({
@@ -553,18 +564,18 @@ describe('LlmService', () => {
   });
 
   describe('getDefaultProvider', () => {
-    it('should return configured default provider', () => {
+    it('should return configured default provider from env when DB has none', async () => {
       mockConfigService.get.mockReturnValue('anthropic');
 
-      const defaultProvider = service.getDefaultProvider();
+      const defaultProvider = await service.getDefaultProvider();
 
       expect(defaultProvider).toBe('anthropic');
     });
 
-    it('should return openai when no default configured', () => {
+    it('should return openai when no default configured', async () => {
       mockConfigService.get.mockReturnValue(undefined);
 
-      const defaultProvider = service.getDefaultProvider();
+      const defaultProvider = await service.getDefaultProvider();
 
       expect(defaultProvider).toBe('openai');
     });

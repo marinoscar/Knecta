@@ -35,7 +35,7 @@ export class AgentService {
     const agentConfig =
       systemSettings.agentConfigs?.semanticModel?.[llmProvider ?? ''] ||
       undefined;
-    const llm = this.llmService.getChatModel(llmProvider, agentConfig);
+    const llm = await this.llmService.getChatModel(llmProvider, agentConfig);
 
     // Fetch OSI spec text before building graph
     const osiSpecText = await this.osiSpecService.getSpecText();
