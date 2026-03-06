@@ -13,20 +13,19 @@ import {
 } from '@mui/material';
 import { useState, useEffect } from 'react';
 import { getLlmProviders } from '../../services/api';
-import type { SystemSettings, LLMProviderInfo, DataAgentProviderConfig } from '../../types';
+import type { SystemSettings, LLMProviderInfo, AgentProviderConfig } from '../../types';
 
 interface DataAgentSettingsProps {
   settings: SystemSettings;
-  onSave: (dataAgent: SystemSettings['dataAgent']) => Promise<void>;
+  onSave: (dataAgent: Record<string, AgentProviderConfig>) => Promise<void>;
   disabled?: boolean;
 }
 
-type ProviderKey = 'openai' | 'anthropic' | 'azure';
-
-const PROVIDER_DISPLAY_NAMES: Record<ProviderKey, string> = {
+const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   openai: 'OpenAI',
   anthropic: 'Anthropic',
-  azure: 'Azure OpenAI',
+  azure_openai: 'Azure OpenAI',
+  snowflake_cortex: 'Snowflake Cortex',
 };
 
 export function DataAgentSettings({ settings, onSave, disabled }: DataAgentSettingsProps) {
@@ -35,12 +34,10 @@ export function DataAgentSettings({ settings, onSave, disabled }: DataAgentSetti
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Local state for each provider
-  const [providerConfigs, setProviderConfigs] = useState<Record<ProviderKey, DataAgentProviderConfig>>({
-    openai: settings.dataAgent?.openai || {},
-    anthropic: settings.dataAgent?.anthropic || {},
-    azure: settings.dataAgent?.azure || {},
-  });
+  // Local state keyed by provider type (e.g. 'openai', 'anthropic', 'azure_openai')
+  const [providerConfigs, setProviderConfigs] = useState<Record<string, AgentProviderConfig>>(
+    settings.agentConfigs?.dataAgent || {},
+  );
 
   useEffect(() => {
     loadProviders();
@@ -48,11 +45,7 @@ export function DataAgentSettings({ settings, onSave, disabled }: DataAgentSetti
 
   useEffect(() => {
     // Update local state when settings change
-    setProviderConfigs({
-      openai: settings.dataAgent?.openai || {},
-      anthropic: settings.dataAgent?.anthropic || {},
-      azure: settings.dataAgent?.azure || {},
-    });
+    setProviderConfigs(settings.agentConfigs?.dataAgent || {});
   }, [settings]);
 
   const loadProviders = async () => {
@@ -68,19 +61,18 @@ export function DataAgentSettings({ settings, onSave, disabled }: DataAgentSetti
     }
   };
 
-  const updateProviderConfig = (provider: ProviderKey, updates: Partial<DataAgentProviderConfig>) => {
+  const updateProviderConfig = (providerType: string, updates: Partial<AgentProviderConfig>) => {
     setProviderConfigs(prev => ({
       ...prev,
-      [provider]: { ...prev[provider], ...updates },
+      [providerType]: { ...prev[providerType], ...updates },
     }));
   };
 
   const hasChanges = (): boolean => {
-    const original = settings.dataAgent || {};
+    const original = settings.agentConfigs?.dataAgent || {};
     return Object.keys(providerConfigs).some(key => {
-      const providerKey = key as ProviderKey;
-      const current = providerConfigs[providerKey];
-      const orig = original[providerKey] || {};
+      const current = providerConfigs[key];
+      const orig = original[key] || {};
       return JSON.stringify(current) !== JSON.stringify(orig);
     });
   };
@@ -89,12 +81,12 @@ export function DataAgentSettings({ settings, onSave, disabled }: DataAgentSetti
     setIsSaving(true);
     try {
       // Only include configs for enabled providers
-      const enabledProviderKeys = providers.map(p => p.name as ProviderKey);
-      const filteredConfigs: SystemSettings['dataAgent'] = {};
+      const enabledProviderTypes = providers.map(p => p.type);
+      const filteredConfigs: Record<string, AgentProviderConfig> = {};
 
-      enabledProviderKeys.forEach(key => {
-        if (providerConfigs[key] && Object.keys(providerConfigs[key]).length > 0) {
-          filteredConfigs[key] = providerConfigs[key];
+      enabledProviderTypes.forEach(type => {
+        if (providerConfigs[type] && Object.keys(providerConfigs[type]).length > 0) {
+          filteredConfigs[type] = providerConfigs[type];
         }
       });
 
@@ -104,21 +96,21 @@ export function DataAgentSettings({ settings, onSave, disabled }: DataAgentSetti
     }
   };
 
-  const renderReasoningLevelControl = (_provider: LLMProviderInfo, providerKey: ProviderKey) => {
-    const config = providerConfigs[providerKey];
+  const renderReasoningLevelControl = (_provider: LLMProviderInfo, providerType: string) => {
+    const config = providerConfigs[providerType] || {};
     const reasoningLevel = config.reasoningLevel || '';
     const isCustomBudget = reasoningLevel === 'custom';
 
     let options: { value: string; label: string }[] = [];
 
-    if (providerKey === 'openai' || providerKey === 'azure') {
+    if (providerType === 'openai' || providerType === 'azure_openai') {
       options = [
         { value: '', label: 'None' },
         { value: 'low', label: 'Low' },
         { value: 'medium', label: 'Medium' },
         { value: 'high', label: 'High' },
       ];
-    } else if (providerKey === 'anthropic') {
+    } else if (providerType === 'anthropic') {
       options = [
         { value: '', label: 'None' },
         { value: 'adaptive', label: 'Adaptive' },
@@ -135,7 +127,7 @@ export function DataAgentSettings({ settings, onSave, disabled }: DataAgentSetti
             label="Reasoning Level"
             onChange={(e) => {
               const newLevel = e.target.value;
-              updateProviderConfig(providerKey, {
+              updateProviderConfig(providerType, {
                 reasoningLevel: newLevel,
                 customBudget: newLevel === 'custom' ? (config.customBudget || 1024) : undefined,
               });
@@ -150,7 +142,7 @@ export function DataAgentSettings({ settings, onSave, disabled }: DataAgentSetti
           </Select>
         </FormControl>
 
-        {providerKey === 'anthropic' && isCustomBudget && (
+        {providerType === 'anthropic' && isCustomBudget && (
           <TextField
             fullWidth
             type="number"
@@ -159,7 +151,7 @@ export function DataAgentSettings({ settings, onSave, disabled }: DataAgentSetti
             onChange={(e) => {
               const value = parseInt(e.target.value, 10);
               if (!isNaN(value)) {
-                updateProviderConfig(providerKey, { customBudget: Math.max(1024, Math.min(128000, value)) });
+                updateProviderConfig(providerType, { customBudget: Math.max(1024, Math.min(128000, value)) });
               }
             }}
             disabled={disabled}
@@ -173,12 +165,12 @@ export function DataAgentSettings({ settings, onSave, disabled }: DataAgentSetti
   };
 
   const renderProviderSection = (provider: LLMProviderInfo) => {
-    const providerKey = provider.name as ProviderKey;
-    const config = providerConfigs[providerKey];
-    const displayName = PROVIDER_DISPLAY_NAMES[providerKey] || provider.name;
+    const providerType = provider.type;
+    const config = providerConfigs[providerType] || {};
+    const displayName = PROVIDER_DISPLAY_NAMES[providerType] || provider.name;
 
     return (
-      <Paper key={providerKey} sx={{ p: 3, mb: 3 }}>
+      <Paper key={providerType} sx={{ p: 3, mb: 3 }}>
         <Typography variant="h6" gutterBottom>
           {displayName}
         </Typography>
@@ -187,10 +179,10 @@ export function DataAgentSettings({ settings, onSave, disabled }: DataAgentSetti
           fullWidth
           label="Model"
           value={config.model || ''}
-          onChange={(e) => updateProviderConfig(providerKey, { model: e.target.value })}
+          onChange={(e) => updateProviderConfig(providerType, { model: e.target.value })}
           placeholder={provider.model}
           disabled={disabled}
-          helperText={`Default: ${provider.model}`}
+          helperText={provider.model ? `Default: ${provider.model}` : undefined}
           sx={{ mb: 2 }}
         />
 
@@ -200,7 +192,7 @@ export function DataAgentSettings({ settings, onSave, disabled }: DataAgentSetti
           </Typography>
           <Slider
             value={config.temperature !== undefined ? config.temperature : 0}
-            onChange={(_, value) => updateProviderConfig(providerKey, { temperature: value as number })}
+            onChange={(_, value) => updateProviderConfig(providerType, { temperature: value as number })}
             min={0}
             max={2}
             step={0.1}
@@ -214,7 +206,7 @@ export function DataAgentSettings({ settings, onSave, disabled }: DataAgentSetti
           />
         </Box>
 
-        {renderReasoningLevelControl(provider, providerKey)}
+        {renderReasoningLevelControl(provider, providerType)}
       </Paper>
     );
   };

@@ -12,7 +12,8 @@ interface ModelSelectorProps {
 const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   openai: 'OpenAI',
   anthropic: 'Anthropic',
-  azure: 'Azure OpenAI',
+  azure_openai: 'Azure OpenAI',
+  snowflake_cortex: 'Snowflake Cortex',
 };
 
 export function ModelSelector({
@@ -23,9 +24,10 @@ export function ModelSelector({
   size = 'small',
 }: ModelSelectorProps) {
   // Ensure selected provider is valid, otherwise use first provider
-  const validSelected = providers.find((p) => p.name === selectedProvider)
+  // selectedProvider and values are provider type strings (e.g. 'openai', 'anthropic')
+  const validSelected = providers.find((p) => p.type === selectedProvider)
     ? (selectedProvider as string)
-    : providers[0]?.name || '';
+    : providers[0]?.type || '';
 
   return (
     <FormControl size={size} sx={{ minWidth: 160 }}>
@@ -40,9 +42,9 @@ export function ModelSelector({
         }}
       >
         {providers.map((provider) => (
-          <MenuItem key={provider.name} value={provider.name}>
+          <MenuItem key={provider.type} value={provider.type}>
             <Typography variant="body2">
-              {PROVIDER_DISPLAY_NAMES[provider.name] || provider.name}
+              {PROVIDER_DISPLAY_NAMES[provider.type] || provider.name}
             </Typography>
           </MenuItem>
         ))}

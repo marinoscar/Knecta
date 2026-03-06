@@ -30,11 +30,11 @@ export interface UserSettings {
   version: number;
 }
 
-export interface DataAgentProviderConfig {
+export interface AgentProviderConfig {
   temperature?: number;
   model?: string;
   reasoningLevel?: string;
-  customBudget?: number;
+  customBudget?: number;  // Frontend-only for Anthropic UI
 }
 
 export interface SystemSettings {
@@ -42,10 +42,9 @@ export interface SystemSettings {
     allowUserThemeOverride: boolean;
   };
   features: Record<string, boolean>;
-  dataAgent?: {
-    openai?: DataAgentProviderConfig;
-    anthropic?: DataAgentProviderConfig;
-    azure?: DataAgentProviderConfig;
+  agentConfigs?: {
+    dataAgent?: Record<string, AgentProviderConfig>;
+    semanticModel?: Record<string, AgentProviderConfig>;
   };
   notifications?: {
     email?: { enabled: boolean };
@@ -305,11 +304,39 @@ export interface ColumnInfo {
 // LLM Providers
 // ==========================================
 
+export type LLMProviderType = 'openai' | 'anthropic' | 'azure_openai' | 'snowflake_cortex';
+
 export interface LLMProviderInfo {
+  id: string;
+  type: string;
   name: string;
   enabled: boolean;
-  model: string;
   isDefault: boolean;
+  model?: string;
+  lastTestedAt?: string;
+  lastTestResult?: boolean;
+  lastTestMessage?: string;
+}
+
+export interface LLMProviderDetail extends LLMProviderInfo {
+  config: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateLlmProviderRequest {
+  type: LLMProviderType;
+  name: string;
+  enabled?: boolean;
+  isDefault?: boolean;
+  config: Record<string, any>;
+}
+
+export interface UpdateLlmProviderRequest {
+  name?: string;
+  enabled?: boolean;
+  isDefault?: boolean;
+  config?: Record<string, any>;
 }
 
 // ==========================================

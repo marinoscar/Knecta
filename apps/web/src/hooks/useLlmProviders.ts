@@ -35,21 +35,22 @@ export function useLlmProviders(userDefaultProvider?: string): UseLlmProvidersRe
   }, [fetchProviders]);
 
   // Resolve default provider: user setting > system default > first provider
+  // Returns the provider type string (e.g. 'openai', 'anthropic') used as identifier
   const defaultProvider = (() => {
     if (!providers.length) return null;
 
     // If user has a preference, use it (if it's still enabled)
     if (userDefaultProvider) {
-      const userPreferred = providers.find((p) => p.name === userDefaultProvider);
-      if (userPreferred) return userPreferred.name;
+      const userPreferred = providers.find((p) => p.type === userDefaultProvider);
+      if (userPreferred) return userPreferred.type;
     }
 
     // Fall back to system default
     const systemDefault = providers.find((p) => p.isDefault);
-    if (systemDefault) return systemDefault.name;
+    if (systemDefault) return systemDefault.type;
 
     // Fall back to first provider
-    return providers[0].name;
+    return providers[0].type;
   })();
 
   return {

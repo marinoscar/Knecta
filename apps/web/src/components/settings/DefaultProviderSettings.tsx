@@ -22,7 +22,8 @@ interface DefaultProviderSettingsProps {
 const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   openai: 'OpenAI',
   anthropic: 'Anthropic',
-  azure: 'Azure OpenAI',
+  azure_openai: 'Azure OpenAI',
+  snowflake_cortex: 'Snowflake Cortex',
 };
 
 export function DefaultProviderSettings({
@@ -96,10 +97,10 @@ export function DefaultProviderSettings({
                 </Box>
               </MenuItem>
               {providers.map((provider) => (
-                <MenuItem key={provider.name} value={provider.name}>
+                <MenuItem key={provider.type} value={provider.type}>
                   <Box>
                     <Typography variant="body2">
-                      {PROVIDER_DISPLAY_NAMES[provider.name] || provider.name}
+                      {PROVIDER_DISPLAY_NAMES[provider.type] || provider.name}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
                       {provider.model}

@@ -214,6 +214,9 @@ import type {
   TableInfo,
   ColumnInfo,
   LLMProviderInfo,
+  LLMProviderDetail,
+  CreateLlmProviderRequest,
+  UpdateLlmProviderRequest,
   OntologiesResponse,
   Ontology,
   CreateOntologyPayload,
@@ -469,6 +472,26 @@ export async function getConnectionColumns(connectionId: string, database: strin
 
 export async function getLlmProviders(): Promise<{ providers: LLMProviderInfo[] }> {
   return api.get<{ providers: LLMProviderInfo[] }>('/llm/providers');
+}
+
+export async function getLlmProviderById(id: string): Promise<LLMProviderDetail> {
+  return api.get<LLMProviderDetail>(`/llm/providers/${id}`);
+}
+
+export async function createLlmProvider(data: CreateLlmProviderRequest): Promise<LLMProviderDetail> {
+  return api.post<LLMProviderDetail>('/llm/providers', data);
+}
+
+export async function updateLlmProvider(id: string, data: UpdateLlmProviderRequest): Promise<LLMProviderDetail> {
+  return api.patch<LLMProviderDetail>(`/llm/providers/${id}`, data);
+}
+
+export async function deleteLlmProvider(id: string): Promise<void> {
+  return api.delete<void>(`/llm/providers/${id}`);
+}
+
+export async function testLlmProvider(id: string): Promise<{ success: boolean; message: string }> {
+  return api.post<{ success: boolean; message: string }>(`/llm/providers/${id}/test`);
 }
 
 // ==========================================

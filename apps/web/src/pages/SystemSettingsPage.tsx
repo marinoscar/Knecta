@@ -124,7 +124,7 @@ export default function SystemSettingsPage() {
               <TabPanel value={tabIndex} index={2}>
                 <DataAgentSettings
                   settings={settings}
-                  onSave={(dataAgent) => handleSave('dataAgent', dataAgent)}
+                  onSave={(dataAgent) => handleSave('agentConfigs', { ...settings.agentConfigs, dataAgent })}
                   disabled={!canWrite || isSaving}
                 />
               </TabPanel>
