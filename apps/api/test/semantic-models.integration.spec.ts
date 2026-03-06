@@ -1026,13 +1026,15 @@ describe('Semantic Models (Integration)', () => {
       expect(Array.isArray(response.body.data.providers)).toBe(true);
     });
 
-    it('should return 403 without semantic_models:read permission', async () => {
+    it('should return 200 for viewer with llm_providers:read permission', async () => {
       const viewer = await createMockViewerUser(context);
 
-      await request(context.app.getHttpServer())
+      const response = await request(context.app.getHttpServer())
         .get('/api/llm/providers')
         .set(authHeader(viewer.accessToken))
-        .expect(403);
+        .expect(200);
+
+      expect(response.body.data).toHaveProperty('providers');
     });
   });
 });

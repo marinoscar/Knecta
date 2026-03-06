@@ -610,6 +610,11 @@ export function setupBaseMocks(): void {
     count: Array.isArray(data) ? data.length : 1,
   }));
 
+  // Mock LLM provider operations (needed by LlmProviderService)
+  (prismaMock.llmProvider.findMany as jest.Mock).mockResolvedValue([]);
+  (prismaMock.llmProvider.findUnique as jest.Mock).mockResolvedValue(null);
+  (prismaMock.llmProvider.findFirst as jest.Mock).mockResolvedValue(null);
+
   // Mock $connect and $disconnect
   (prismaMock.$connect as jest.Mock).mockResolvedValue(undefined);
   (prismaMock.$disconnect as jest.Mock).mockResolvedValue(undefined);
