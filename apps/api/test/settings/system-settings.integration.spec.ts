@@ -244,14 +244,16 @@ describe('System Settings Integration', () => {
         .expect(400);
     });
 
-    it('should deep merge dataAgent config', async () => {
+    it('should deep merge agentConfigs', async () => {
       const admin = await createMockAdminUser(context);
 
       const partialUpdate = {
-        dataAgent: {
-          openai: {
-            model: 'o1',
-            reasoningLevel: 'high',
+        agentConfigs: {
+          dataAgent: {
+            openai: {
+              model: 'o1',
+              reasoningLevel: 'high',
+            },
           },
         },
       };
@@ -262,10 +264,12 @@ describe('System Settings Integration', () => {
         value: {
           ui: DEFAULT_SYSTEM_SETTINGS.ui,
           features: DEFAULT_SYSTEM_SETTINGS.features,
-          dataAgent: {
-            openai: {
-              model: 'o1',
-              reasoningLevel: 'high',
+          agentConfigs: {
+            dataAgent: {
+              openai: {
+                model: 'o1',
+                reasoningLevel: 'high',
+              },
             },
           },
         } as any,
@@ -283,15 +287,17 @@ describe('System Settings Integration', () => {
         .send(partialUpdate)
         .expect(200);
 
-      expect(response.body.data.dataAgent).toEqual({
-        openai: {
-          model: 'o1',
-          reasoningLevel: 'high',
+      expect(response.body.data.agentConfigs).toEqual({
+        dataAgent: {
+          openai: {
+            model: 'o1',
+            reasoningLevel: 'high',
+          },
         },
       });
     });
 
-    it('should return dataAgent in GET response', async () => {
+    it('should return agentConfigs in GET response', async () => {
       const admin = await createMockAdminUser(context);
 
       context.prismaMock.systemSettings.findUnique.mockResolvedValue({
@@ -299,10 +305,12 @@ describe('System Settings Integration', () => {
         key: 'global',
         value: {
           ...DEFAULT_SYSTEM_SETTINGS,
-          dataAgent: {
-            anthropic: {
-              model: 'claude-opus-4-6',
-              reasoningLevel: 'adaptive',
+          agentConfigs: {
+            dataAgent: {
+              anthropic: {
+                model: 'claude-opus-4-6',
+                reasoningLevel: 'adaptive',
+              },
             },
           },
         } as any,
@@ -317,10 +325,12 @@ describe('System Settings Integration', () => {
         .set(authHeader(admin.accessToken))
         .expect(200);
 
-      expect(response.body.data.dataAgent).toEqual({
-        anthropic: {
-          model: 'claude-opus-4-6',
-          reasoningLevel: 'adaptive',
+      expect(response.body.data.agentConfigs).toEqual({
+        dataAgent: {
+          anthropic: {
+            model: 'claude-opus-4-6',
+            reasoningLevel: 'adaptive',
+          },
         },
       });
     });
