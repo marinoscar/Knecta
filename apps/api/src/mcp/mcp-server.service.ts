@@ -202,7 +202,7 @@ export class McpServerService {
         // 2. Load system settings for provider config
         const systemSettings = await this.systemSettingsService.getSettings();
         const providerConfig = provider
-          ? systemSettings.dataAgent?.[provider as 'openai' | 'anthropic' | 'azure']
+          ? systemSettings.agentConfigs?.dataAgent?.[provider]
           : undefined;
 
         // 3. Auto-generate chat title

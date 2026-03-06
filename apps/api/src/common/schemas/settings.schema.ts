@@ -34,22 +34,23 @@ const notificationChannelConfigSchema = z.object({
   enabled: z.boolean(),
 });
 
-const dataAgentProviderConfigSchema = z.object({
+const agentProviderConfigSchema = z.object({
   temperature: z.number().min(0).max(2).optional(),
   model: z.string().max(100).optional(),
   reasoningLevel: z.string().max(50).optional(),
 });
+
+const agentConfigSchema = z.record(z.string(), agentProviderConfigSchema.optional());
 
 export const systemSettingsSchema = z.object({
   ui: z.object({
     allowUserThemeOverride: z.boolean(),
   }),
   features: z.record(z.string(), z.boolean()),
-  dataAgent: z
+  agentConfigs: z
     .object({
-      openai: dataAgentProviderConfigSchema.optional(),
-      anthropic: dataAgentProviderConfigSchema.optional(),
-      azure: dataAgentProviderConfigSchema.optional(),
+      dataAgent: agentConfigSchema.optional(),
+      semanticModel: agentConfigSchema.optional(),
     })
     .optional(),
   notifications: z

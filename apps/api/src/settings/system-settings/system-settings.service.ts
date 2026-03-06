@@ -56,7 +56,7 @@ export class SystemSettingsService {
     return {
       ui: value.ui,
       features: value.features,
-      dataAgent: value.dataAgent,
+      agentConfigs: value.agentConfigs,
       notifications: value.notifications,
       updatedAt: settings.updatedAt,
       updatedBy: settings.updatedByUser,
@@ -102,7 +102,7 @@ export class SystemSettingsService {
     return {
       ui: value.ui,
       features: value.features,
-      dataAgent: value.dataAgent,
+      agentConfigs: value.agentConfigs,
       notifications: value.notifications,
       updatedAt: settings.updatedAt,
       updatedBy: settings.updatedByUser,
@@ -140,22 +140,30 @@ export class SystemSettingsService {
       },
     };
 
-    // Only include dataAgent if it exists in current or dto
-    if (current.dataAgent || dto.dataAgent) {
-      merged.dataAgent = {
-        openai: {
-          ...current.dataAgent?.openai,
-          ...dto.dataAgent?.openai,
-        },
-        anthropic: {
-          ...current.dataAgent?.anthropic,
-          ...dto.dataAgent?.anthropic,
-        },
-        azure: {
-          ...current.dataAgent?.azure,
-          ...dto.dataAgent?.azure,
-        },
-      };
+    // Deep merge agentConfigs: agent key → provider key → config object
+    if (current.agentConfigs || dto.agentConfigs) {
+      merged.agentConfigs = merged.agentConfigs || {};
+      const baseConfigs = current.agentConfigs || {};
+      const patchConfigs = dto.agentConfigs || {};
+      const allAgentKeys = new Set([
+        ...Object.keys(baseConfigs),
+        ...Object.keys(patchConfigs),
+      ]);
+      for (const agentKey of allAgentKeys) {
+        const currentAgent = (baseConfigs as any)[agentKey] || {};
+        const dtoAgent = (patchConfigs as any)[agentKey] || {};
+        const allProviders = new Set([
+          ...Object.keys(currentAgent),
+          ...Object.keys(dtoAgent),
+        ]);
+        (merged.agentConfigs as any)[agentKey] = {};
+        for (const provider of allProviders) {
+          (merged.agentConfigs as any)[agentKey][provider] = {
+            ...currentAgent[provider],
+            ...dtoAgent[provider],
+          };
+        }
+      }
     }
 
     // Only include notifications if it exists in current or dto
@@ -198,7 +206,7 @@ export class SystemSettingsService {
     return {
       ui: value.ui,
       features: value.features,
-      dataAgent: value.dataAgent,
+      agentConfigs: value.agentConfigs,
       notifications: value.notifications,
       updatedAt: settings.updatedAt,
       updatedBy: settings.updatedByUser,

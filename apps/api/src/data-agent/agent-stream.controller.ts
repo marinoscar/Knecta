@@ -117,7 +117,7 @@ export class AgentStreamController {
       const systemSettings = await this.systemSettingsService.getSettings();
       const providerKey = chatProvider as 'openai' | 'anthropic' | 'azure';
       const providerConfig: LlmModelConfig | undefined = chatProvider
-        ? (systemSettings.dataAgent?.[providerKey] || undefined)
+        ? (systemSettings.agentConfigs?.dataAgent?.[providerKey] || undefined)
         : undefined;
 
       // Resolve web search enablement: global flag must be ON, then chat can opt out

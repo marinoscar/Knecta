@@ -21,12 +21,21 @@ export interface UserSettingsValue {
 }
 
 /**
- * Data agent provider configuration
+ * Per-provider LLM tuning configuration for an agent
  */
-export interface DataAgentProviderConfig {
+export interface AgentProviderConfig {
   temperature?: number;
   model?: string;
   reasoningLevel?: string;
+}
+
+/**
+ * Agent-level configs: maps provider key → tuning config
+ * Supports any agent type (dataAgent, semanticModel, etc.)
+ */
+export interface AgentConfigs {
+  dataAgent?: Record<string, AgentProviderConfig | undefined>;
+  semanticModel?: Record<string, AgentProviderConfig | undefined>;
 }
 
 /**
@@ -39,11 +48,7 @@ export interface SystemSettingsValue {
   features: {
     [key: string]: boolean;
   };
-  dataAgent?: {
-    openai?: DataAgentProviderConfig;
-    anthropic?: DataAgentProviderConfig;
-    azure?: DataAgentProviderConfig;
-  };
+  agentConfigs?: AgentConfigs;
   notifications?: {
     email?: { enabled: boolean };
     sms?: { enabled: boolean };

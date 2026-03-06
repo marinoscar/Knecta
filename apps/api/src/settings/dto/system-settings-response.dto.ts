@@ -1,11 +1,16 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
-const dataAgentProviderConfigResponseSchema = z.object({
+const agentProviderConfigResponseSchema = z.object({
   temperature: z.number().min(0).max(2).optional(),
   model: z.string().max(100).optional(),
   reasoningLevel: z.string().max(50).optional(),
 });
+
+const agentConfigResponseSchema = z.record(
+  z.string(),
+  agentProviderConfigResponseSchema.optional(),
+);
 
 export const systemSettingsResponseSchema = z.object({
   ui: z.object({
@@ -16,11 +21,10 @@ export const systemSettingsResponseSchema = z.object({
     refreshTtlDays: z.number(),
   }),
   features: z.record(z.string(), z.boolean()),
-  dataAgent: z
+  agentConfigs: z
     .object({
-      openai: dataAgentProviderConfigResponseSchema.optional(),
-      anthropic: dataAgentProviderConfigResponseSchema.optional(),
-      azure: dataAgentProviderConfigResponseSchema.optional(),
+      dataAgent: agentConfigResponseSchema.optional(),
+      semanticModel: agentConfigResponseSchema.optional(),
     })
     .optional(),
   updatedAt: z.date(),
