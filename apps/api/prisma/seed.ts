@@ -72,6 +72,11 @@ const PERMISSIONS = [
   { name: 'data_imports:read', description: 'View data imports' },
   { name: 'data_imports:write', description: 'Create and manage data imports' },
   { name: 'data_imports:delete', description: 'Delete data imports' },
+
+  // LLM Providers management
+  { name: 'llm_providers:read', description: 'View LLM provider configurations' },
+  { name: 'llm_providers:write', description: 'Create, update, and manage LLM providers' },
+  { name: 'llm_providers:delete', description: 'Delete LLM provider configurations' },
 ] as const;
 
 // Role to permissions mapping
@@ -106,6 +111,9 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'data_imports:read',
     'data_imports:write',
     'data_imports:delete',
+    'llm_providers:read',
+    'llm_providers:write',
+    'llm_providers:delete',
   ],
   contributor: [
     'user_settings:read',
@@ -129,6 +137,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'data_imports:read',
     'data_imports:write',
     'data_imports:delete',
+    'llm_providers:read',
   ],
   viewer: [
     'user_settings:read',
@@ -139,6 +148,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'ontologies:read',
     'data_agent:read',
     'data_imports:read',
+    'llm_providers:read',
   ],
 };
 

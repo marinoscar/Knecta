@@ -47,6 +47,8 @@ model User {
   oauthCodes                OAuthAuthorizationCode[] @relation("UserOAuthCodes")
   dataImports               DataImport[]             @relation("UserDataImports")
   dataImportRuns            DataImportRun[]          @relation("UserDataImportRuns")
+  llmProvidersCreated       LlmProvider[]            @relation("UserLlmProvidersCreated")
+  llmProvidersUpdated       LlmProvider[]            @relation("UserLlmProvidersUpdated")
 
   @@map("users")
 }
@@ -680,4 +682,31 @@ model DataImportRun {
   @@index([importId])
   @@index([status])
   @@map("data_import_runs")
+}
+
+// =============================================================================
+// LLM Providers
+// =============================================================================
+
+model LlmProvider {
+  id              String    @id @default(uuid()) @db.Uuid
+  type            String    @unique @db.VarChar(50)
+  name            String    @db.VarChar(100)
+  enabled         Boolean   @default(true)
+  isDefault       Boolean   @default(false) @map("is_default")
+  encryptedConfig String    @map("encrypted_config") @db.Text
+  lastTestedAt    DateTime? @map("last_tested_at") @db.Timestamptz
+  lastTestResult  Boolean?  @map("last_test_result")
+  lastTestMessage String?   @map("last_test_message")
+  createdByUserId String?   @map("created_by_user_id") @db.Uuid
+  updatedByUserId String?   @map("updated_by_user_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  createdByUser User? @relation("UserLlmProvidersCreated", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedByUser User? @relation("UserLlmProvidersUpdated", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([enabled])
+  @@map("llm_providers")
 }

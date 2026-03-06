@@ -65,6 +65,11 @@ export const PERMISSIONS = {
   DATA_IMPORTS_READ: 'data_imports:read',
   DATA_IMPORTS_WRITE: 'data_imports:write',
   DATA_IMPORTS_DELETE: 'data_imports:delete',
+
+  // LLM Providers
+  LLM_PROVIDERS_READ: 'llm_providers:read',
+  LLM_PROVIDERS_WRITE: 'llm_providers:write',
+  LLM_PROVIDERS_DELETE: 'llm_providers:delete',
 } as const;
 
 export type PermissionName = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
