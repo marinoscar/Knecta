@@ -144,6 +144,21 @@ export const mockPermissions = {
     name: 'data_imports:delete',
     description: 'Delete data imports',
   },
+  llmProvidersRead: {
+    id: randomUUID(),
+    name: 'llm_providers:read',
+    description: 'View LLM provider configurations',
+  },
+  llmProvidersWrite: {
+    id: randomUUID(),
+    name: 'llm_providers:write',
+    description: 'Create, update, and manage LLM providers',
+  },
+  llmProvidersDelete: {
+    id: randomUUID(),
+    name: 'llm_providers:delete',
+    description: 'Delete LLM provider configurations',
+  },
 };
 
 export const mockRoles = {
@@ -452,6 +467,9 @@ export const rolePermissionsMap = {
     mockPermissions.dataImportsRead,
     mockPermissions.dataImportsWrite,
     mockPermissions.dataImportsDelete,
+    mockPermissions.llmProvidersRead,
+    mockPermissions.llmProvidersWrite,
+    mockPermissions.llmProvidersDelete,
   ],
   contributor: [
     mockPermissions.userSettingsRead,
@@ -473,6 +491,7 @@ export const rolePermissionsMap = {
     mockPermissions.dataImportsRead,
     mockPermissions.dataImportsWrite,
     mockPermissions.dataImportsDelete,
+    mockPermissions.llmProvidersRead,
   ],
   viewer: [
     mockPermissions.userSettingsRead,
@@ -480,6 +499,7 @@ export const rolePermissionsMap = {
     mockPermissions.ontologiesRead,
     mockPermissions.dataAgentRead,
     mockPermissions.dataImportsRead,
+    mockPermissions.llmProvidersRead,
   ],
 };
 
@@ -776,6 +796,62 @@ export function createMockDataAgentPreference(
     key,
     value,
     source,
+    createdAt,
+    updatedAt,
+  };
+}
+
+// ============================================================================
+// LLM Provider Factory
+// ============================================================================
+
+export interface CreateMockLlmProviderOptions {
+  id?: string;
+  type?: 'openai' | 'anthropic' | 'azure_openai' | 'snowflake_cortex';
+  name?: string;
+  enabled?: boolean;
+  isDefault?: boolean;
+  encryptedConfig?: string;
+  createdByUserId?: string | null;
+  updatedByUserId?: string | null;
+  lastTestedAt?: Date | null;
+  lastTestResult?: boolean | null;
+  lastTestMessage?: string | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export function createMockLlmProvider(
+  options: CreateMockLlmProviderOptions = {},
+): any {
+  const {
+    id = randomUUID(),
+    type = 'openai',
+    name = 'OpenAI',
+    enabled = true,
+    isDefault = false,
+    encryptedConfig = 'encrypted-config',
+    createdByUserId = null,
+    updatedByUserId = null,
+    lastTestedAt = null,
+    lastTestResult = null,
+    lastTestMessage = null,
+    createdAt = new Date(),
+    updatedAt = new Date(),
+  } = options;
+
+  return {
+    id,
+    type,
+    name,
+    enabled,
+    isDefault,
+    encryptedConfig,
+    createdByUserId,
+    updatedByUserId,
+    lastTestedAt,
+    lastTestResult,
+    lastTestMessage,
     createdAt,
     updatedAt,
   };
