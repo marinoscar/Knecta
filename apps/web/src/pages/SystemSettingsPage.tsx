@@ -7,6 +7,7 @@ import {
   Tabs,
   Tab,
   Paper,
+  Divider,
 } from '@mui/material';
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
@@ -16,7 +17,9 @@ import { LoadingSpinner } from '../components/common/LoadingSpinner';
 import { SystemSettingsEditor } from '../components/admin/SystemSettingsEditor';
 import { FeatureFlagsList } from '../components/admin/FeatureFlagsList';
 import { UISettings } from '../components/admin/UISettings';
-import { DataAgentSettings } from '../components/admin/DataAgentSettings';
+import { LlmProviderSettings } from '../components/admin/LlmProviderSettings';
+import { AgentConfigSettings } from '../components/admin/AgentConfigSettings';
+import type { AgentProviderConfig } from '../types';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -62,6 +65,23 @@ export default function SystemSettingsPage() {
     }
   };
 
+  const handleAgentConfigSave = async (
+    agentKey: string,
+    providerConfigs: Record<string, AgentProviderConfig>,
+  ) => {
+    try {
+      await updateSettings({
+        agentConfigs: {
+          ...settings?.agentConfigs,
+          [agentKey]: providerConfigs,
+        },
+      });
+      setSuccessMessage('Agent configuration saved');
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : 'Failed to save');
+    }
+  };
+
   if (isLoading) {
     return <LoadingSpinner />;
   }
@@ -100,11 +120,13 @@ export default function SystemSettingsPage() {
             >
               <Tab label="UI Settings" />
               <Tab label="Feature Flags" />
-              <Tab label="Data Agent" />
+              <Tab label="LLM Providers" />
+              <Tab label="Agent Configuration" />
               <Tab label="Advanced (JSON)" />
             </Tabs>
 
             <Box sx={{ p: 3 }}>
+              {/* Tab 0: UI Settings */}
               <TabPanel value={tabIndex} index={0}>
                 <UISettings
                   settings={settings.ui}
@@ -113,6 +135,7 @@ export default function SystemSettingsPage() {
                 />
               </TabPanel>
 
+              {/* Tab 1: Feature Flags */}
               <TabPanel value={tabIndex} index={1}>
                 <FeatureFlagsList
                   flags={settings.features}
@@ -121,15 +144,34 @@ export default function SystemSettingsPage() {
                 />
               </TabPanel>
 
+              {/* Tab 2: LLM Providers */}
               <TabPanel value={tabIndex} index={2}>
-                <DataAgentSettings
+                <LlmProviderSettings />
+              </TabPanel>
+
+              {/* Tab 3: Agent Configuration */}
+              <TabPanel value={tabIndex} index={3}>
+                <AgentConfigSettings
+                  agentKey="dataAgent"
+                  agentDisplayName="Data Agent"
                   settings={settings}
-                  onSave={(dataAgent) => handleSave('agentConfigs', { ...settings.agentConfigs, dataAgent })}
+                  onSave={(configs) => handleAgentConfigSave('dataAgent', configs)}
+                  disabled={!canWrite || isSaving}
+                />
+
+                <Divider sx={{ my: 4 }} />
+
+                <AgentConfigSettings
+                  agentKey="semanticModel"
+                  agentDisplayName="Semantic Model Agent"
+                  settings={settings}
+                  onSave={(configs) => handleAgentConfigSave('semanticModel', configs)}
                   disabled={!canWrite || isSaving}
                 />
               </TabPanel>
 
-              <TabPanel value={tabIndex} index={3}>
+              {/* Tab 4: Advanced (JSON) */}
+              <TabPanel value={tabIndex} index={4}>
                 <SystemSettingsEditor
                   settings={settings}
                   onSave={updateSettings}
