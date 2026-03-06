@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { DiscoveryModule } from '../discovery/discovery.module';
 import { LlmModule } from '../llm/llm.module';
+import { SettingsModule } from '../settings/settings.module';
 import { SemanticModelsController } from './semantic-models.controller';
 import { AgentStreamController } from './agent-stream.controller';
 import { SemanticModelsService } from './semantic-models.service';
@@ -9,7 +10,7 @@ import { AgentService } from './agent/agent.service';
 import { OsiSpecService } from './agent/osi';
 
 @Module({
-  imports: [PrismaModule, DiscoveryModule, LlmModule],
+  imports: [PrismaModule, DiscoveryModule, LlmModule, SettingsModule],
   controllers: [SemanticModelsController, AgentStreamController],
   providers: [SemanticModelsService, AgentService, OsiSpecService],
   exports: [SemanticModelsService, AgentService],

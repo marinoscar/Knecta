@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { DiscoveryService } from '../../discovery/discovery.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LlmService } from '../../llm/llm.service';
+import { SystemSettingsService } from '../../settings/system-settings/system-settings.service';
 import { SemanticModelsService } from '../semantic-models.service';
 import { buildAgentGraph } from './graph';
 import { OsiSpecService } from './osi/osi-spec.service';
@@ -12,6 +13,7 @@ export class AgentService {
     private readonly discoveryService: DiscoveryService,
     private readonly prisma: PrismaService,
     private readonly llmService: LlmService,
+    private readonly systemSettingsService: SystemSettingsService,
     private readonly osiSpecService: OsiSpecService,
   ) {}
 
@@ -28,7 +30,12 @@ export class AgentService {
     modelName?: string,
     instructions?: string,
   ) {
-    const llm = this.llmService.getChatModel(llmProvider);
+    // Get agent-specific config from system settings
+    const systemSettings = await this.systemSettingsService.getSettings();
+    const agentConfig =
+      systemSettings.agentConfigs?.semanticModel?.[llmProvider ?? ''] ||
+      undefined;
+    const llm = this.llmService.getChatModel(llmProvider, agentConfig);
 
     // Fetch OSI spec text before building graph
     const osiSpecText = await this.osiSpecService.getSpecText();
