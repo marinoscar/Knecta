@@ -7,9 +7,9 @@ import type { LLMProviderInfo } from '../../../types';
 
 describe('ModelSelector', () => {
   const mockProviders: LLMProviderInfo[] = [
-    { name: 'openai', enabled: true, model: 'gpt-4', isDefault: true },
-    { name: 'anthropic', enabled: true, model: 'claude-3-5-sonnet-20241022', isDefault: false },
-    { name: 'azure', enabled: true, model: 'gpt-4', isDefault: false },
+    { id: 'provider-1', type: 'openai', name: 'openai', enabled: true, model: 'gpt-4', isDefault: true },
+    { id: 'provider-2', type: 'anthropic', name: 'anthropic', enabled: true, model: 'claude-3-5-sonnet-20241022', isDefault: false },
+    { id: 'provider-3', type: 'azure_openai', name: 'azure_openai', enabled: true, model: 'gpt-4', isDefault: false },
   ];
 
   const mockOnChange = vi.fn();
@@ -170,7 +170,7 @@ describe('ModelSelector', () => {
       const azureOption = screen.getByText('Azure OpenAI');
       await user.click(azureOption);
 
-      expect(mockOnChange).toHaveBeenCalledWith('azure');
+      expect(mockOnChange).toHaveBeenCalledWith('azure_openai');
     });
   });
 
@@ -249,7 +249,7 @@ describe('ModelSelector', () => {
 
     it('handles single provider', async () => {
       const singleProvider: LLMProviderInfo[] = [
-        { name: 'openai', enabled: true, model: 'gpt-4', isDefault: true },
+        { id: 'provider-1', type: 'openai', name: 'openai', enabled: true, model: 'gpt-4', isDefault: true },
       ];
 
       render(
@@ -271,7 +271,7 @@ describe('ModelSelector', () => {
     it('handles provider with unknown name', async () => {
       const providersWithUnknown: LLMProviderInfo[] = [
         ...mockProviders,
-        { name: 'unknown', enabled: true, model: 'unknown-model', isDefault: false },
+        { id: 'provider-4', type: 'unknown', name: 'unknown', enabled: true, model: 'unknown-model', isDefault: false },
       ];
 
       render(
