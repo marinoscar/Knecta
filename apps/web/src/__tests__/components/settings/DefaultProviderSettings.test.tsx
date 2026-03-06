@@ -14,9 +14,9 @@ describe('DefaultProviderSettings', () => {
   const mockOnProviderChange = vi.fn();
 
   const mockProviders: LLMProviderInfo[] = [
-    { name: 'openai', enabled: true, model: 'gpt-4', isDefault: true },
-    { name: 'anthropic', enabled: true, model: 'claude-3-5-sonnet-20241022', isDefault: false },
-    { name: 'azure', enabled: true, model: 'gpt-4', isDefault: false },
+    { id: 'prov-1', type: 'openai', name: 'OpenAI', enabled: true, model: 'gpt-4', isDefault: true },
+    { id: 'prov-2', type: 'anthropic', name: 'Anthropic', enabled: true, model: 'claude-3-5-sonnet-20241022', isDefault: false },
+    { id: 'prov-3', type: 'azure_openai', name: 'Azure OpenAI', enabled: true, model: 'gpt-4', isDefault: false },
   ];
 
   beforeEach(() => {
@@ -290,8 +290,8 @@ describe('DefaultProviderSettings', () => {
     it('only shows enabled providers', async () => {
       vi.mocked(api.getLlmProviders).mockResolvedValue({
         providers: [
-          { name: 'openai', enabled: true, model: 'gpt-4', isDefault: true },
-          { name: 'anthropic', enabled: false, model: 'claude-3-5-sonnet-20241022', isDefault: false },
+          { id: 'prov-1', type: 'openai', name: 'OpenAI', enabled: true, model: 'gpt-4', isDefault: true },
+          { id: 'prov-2', type: 'anthropic', name: 'Anthropic', enabled: false, model: 'claude-3-5-sonnet-20241022', isDefault: false },
         ],
       });
 

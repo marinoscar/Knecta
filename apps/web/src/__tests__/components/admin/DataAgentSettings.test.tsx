@@ -14,17 +14,22 @@ describe('DataAgentSettings', () => {
   const mockOnSave = vi.fn();
 
   const mockProviders: LLMProviderInfo[] = [
-    { name: 'openai', enabled: true, model: 'gpt-4', isDefault: true },
-    { name: 'anthropic', enabled: true, model: 'claude-3-5-sonnet-20241022', isDefault: false },
+    { id: 'prov-1', type: 'openai', name: 'OpenAI', enabled: true, model: 'gpt-4', isDefault: true },
+    { id: 'prov-2', type: 'anthropic', name: 'Anthropic', enabled: true, model: 'claude-3-5-sonnet-20241022', isDefault: false },
   ];
 
   const defaultSettings: SystemSettings = {
     ui: { allowUserThemeOverride: true },
-    featureFlags: {},
-    dataAgent: {
-      openai: { temperature: 0.0 },
-      anthropic: { temperature: 0.0 },
+    features: {},
+    agentConfigs: {
+      dataAgent: {
+        openai: { temperature: 0.0 },
+        anthropic: { temperature: 0.0 },
+      },
     },
+    updatedAt: new Date().toISOString(),
+    updatedBy: null,
+    version: 1,
   };
 
   beforeEach(() => {
@@ -81,8 +86,8 @@ describe('DataAgentSettings', () => {
     it('does not render disabled providers', async () => {
       vi.mocked(api.getLlmProviders).mockResolvedValue({
         providers: [
-          { name: 'openai', enabled: true, model: 'gpt-4', isDefault: true },
-          { name: 'anthropic', enabled: false, model: 'claude-3-5-sonnet-20241022', isDefault: false },
+          { id: 'prov-1', type: 'openai', name: 'OpenAI', enabled: true, model: 'gpt-4', isDefault: true },
+          { id: 'prov-2', type: 'anthropic', name: 'Anthropic', enabled: false, model: 'claude-3-5-sonnet-20241022', isDefault: false },
         ],
       });
 
@@ -118,8 +123,10 @@ describe('DataAgentSettings', () => {
     it('displays temperature slider with correct initial value from settings', async () => {
       const settingsWithTemp: SystemSettings = {
         ...defaultSettings,
-        dataAgent: {
-          openai: { temperature: 1.5 },
+        agentConfigs: {
+          dataAgent: {
+            openai: { temperature: 1.5 },
+          },
         },
       };
 
@@ -136,8 +143,11 @@ describe('DataAgentSettings', () => {
     it('displays temperature slider with default value 0.0 when not in settings', async () => {
       const settingsNoTemp: SystemSettings = {
         ui: { allowUserThemeOverride: true },
-        featureFlags: {},
-        dataAgent: {},
+        features: {},
+        agentConfigs: { dataAgent: {} },
+        updatedAt: new Date().toISOString(),
+        updatedBy: null,
+        version: 1,
       };
 
       render(
@@ -195,8 +205,10 @@ describe('DataAgentSettings', () => {
     it('displays current model value when set in settings', async () => {
       const settingsWithModel: SystemSettings = {
         ...defaultSettings,
-        dataAgent: {
-          openai: { model: 'gpt-4o', temperature: 0.0 },
+        agentConfigs: {
+          dataAgent: {
+            openai: { model: 'gpt-4o', temperature: 0.0 },
+          },
         },
       };
 
@@ -265,8 +277,10 @@ describe('DataAgentSettings', () => {
 
       const settingsWithCustom: SystemSettings = {
         ...defaultSettings,
-        dataAgent: {
-          anthropic: { reasoningLevel: 'custom', customBudget: 2048, temperature: 0.0 },
+        agentConfigs: {
+          dataAgent: {
+            anthropic: { reasoningLevel: 'custom', customBudget: 2048, temperature: 0.0 },
+          },
         },
       };
 
@@ -286,8 +300,10 @@ describe('DataAgentSettings', () => {
     it('does not show custom budget field for OpenAI', async () => {
       const settingsWithReasoning: SystemSettings = {
         ...defaultSettings,
-        dataAgent: {
-          openai: { reasoningLevel: 'high', temperature: 0.0 },
+        agentConfigs: {
+          dataAgent: {
+            openai: { reasoningLevel: 'high', temperature: 0.0 },
+          },
         },
       };
 
