@@ -1697,6 +1697,288 @@ The database connections API allows users to store and manage connection configu
 
 ---
 
+### LLM Providers
+
+The LLM providers API allows administrators to configure and manage AI model providers backed by the database. Credentials are encrypted at rest using AES-256-GCM encryption. DB-backed providers take precedence over environment variable fallbacks.
+
+**Supported Provider Types:**
+- `openai` - OpenAI (GPT models)
+- `anthropic` - Anthropic (Claude models)
+- `azure_openai` - Azure OpenAI Service
+- `snowflake_cortex` - Snowflake Cortex (no env var fallback)
+- `databricks` - Databricks Model Serving (no env var fallback)
+
+#### GET /llm/providers
+
+**Requires:** `llm_providers:read` permission - List all configured LLM providers. Credentials are masked in all responses.
+
+**Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `page` | number | 1 | Page number |
+| `pageSize` | number | 20 | Items per page (max 100) |
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "name": "Production OpenAI",
+      "providerType": "openai",
+      "isEnabled": true,
+      "isDefault": false,
+      "lastTestedAt": "2026-03-01T10:00:00.000Z",
+      "lastTestResult": true,
+      "lastTestMessage": "Connection successful",
+      "createdAt": "2026-02-01T00:00:00.000Z",
+      "updatedAt": "2026-03-01T10:00:00.000Z"
+    }
+  ],
+  "meta": {
+    "total": 3,
+    "page": 1,
+    "pageSize": 20,
+    "totalPages": 1
+  }
+}
+```
+
+**Note:** Credential fields (`apiKey`, `token`, `pat`) are never returned. The response includes only non-sensitive configuration fields.
+
+---
+
+#### POST /llm/providers
+
+**Requires:** `llm_providers:write` permission (Admin) - Create a new LLM provider configuration.
+
+**Request Body (OpenAI):**
+```json
+{
+  "name": "Production OpenAI",
+  "providerType": "openai",
+  "isEnabled": true,
+  "isDefault": false,
+  "config": {
+    "apiKey": "sk-...",
+    "model": "gpt-4o"
+  }
+}
+```
+
+**Request Body (Anthropic):**
+```json
+{
+  "name": "Anthropic Claude",
+  "providerType": "anthropic",
+  "isEnabled": true,
+  "isDefault": false,
+  "config": {
+    "apiKey": "sk-ant-...",
+    "model": "claude-opus-4-6"
+  }
+}
+```
+
+**Request Body (Azure OpenAI):**
+```json
+{
+  "name": "Azure GPT-4",
+  "providerType": "azure_openai",
+  "isEnabled": true,
+  "isDefault": false,
+  "config": {
+    "apiKey": "your-azure-key",
+    "endpoint": "https://your-instance.openai.azure.com",
+    "deployment": "gpt-4o",
+    "apiVersion": "2024-02-01",
+    "model": "gpt-4o"
+  }
+}
+```
+
+**Request Body (Snowflake Cortex):**
+```json
+{
+  "name": "Snowflake Cortex",
+  "providerType": "snowflake_cortex",
+  "isEnabled": true,
+  "isDefault": false,
+  "config": {
+    "account": "your-account.snowflakecomputing.com",
+    "pat": "your-programmatic-access-token",
+    "model": "llama3.1-70b"
+  }
+}
+```
+
+**Request Body (Databricks):**
+```json
+{
+  "name": "Databricks DBRX",
+  "providerType": "databricks",
+  "isEnabled": true,
+  "isDefault": false,
+  "config": {
+    "host": "https://your-workspace.azuredatabricks.net",
+    "token": "dapi...",
+    "endpoint": "databricks-dbrx-instruct"
+  }
+}
+```
+
+**Config Fields by Provider Type:**
+| Provider | Field | Required | Description |
+|----------|-------|----------|-------------|
+| `openai` | `apiKey` | Yes | OpenAI API key |
+| `openai` | `model` | No | Model name (e.g., `gpt-4o`) |
+| `anthropic` | `apiKey` | Yes | Anthropic API key |
+| `anthropic` | `model` | No | Model name (e.g., `claude-opus-4-6`) |
+| `azure_openai` | `apiKey` | Yes | Azure OpenAI API key |
+| `azure_openai` | `endpoint` | Yes | Azure endpoint URL |
+| `azure_openai` | `deployment` | Yes | Deployment name |
+| `azure_openai` | `apiVersion` | Yes | API version string |
+| `azure_openai` | `model` | No | Model name override |
+| `snowflake_cortex` | `account` | Yes | Snowflake account identifier |
+| `snowflake_cortex` | `pat` | Yes | Programmatic access token |
+| `snowflake_cortex` | `model` | Yes | Cortex model name |
+| `databricks` | `host` | Yes | Databricks workspace URL |
+| `databricks` | `token` | Yes | Databricks personal access token |
+| `databricks` | `endpoint` | Yes | Model serving endpoint name |
+
+**Response:** `201 Created` — Returns the created provider object (credentials masked).
+
+**Error Cases:**
+- 400 Bad Request - Invalid config for the selected provider type
+- 403 Forbidden - Insufficient permissions
+
+---
+
+#### GET /llm/providers/:id
+
+**Requires:** `llm_providers:write` permission (Admin) - Get details of a specific LLM provider. Credentials are masked.
+
+**Path Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | UUID | Provider ID |
+
+**Response:**
+```json
+{
+  "id": "uuid",
+  "name": "Production OpenAI",
+  "providerType": "openai",
+  "isEnabled": true,
+  "isDefault": false,
+  "config": {
+    "model": "gpt-4o"
+  },
+  "lastTestedAt": "2026-03-01T10:00:00.000Z",
+  "lastTestResult": true,
+  "lastTestMessage": "Connection successful",
+  "createdAt": "2026-02-01T00:00:00.000Z",
+  "updatedAt": "2026-03-01T10:00:00.000Z"
+}
+```
+
+**Note:** Sensitive credential fields are omitted from the response. The `config` object includes only non-sensitive fields (e.g., `model`, `endpoint`, `deployment`, `apiVersion`, `account`).
+
+**Error Cases:**
+- 404 Not Found - Provider not found
+- 403 Forbidden - Insufficient permissions
+
+---
+
+#### PATCH /llm/providers/:id
+
+**Requires:** `llm_providers:write` permission (Admin) - Partially update a provider configuration. All fields are optional; only provided fields are updated.
+
+**Path Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | UUID | Provider ID |
+
+**Request Body:**
+```json
+{
+  "name": "Updated Name",
+  "isEnabled": false,
+  "isDefault": true,
+  "config": {
+    "model": "gpt-4o-mini"
+  }
+}
+```
+
+**Response:** `200 OK` — Returns the updated provider object (credentials masked).
+
+**Error Cases:**
+- 400 Bad Request - Invalid update payload
+- 404 Not Found - Provider not found
+- 403 Forbidden - Insufficient permissions
+
+---
+
+#### DELETE /llm/providers/:id
+
+**Requires:** `llm_providers:delete` permission (Admin) - Delete a provider configuration.
+
+**Path Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | UUID | Provider ID |
+
+**Response:** `204 No Content`
+
+**Error Cases:**
+- 404 Not Found - Provider not found
+- 403 Forbidden - Insufficient permissions
+
+**Note:** Deleting the default provider does not affect active chat sessions that already selected it; new sessions will fall back to the next available provider or environment variable defaults.
+
+---
+
+#### POST /llm/providers/:id/test
+
+**Requires:** `llm_providers:write` permission (Admin) - Test connectivity to a configured LLM provider by sending a minimal request.
+
+**Path Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | UUID | Provider ID |
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Connection successful",
+  "latencyMs": 342
+}
+```
+
+**Failure Response:**
+```json
+{
+  "success": false,
+  "message": "Authentication failed: invalid API key",
+  "latencyMs": 1100
+}
+```
+
+**Side Effects:**
+- Updates `lastTestedAt` timestamp
+- Updates `lastTestResult` (true/false)
+- Updates `lastTestMessage` with result message
+
+**Error Cases:**
+- 404 Not Found - Provider not found
+- 403 Forbidden - Insufficient permissions
+
+**Use Case:** Verify that a stored provider configuration is working correctly after creation or after updating credentials.
+
+---
+
 ### Data Agent
 
 #### POST /data-agent/chats/:id/share

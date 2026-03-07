@@ -338,6 +338,11 @@ cd apps/api && npm run prisma:migrate
 
 ### LLM Providers
 - `GET /api/llm/providers` - List enabled LLM providers
+- `POST /api/llm/providers` - Create provider (Admin)
+- `GET /api/llm/providers/:id` - Get provider details (Admin)
+- `PATCH /api/llm/providers/:id` - Update provider (Admin)
+- `DELETE /api/llm/providers/:id` - Delete provider (Admin)
+- `POST /api/llm/providers/:id/test` - Test provider connection (Admin)
 
 ### Data Agent
 - `GET /api/data-agent/chats` - List chats (paginated)
@@ -396,6 +401,7 @@ cd apps/api && npm run prisma:migrate
 - `ontologies:read/write/delete` - Ontology management
 - `data_agent:read/write/delete` - Data Agent chat management
 - `data_imports:read/write/delete` - Data import management
+- `llm_providers:read/write/delete` - LLM provider management
 
 ## Database Tables
 
@@ -421,6 +427,7 @@ cd apps/api && npm run prisma:migrate
 - `data_chat_shares` - Public chat share links (token, expiry, view count, revocation)
 - `data_imports` - Data import metadata (source file, config, output tables, status)
 - `data_import_runs` - Import execution tracking (status, progress, phases)
+- `llm_providers` - LLM provider configurations (type, encrypted credentials, test status)
 
 ## Access Control: Email Allowlist
 
@@ -502,11 +509,13 @@ Note: `DATABASE_URL` is constructed automatically from these variables at runtim
 - `ENCRYPTION_KEY` - 32-byte key for AES-256-GCM encryption of connection credentials
 
 **LLM Providers:**
-- `LLM_DEFAULT_PROVIDER` - Default LLM provider (openai|anthropic|azure)
+- `LLM_DEFAULT_PROVIDER` - Default LLM provider fallback (openai|anthropic|azure) — used only when no DB provider is configured
 - `LLM_MAX_RETRIES` - Max retry attempts for transient LLM failures (default: 3, set 0 to disable)
-- `OPENAI_API_KEY` / `OPENAI_MODEL` - OpenAI configuration
-- `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` - Anthropic configuration
-- `AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_ENDPOINT` / `AZURE_OPENAI_DEPLOYMENT` / `AZURE_OPENAI_API_VERSION` - Azure OpenAI configuration
+- `OPENAI_API_KEY` / `OPENAI_MODEL` - OpenAI configuration (env var fallback)
+- `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` - Anthropic configuration (env var fallback)
+- `AZURE_OPENAI_API_KEY` / `AZURE_OPENAI_ENDPOINT` / `AZURE_OPENAI_DEPLOYMENT` / `AZURE_OPENAI_API_VERSION` - Azure OpenAI configuration (env var fallback)
+
+Note: Snowflake Cortex and Databricks providers are DB-only (no env var fallback).
 
 **Observability:**
 - `OTEL_ENABLED` - Enable OpenTelemetry (default: true)
