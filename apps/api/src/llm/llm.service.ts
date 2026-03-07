@@ -277,12 +277,17 @@ export class LlmService {
       }
 
       case 'snowflake_cortex': {
-        const { account, pat, model: defaultModel } = dbConfig;
-        if (!account || !pat) {
+        const { account: rawAccount, pat, model: defaultModel } = dbConfig;
+        if (!rawAccount || !pat) {
           throw new BadRequestException(
             'Snowflake Cortex not fully configured',
           );
         }
+        // Normalize: strip protocol/domain if full URL pasted, trim whitespace
+        const account = rawAccount
+          .replace(/^https?:\/\//, '')
+          .replace(/\.snowflakecomputing\.com.*$/, '')
+          .trim();
         const model =
           runtimeConfig?.model ||
           defaultModel ||

@@ -148,8 +148,8 @@ const PROVIDER_CONFIGS: Record<LLMProviderType, ProviderConfig> = {
         label: 'Account Identifier',
         type: 'text',
         required: true,
-        placeholder: 'xy12345.us-east-1',
-        helperText: 'Your Snowflake account identifier',
+        placeholder: 'orgname-accountname',
+        helperText: 'From Account Details → Account/Server URL (before .snowflakecomputing.com)',
       },
       {
         key: 'pat',
