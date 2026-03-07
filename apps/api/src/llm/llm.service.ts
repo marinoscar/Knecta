@@ -86,6 +86,71 @@ export class LlmService {
     );
   }
 
+  /**
+   * Resolve the effective model name for a provider using the same 3-level
+   * fallback chain as getChatModel / createModelFromDbConfig:
+   *   1. runtimeConfig?.model  (system settings agentConfigs override)
+   *   2. DB provider config field (model / deployment / endpoint)
+   *   3. DEFAULT_MODELS[type]  (hardcoded per-provider default)
+   *   4. Empty string (no config at all)
+   *
+   * This is used by the DataAgentTracer to display the actual model name in
+   * the insights panel rather than the empty string that providerConfig?.model
+   * returns when no system-settings override is configured.
+   */
+  async resolveModelName(
+    provider?: string,
+    runtimeConfig?: LlmModelConfig,
+  ): Promise<string> {
+    // 1. Runtime override wins immediately — no DB lookup needed
+    if (runtimeConfig?.model) return runtimeConfig.model;
+
+    // 2. Resolve provider type (alias + default)
+    const resolvedType = TYPE_ALIASES[provider ?? ''] || provider;
+    const targetProvider =
+      resolvedType || (await this.getDefaultProvider()) || 'openai';
+
+    // 3. Try DB config
+    const dbConfig =
+      await this.llmProviderService.getDecryptedConfig(targetProvider);
+
+    if (dbConfig) {
+      const resolvedProviderType = (TYPE_ALIASES[targetProvider] ||
+        targetProvider) as ProviderType;
+
+      switch (resolvedProviderType) {
+        case 'databricks':
+          // Databricks uses the endpoint name as the model identifier
+          return (dbConfig as any).endpoint || DEFAULT_MODELS.databricks || '';
+
+        case 'azure_openai': {
+          // Azure uses deployment when no explicit model override exists
+          const azureConfig = dbConfig as any;
+          return (
+            azureConfig.model ||
+            azureConfig.deployment ||
+            DEFAULT_MODELS.azure_openai ||
+            ''
+          );
+        }
+
+        default:
+          // openai, anthropic, snowflake_cortex all use a 'model' field
+          return (
+            (dbConfig as any).model ||
+            DEFAULT_MODELS[resolvedProviderType] ||
+            ''
+          );
+      }
+    }
+
+    // 4. No DB config — fall back to DEFAULT_MODELS if we know the type,
+    //    otherwise return empty string (env-var path, model unknown statically)
+    const resolvedProviderType = (TYPE_ALIASES[targetProvider] ||
+      targetProvider) as ProviderType;
+    return DEFAULT_MODELS[resolvedProviderType] || '';
+  }
+
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------

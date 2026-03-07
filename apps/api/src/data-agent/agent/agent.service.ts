@@ -199,7 +199,7 @@ export class DataAgentAgentService {
 
     // Create tracer for LLM interaction diagnostics
     const providerName = provider || 'default';
-    const modelName = providerConfig?.model || '';
+    const modelName = await this.llmService.resolveModelName(provider, providerConfig);
     const tracer = new DataAgentTracer(messageId, providerName, modelName, providerConfig?.temperature, onEvent);
 
     // Create web search tool when enabled; resolve the effective provider name for tool config
