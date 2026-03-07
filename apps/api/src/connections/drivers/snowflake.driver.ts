@@ -75,11 +75,16 @@ export class SnowflakeDriver implements DiscoveryDriver {
         }
       }
 
-      return {
+      const wasDecryptedLocally = privateKey.includes('BEGIN ENCRYPTED PRIVATE KEY');
+      const authConfig: Record<string, string> = {
         username: params.username || '',
         authenticator: 'SNOWFLAKE_JWT',
         privateKey: resolvedKey,
       };
+      if (!wasDecryptedLocally && privateKeyPass) {
+        authConfig.privateKeyPass = privateKeyPass;
+      }
+      return authConfig;
     }
 
     // Default: password auth
