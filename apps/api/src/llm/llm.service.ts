@@ -296,6 +296,10 @@ export class LlmService {
           temperature,
           configuration: {
             baseURL: `https://${account}.snowflakecomputing.com/api/v2/cortex/v1`,
+            defaultHeaders: {
+              'X-Snowflake-Authorization-Token-Type':
+                'PROGRAMMATIC_ACCESS_TOKEN',
+            },
           },
         });
       }
