@@ -96,9 +96,8 @@ describe('ConnectionDialog', () => {
       const snowflakeOption = await screen.findByRole('option', { name: /snowflake/i });
       await user.click(snowflakeOption);
 
-      // Fill in required Name and Host but leave Account empty
+      // Fill in required Name but leave Account empty
       await user.type(screen.getByLabelText(/connection name/i), 'My Snowflake');
-      await user.type(screen.getByLabelText(/^host/i), 'xy12345.us-east-1.snowflakecomputing.com');
 
       // Submit without filling in Account
       await user.click(screen.getByRole('button', { name: /create/i }));
@@ -131,7 +130,6 @@ describe('ConnectionDialog', () => {
 
       // Fill in all required fields including Account
       await user.type(screen.getByLabelText(/connection name/i), 'My Snowflake');
-      await user.type(screen.getByLabelText(/^host/i), 'xy12345.us-east-1.snowflakecomputing.com');
       await user.type(screen.getByLabelText(/^account/i), 'xy12345.us-east-1');
 
       await user.click(screen.getByRole('button', { name: /create/i }));
@@ -479,7 +477,6 @@ describe('ConnectionDialog', () => {
 
       // Fill required fields but leave Private Key empty
       await user.type(screen.getByLabelText(/connection name/i), 'My Snowflake');
-      await user.type(screen.getByLabelText(/^host/i), 'xy12345.us-east-1.snowflakecomputing.com');
       await user.type(screen.getByLabelText(/^account/i), 'xy12345.us-east-1');
 
       await user.click(screen.getByRole('button', { name: /create/i }));
@@ -511,7 +508,6 @@ describe('ConnectionDialog', () => {
       await user.click(keyPairOption);
 
       await user.type(screen.getByLabelText(/connection name/i), 'My Snowflake');
-      await user.type(screen.getByLabelText(/^host/i), 'xy12345.us-east-1.snowflakecomputing.com');
       await user.type(screen.getByLabelText(/^account/i), 'xy12345.us-east-1');
       fireEvent.change(screen.getByLabelText(/private key \(pem\)/i), {
         target: { value: '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----' },
@@ -554,7 +550,6 @@ describe('ConnectionDialog', () => {
       await user.click(keyPairOption);
 
       await user.type(screen.getByLabelText(/connection name/i), 'My Snowflake');
-      await user.type(screen.getByLabelText(/^host/i), 'xy12345.us-east-1.snowflakecomputing.com');
       await user.type(screen.getByLabelText(/^account/i), 'xy12345.us-east-1');
       fireEvent.change(screen.getByLabelText(/private key \(pem\)/i), {
         target: { value: '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----' },
