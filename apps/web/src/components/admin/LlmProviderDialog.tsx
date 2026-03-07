@@ -169,6 +169,35 @@ const PROVIDER_CONFIGS: Record<LLMProviderType, ProviderConfig> = {
     ],
     defaultModel: 'claude-3-7-sonnet',
   },
+  databricks: {
+    displayName: 'Databricks',
+    defaultName: 'Databricks',
+    fields: [
+      {
+        key: 'host',
+        label: 'Workspace Host',
+        type: 'text',
+        required: true,
+        placeholder: 'my-workspace.cloud.databricks.com',
+        helperText: 'Databricks workspace hostname (without https://)',
+      },
+      {
+        key: 'token',
+        label: 'Personal Access Token',
+        type: 'password',
+        required: true,
+      },
+      {
+        key: 'endpoint',
+        label: 'Serving Endpoint',
+        type: 'text',
+        required: true,
+        placeholder: 'databricks-dbrx-instruct',
+        helperText: 'Name of the model serving endpoint',
+      },
+    ],
+    defaultModel: '',
+  },
 };
 
 const PROVIDER_TYPE_OPTIONS: Array<{ value: LLMProviderType; label: string }> = [
@@ -176,6 +205,7 @@ const PROVIDER_TYPE_OPTIONS: Array<{ value: LLMProviderType; label: string }> = 
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'azure_openai', label: 'Azure OpenAI' },
   { value: 'snowflake_cortex', label: 'Snowflake Cortex' },
+  { value: 'databricks', label: 'Databricks' },
 ];
 
 export function LlmProviderDialog({

@@ -26,12 +26,19 @@ const snowflakeCortexConfigSchema = z.object({
   model: z.string().max(100).optional(),
 });
 
+const databricksConfigSchema = z.object({
+  host: z.string().min(1, 'Workspace host is required'),
+  token: z.string().min(1, 'Personal Access Token is required'),
+  endpoint: z.string().min(1, 'Serving endpoint name is required'),
+});
+
 // Export individual config schemas for reuse
 export {
   openaiConfigSchema,
   anthropicConfigSchema,
   azureOpenaiConfigSchema,
   snowflakeCortexConfigSchema,
+  databricksConfigSchema,
 };
 
 // Map type to its config schema (for runtime validation)
@@ -40,10 +47,11 @@ export const CONFIG_SCHEMAS: Record<string, z.ZodType> = {
   anthropic: anthropicConfigSchema,
   azure_openai: azureOpenaiConfigSchema,
   snowflake_cortex: snowflakeCortexConfigSchema,
+  databricks: databricksConfigSchema,
 };
 
 export const createLlmProviderSchema = z.object({
-  type: z.enum(['openai', 'anthropic', 'azure_openai', 'snowflake_cortex']),
+  type: z.enum(['openai', 'anthropic', 'azure_openai', 'snowflake_cortex', 'databricks']),
   name: z.string().min(1).max(100),
   enabled: z.boolean().default(true),
   isDefault: z.boolean().default(false),

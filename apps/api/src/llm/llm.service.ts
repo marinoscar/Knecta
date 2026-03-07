@@ -4,7 +4,12 @@ import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { ChatOpenAI } from '@langchain/openai';
 import { ChatAnthropic } from '@langchain/anthropic';
 import { LlmProviderService } from './llm-provider.service';
-import { TYPE_ALIASES, DEFAULT_MODELS, ProviderType } from './types/provider-config.types';
+import {
+  TYPE_ALIASES,
+  DEFAULT_MODELS,
+  ProviderType,
+  DatabricksProviderConfig,
+} from './types/provider-config.types';
 
 export interface LLMProviderInfo {
   id?: string;
@@ -226,6 +231,26 @@ export class LlmService {
           temperature,
           configuration: {
             baseURL: `https://${account}.snowflakecomputing.com/api/v2/cortex/v1`,
+          },
+        });
+      }
+
+      case 'databricks': {
+        const { host, token, endpoint } = dbConfig as DatabricksProviderConfig;
+        if (!host || !token || !endpoint) {
+          throw new BadRequestException(
+            'Databricks not fully configured',
+          );
+        }
+        const temperature = runtimeConfig?.temperature ?? 0;
+
+        return new ChatOpenAI({
+          openAIApiKey: token,
+          modelName: endpoint,
+          maxRetries,
+          temperature,
+          configuration: {
+            baseURL: `https://${host}/serving-endpoints`,
           },
         });
       }

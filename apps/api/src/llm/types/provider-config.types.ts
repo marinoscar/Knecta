@@ -39,11 +39,22 @@ export interface SnowflakeCortexProviderConfig {
   model?: string;
 }
 
+/**
+ * Databricks Foundation Model APIs provider config — stored encrypted.
+ * Uses OpenAI-compatible serving endpoint, so ChatOpenAI works with custom baseURL.
+ */
+export interface DatabricksProviderConfig {
+  host: string; // Workspace URL (e.g., 'my-workspace.cloud.databricks.com')
+  token: string; // Personal Access Token (sensitive)
+  endpoint: string; // Serving endpoint name, also used as modelName
+}
+
 export type ProviderConfig =
   | OpenAIProviderConfig
   | AnthropicProviderConfig
   | AzureOpenAIProviderConfig
-  | SnowflakeCortexProviderConfig;
+  | SnowflakeCortexProviderConfig
+  | DatabricksProviderConfig;
 
 /** Supported provider type identifiers */
 export const PROVIDER_TYPES = [
@@ -51,6 +62,7 @@ export const PROVIDER_TYPES = [
   'anthropic',
   'azure_openai',
   'snowflake_cortex',
+  'databricks',
 ] as const;
 
 export type ProviderType = (typeof PROVIDER_TYPES)[number];
@@ -61,6 +73,7 @@ export const SENSITIVE_FIELDS: Record<ProviderType, string[]> = {
   anthropic: ['apiKey'],
   azure_openai: ['apiKey'],
   snowflake_cortex: ['pat'],
+  databricks: ['token'],
 };
 
 /** Default model per provider type (used when no model is configured) */
@@ -69,6 +82,7 @@ export const DEFAULT_MODELS: Record<ProviderType, string> = {
   anthropic: 'claude-sonnet-4-5-20250929',
   azure_openai: '', // Uses deployment name
   snowflake_cortex: 'claude-3-7-sonnet',
+  databricks: '', // Uses endpoint name as model
 };
 
 /** Display names for provider types */
@@ -77,6 +91,7 @@ export const PROVIDER_DISPLAY_NAMES: Record<ProviderType, string> = {
   anthropic: 'Anthropic',
   azure_openai: 'Azure OpenAI',
   snowflake_cortex: 'Snowflake Cortex',
+  databricks: 'Databricks',
 };
 
 /**

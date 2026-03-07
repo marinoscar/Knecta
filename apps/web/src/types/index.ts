@@ -304,7 +304,7 @@ export interface ColumnInfo {
 // LLM Providers
 // ==========================================
 
-export type LLMProviderType = 'openai' | 'anthropic' | 'azure_openai' | 'snowflake_cortex';
+export type LLMProviderType = 'openai' | 'anthropic' | 'azure_openai' | 'snowflake_cortex' | 'databricks';
 
 export interface LLMProviderInfo {
   id: string;

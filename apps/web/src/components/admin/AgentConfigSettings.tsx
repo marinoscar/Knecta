@@ -28,6 +28,7 @@ const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   anthropic: 'Anthropic',
   azure_openai: 'Azure OpenAI',
   snowflake_cortex: 'Snowflake Cortex',
+  databricks: 'Databricks',
 };
 
 export function AgentConfigSettings({
