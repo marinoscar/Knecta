@@ -254,10 +254,56 @@ cd apps/api && npm run prisma:migrate
 
 ## Service URLs (Development)
 
+**Local:**
 - **Application**: http://localhost:8319 (via Nginx)
 - **Swagger UI**: http://localhost:8319/api/docs
 - **Neo4j Browser**: http://localhost:7474 (direct, dev only)
 - **Uptrace**: http://localhost:14318 (when otel stack running)
+
+**VPS (via wildcard reverse proxy):**
+- **Application**: https://knecta.dev.marin.cr
+- **Swagger UI**: https://knecta.dev.marin.cr/api/docs
+
+## VPS Deployment with HTTPS
+
+When deploying to a VPS (e.g. `dev.marin.cr`), the app must be served over HTTPS because Google OAuth requires it for sensitive scopes. The setup uses a **wildcard subdomain pattern** — each project gets its own subdomain (e.g. `knecta.dev.marin.cr`) instead of a port number.
+
+### Prerequisites
+
+1. **Wildcard DNS record**: `*.dev.marin.cr → <VPS IP>` (A record in Route 53)
+2. **Wildcard SSL certificate**: Obtained via Certbot with the Route 53 DNS-01 challenge:
+   ```bash
+   sudo certbot certonly --dns-route53 -d "*.dev.marin.cr" -d "dev.marin.cr"
+   ```
+   Requires AWS credentials with Route 53 permissions on the VPS (`/root/.aws/credentials`).
+3. **External Docker network**: The API container joins `devnet` to reach the host PostgreSQL:
+   ```bash
+   docker network create devnet
+   ```
+
+### Host Nginx Wildcard Config
+
+A single Nginx config (`/etc/nginx/sites-available/dev-wildcard`) handles all `*.dev.marin.cr` subdomains. To add a new project, add one line to the `map` block:
+
+```nginx
+map $host $backend_port {
+    knecta.dev.marin.cr    8319;
+    app2.dev.marin.cr      8320;
+    # add new projects here
+}
+```
+
+Then reload Nginx: `sudo systemctl reload nginx`
+
+### Environment Configuration for VPS
+
+In `infra/compose/.env`, set:
+```
+APP_URL=https://knecta.dev.marin.cr
+GOOGLE_CALLBACK_URL=https://knecta.dev.marin.cr/api/auth/google/callback
+```
+
+The Google Cloud Console must also have `https://knecta.dev.marin.cr/api/auth/google/callback` as an authorized redirect URI.
 
 ## API Endpoints (MVP)
 
