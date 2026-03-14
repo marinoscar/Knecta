@@ -42,7 +42,7 @@ services:
       # Encryption (for connection credentials at rest)
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       # Database connection (individual variables)
-      - POSTGRES_HOST=${POSTGRES_HOST:-db}
+      - POSTGRES_HOST=${POSTGRES_HOST}
       - POSTGRES_PORT=${POSTGRES_PORT:-5432}
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
@@ -91,14 +91,13 @@ services:
       # Sandbox
       - SANDBOX_URL=http://sandbox:8000
     depends_on:
-      db:
-        condition: service_healthy
       neo4j:
         condition: service_healthy
       sandbox:
         condition: service_healthy
     networks:
       - app-network
+      - devnet
 
   # ---------------------------------------------------------------------------
   # Web - React Frontend
@@ -107,25 +106,6 @@ services:
     build:
       context: ../../apps/web
       dockerfile: Dockerfile
-    networks:
-      - app-network
-
-  # ---------------------------------------------------------------------------
-  # Database - PostgreSQL
-  # ---------------------------------------------------------------------------
-  db:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - POSTGRES_DB=${POSTGRES_DB:-appdb}
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
     networks:
       - app-network
 
@@ -175,10 +155,11 @@ services:
 networks:
   app-network:
     driver: bridge
+  devnet:
+    external: true
 
 # =============================================================================
 # Volumes
 # =============================================================================
 volumes:
-  postgres-data:
   neo4j-data:

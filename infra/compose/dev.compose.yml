@@ -37,13 +37,6 @@ services:
     command: npm run dev
 
   # ---------------------------------------------------------------------------
-  # Database - Expose port for local tools
-  # ---------------------------------------------------------------------------
-  db:
-    ports:
-      - "5432:5432"
-
-  # ---------------------------------------------------------------------------
   # Neo4j - Expose ports for local tools
   # ---------------------------------------------------------------------------
   neo4j:
@@ -66,9 +59,6 @@ services:
     volumes:
       - pgadmin-data:/var/lib/pgadmin
       - ../pgadmin/servers.json:/pgadmin4/servers.json:ro
-    depends_on:
-      db:
-        condition: service_healthy
     networks:
       - app-network
 
