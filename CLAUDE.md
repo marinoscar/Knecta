@@ -10,7 +10,7 @@ Web Application Foundation with React UI + Node API + PostgreSQL. Production-gra
 
 - **Backend**: Node.js + TypeScript, NestJS with Fastify adapter
 - **Frontend**: React + TypeScript, Material UI (MUI)
-- **Database**: PostgreSQL with Prisma ORM
+- **Database**: PostgreSQL with Prisma ORM (external server, not containerized)
 - **Auth**: Passport strategies (Google OAuth required, Microsoft Azure AD optional)
 - **Testing**: Jest + Supertest (backend), React Testing Library + Jest (frontend)
 - **Observability**: OpenTelemetry, Uptrace, Pino structured logging
@@ -36,7 +36,7 @@ Web Application Foundation with React UI + Node API + PostgreSQL. Production-gra
   docs/                     # Documentation
   infra/                    # Infrastructure configuration
     compose/
-      base.compose.yml       # Core services: api, web, db, nginx
+      base.compose.yml       # Core services: api, web, nginx (no DB container — external PostgreSQL required)
       dev.compose.yml        # Development overrides (hot reload, volumes)
       prod.compose.yml       # Production overrides (resource limits)
       otel.compose.yml       # Observability: uptrace, clickhouse, otel-collector
@@ -215,6 +215,10 @@ If the diff feels “big,” you waited too long. **Split the work and commit so
 ```bash
 # Setup: copy environment template
 cp infra/compose/.env.example infra/compose/.env
+
+# NOTE: An external PostgreSQL server is required. There is no DB container in compose.
+# Set POSTGRES_HOST (and related vars) in infra/compose/.env to point to your PostgreSQL server
+# before starting any compose stack.
 
 # Start development (from infra/compose folder)
 cd infra/compose && docker compose -f base.compose.yml -f dev.compose.yml up
@@ -480,7 +484,7 @@ Key variables (see `infra/compose/.env.example` for full list):
 - `APP_URL` - Base URL (default: http://localhost:8319)
 
 **Database (individual connection parameters):**
-- `POSTGRES_HOST` - Database hostname (default: db in Docker, localhost otherwise)
+- `POSTGRES_HOST` - Database hostname (**required**, no default — an external PostgreSQL server must be provided)
 - `POSTGRES_PORT` - Database port (default: 5432)
 - `POSTGRES_USER` - Database user (default: postgres)
 - `POSTGRES_PASSWORD` - Database password (default: postgres)
