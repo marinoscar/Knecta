@@ -219,6 +219,10 @@ cp infra/compose/.env.example infra/compose/.env
 # NOTE: An external PostgreSQL server is required. There is no DB container in compose.
 # Set POSTGRES_HOST (and related vars) in infra/compose/.env to point to your PostgreSQL server
 # before starting any compose stack.
+#
+# The API container joins an external Docker network called "devnet" to reach the
+# PostgreSQL server. This network must exist before starting the stack:
+#   docker network create devnet
 
 # Start development (from infra/compose folder)
 cd infra/compose && docker compose -f base.compose.yml -f dev.compose.yml up
