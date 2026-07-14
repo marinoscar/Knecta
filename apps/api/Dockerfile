@@ -5,7 +5,7 @@
 # -----------------------------------------------------------------------------
 # Base stage — Debian slim (DuckDB requires full glibc; Alpine/musl segfaults)
 # -----------------------------------------------------------------------------
-FROM node:20-slim AS base
+FROM node:25-slim AS base
 WORKDIR /app
 # Install OpenSSL for Prisma and build tools for native modules
 RUN apt-get update && \
